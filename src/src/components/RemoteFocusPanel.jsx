@@ -38,6 +38,19 @@ import { voteOrder, tallyOrder } from '../config/navigatorOrder';
  * the far end and why pressing Show on a row that is already showing costs
  * nothing: the host taps what they see, and what they see is a moment old.
  */
+/**
+ * THE QUESTION'S CONTROL, IN WORDS (owner, 5 Nov 2026). It was "Enlarge the
+ * question" / "Shrink the question", for a white overlay that was not much
+ * larger and is gone. What it does now is put the question back up in the
+ * room's own view: on one screen the stage draws its ASK card in place of the
+ * answers, on two the room's window shows its QUESTION_FOCUS. So it says
+ * "Show", as every response row below does.
+ */
+export const QUESTION_WORDS = Object.freeze({
+  show: 'Show the question',
+  stop: 'Stop showing the question',
+});
+
 export default function RemoteFocusPanel({
   focus = { focus: 'none', index: null },
   answers = [],
@@ -75,14 +88,14 @@ export default function RemoteFocusPanel({
         aria-pressed={showingQuestion}
         onClick={() => onFocus(showingQuestion ? { focus: 'none' } : { focus: 'question' })}
       >
-        <Icon name={showingQuestion ? 'ArrowsIn' : 'ArrowsOut'} weight="bold" size={18} color="currentColor" />
-        {showingQuestion ? 'Shrink the question' : 'Enlarge the question'}
+        <Icon name={showingQuestion ? 'EyeSlash' : 'Eye'} weight="bold" size={18} color="currentColor" />
+        {showingQuestion ? QUESTION_WORDS.stop : QUESTION_WORDS.show}
       </Button>
 
       {/*
-        THE QUESTION'S OWN TEXT, so the host can confirm they are enlarging the
+        THE QUESTION'S OWN TEXT, so the host can confirm they are putting up the
         thing they think they are. The stage shows it; the phone in their hand
-        does not, and "Enlarge the question" with no question named is a button
+        does not, and "Show the question" with no question named is a button
         pressed on faith in front of a room.
       */}
       {questionTitle && <p className="hr-focus__q">{questionTitle}</p>}
@@ -90,7 +103,7 @@ export default function RemoteFocusPanel({
       <div className="hr-focus__list">
         {rows.length === 0 ? (
           /*
-            "Nothing to enlarge yet" and not an empty box. Responses arrive
+            "Nothing to show yet" and not an empty box. Responses arrive
             during the round, so an empty list here is the NORMAL early state
             rather than a fault, and saying which it is stops a host hunting for
             a control that is simply not due yet.

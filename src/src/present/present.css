@@ -234,11 +234,7 @@ html.present-locked body {
   max-width: 22ch;
 }
 .present .present-rc-kicker { color: var(--muted); }
-/* Call's title above the task: a heading at the secondary step. */
-.present .present-rc-title { --ui-t-primary: calc(var(--L-secondary) * var(--fit)); }
 .present .present-rc-support { font-size: calc(var(--L-secondary) * var(--fit)); max-width: 44ch; }
-/* The task under the lesson (owner, 18 Oct 2026): how to answer it, smaller. */
-.present .present-rc-task { margin-top: .5em; max-width: 52ch; line-height: 1.3; }
 
 /* the progress meter, the navigator's track and the read's pages are
    components/ui/Pips, whose default sizes are the wall's own */
@@ -405,9 +401,11 @@ html.present-locked body {
 
 /* ==== ROOM SCREENS, REDRAWN (owner, 18 Oct 2026; docs/design/room-content-v2) ==== */
 
-/* ---- a lesson is up (frames 1-3): the title leads, the lesson under it at
-   the secondary step (never dropped; --fit shrinks it toward --fit-min), the
-   question in one "Your turn" band ---- */
+/* ---- a lesson is up (frames 1-3; owner, 5 Nov 2026): the title leads and
+   the whole lesson sits under it, never dropped (--fit shrinks it toward
+   --fit-min, or grows it to the main's data-grow): the primary step when short
+   (config/roomContent.js STORY_PRIMARY_MAX), else secondary. No "Your turn"
+   band: the instruction is the phones'. ---- */
 .present .present-rc-story {
   margin: 0 0 .5em;
   font-size: calc(var(--L-secondary) * var(--fit));
@@ -417,27 +415,11 @@ html.present-locked body {
   max-width: 64ch;
   text-wrap: pretty;
 }
-.present .present-turn {
-  display: flex;
-  align-items: baseline;
-  gap: 1em;
-  margin: .5em 0 0;
-  padding: .55em 1em;
-  background: var(--surface);
-  border-left: 6px solid var(--accent);
-  border-radius: 0 16px 16px 0;
-  font-size: calc(var(--L-secondary) * var(--fit));
-  max-width: 64ch;
+.present .present-rc-story.is-primary {
+  font-size: calc(var(--L-primary) * var(--fit));
+  line-height: 1.24;
+  max-width: 44ch;
 }
-.present .present-turn-ey {
-  flex: none;
-  font-size: calc(var(--L-meta) * var(--fit));
-  font-weight: 700;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--accent-text);
-}
-.present .present-turn-text { margin: 0; font-weight: 600; line-height: 1.25; }
 
 /* the title as the reminder above the answers and the results */
 .present .present-reminder { margin: 0 0 .45em; flex: none; }

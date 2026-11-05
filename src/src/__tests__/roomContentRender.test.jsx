@@ -20,6 +20,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { render } from '@testing-library/react';
 import QuestionCard, { YOUR_TURN } from '../components/QuestionCard';
+import { STORY_PRIMARY_MAX } from '../config/roomContent';
 import { presentModel } from '../present/presentModel';
 import {
   roomContentFor, questionRoomData, TALK_LINE, ROLE,
@@ -85,7 +86,7 @@ const partsOfDom = (container) => Object.fromEntries(
 );
 const card = (q, profile, props = {}) => render(
   <div className="fitbox">
-    <QuestionCard phase="ASK" question={q} gameType="call-and-answer" instruction={generic(q)} room={stageRoom(q, profile)} {...props} />
+    <QuestionCard phase="ASK" question={q} gameType="call-and-answer" room={stageRoom(q, profile)} {...props} />
   </div>,
 );
 
@@ -108,64 +109,70 @@ describe.each([['own instruction', OWN], ['generic instruction (a lesson)', LESS
   });
 });
 
-describe('what the room sees while a question is up (owner, 18 Oct 2026)', () => {
+describe('what the room sees while a question is up (owner, 18 Oct 2026; 5 Nov 2026)', () => {
   // rejects: the generic room instructions as the biggest text; the lesson
-  // missing or droppable; the title as a small kicker.
-  it('Room: the title leads at the hero step, the lesson under it never dropped, the task in "Your turn"', () => {
-    const onExpand = jest.fn();
-    const { container } = card(OWN, 'room', { onExpand, instruction: OWN_TASK });
+  // missing or droppable; the title as a small kicker; and since 5 Nov
+  // ("taking the instructions out and making the main body larger is more
+  // useful") any instruction at all on the room's screen.
+  it('Room: the title leads at the hero step, the lesson under it never dropped, and nothing else', () => {
+    const { container } = card(OWN, 'room');
     const lead = container.querySelector('[data-rc-part="title"]');
     expect(lead.tagName).toBe('H1');
     expect(lead.classList.contains('q')).toBe(true);
     expect(lead.getAttribute('data-rc-size')).toBe('hero');
     expect(lead.textContent).toBe(OWN.title);
-    expect(lead.getAttribute('data-expandable')).toBe('1');
     const lesson = container.querySelector('[data-rc-part="story"]');
     expect(lesson.textContent).toBe(OWN.questionDetail);
     expect(lesson.hasAttribute('data-drop')).toBe(false);
-    // The recovery stays on the lesson too.
-    expect(lesson.getAttribute('data-expandable')).toBe('1');
-    const turn = container.querySelector('[data-rc-part="task"]');
-    expect(turn.classList.contains('q-turn')).toBe(true);
-    expect(turn.textContent).toContain(YOUR_TURN);
-    expect(turn.textContent).toContain(OWN_TASK);
-    expect(turn.hasAttribute('data-drop')).toBe(false);
     expect(container.querySelector('.q-eyebrow[data-rc-part="category"]').textContent).toBe(OWN.category);
     expect(container.textContent).not.toContain('WORKIE-ONLY-BACKGROUND');
-    // Order: eyebrow, title, lesson, then "Your turn".
-    const order = [...container.querySelectorAll('[data-rc-part]')].map((el) => el.getAttribute('data-rc-part'));
-    expect(order).toEqual(['category', 'title', 'story', 'task']);
-  });
-
-  it.each(['room', 'tv', 'table'])('%s: a generic instruction is not drawn at all (the top line says where to answer)', (profile) => {
-    const { container } = card(LESSON, profile);
+    // The question's own instruction is not on the room's screen: its phones carry it.
     expect(container.querySelector('[data-rc-part="task"]')).toBeNull();
-    expect(container.textContent).not.toContain(generic(LESSON));
-    expect(container.querySelector('[data-drop-note="How to answer"]')).toBeNull();
+    expect(container.textContent).not.toContain(OWN_TASK);
+    expect(container.textContent).not.toContain(YOUR_TURN);
+    const order = [...container.querySelectorAll('[data-rc-part]')].map((el) => el.getAttribute('data-rc-part'));
+    expect(order).toEqual(['category', 'title', 'story']);
   });
 
-  it('Call: the generic instruction is a small line the fitter may give up first', () => {
-    const { container } = card(LESSON, 'call');
-    const line = container.querySelector('[data-rc-part="task"]');
-    expect(line.textContent).toBe(generic(LESSON));
-    expect(line.classList.contains('q-turn')).toBe(false);
-    expect(line.getAttribute('data-drop')).toBe('3');
-    expect(line.getAttribute('data-drop-note')).toBe('How to answer');
-    expect(stageRoom(LESSON, 'call').parts.task.size).toBe('body');
+  it('nothing on the card opens anything: no expand affordance on the title or the lesson', () => {
+    const { container } = card(OWN, 'room');
+    expect(container.querySelector('[data-expandable]')).toBeNull();
+    expect(container.querySelector('[title="Show the full question"]')).toBeNull();
   });
 
-  it('the question at the front of a lesson moves into "Your turn"; an ALL-CAPS title is title-cased', () => {
+  it.each(PROFILES)('%s: no instruction is drawn at all, own or generic', (profile) => {
+    [OWN, LESSON, PULLED].forEach((q) => {
+      const { container, unmount } = card(q, profile);
+      expect(container.querySelector('[data-rc-part="task"]')).toBeNull();
+      expect(container.querySelector('.q-turn, .q-howto')).toBeNull();
+      expect(container.textContent).not.toContain(generic(q));
+      expect(container.querySelector('[data-drop-note="How to answer"]')).toBeNull();
+      unmount();
+    });
+  });
+
+  it('a short lesson is the body at the primary step; a long one at secondary', () => {
+    expect(OWN.questionDetail.length).toBeLessThanOrEqual(STORY_PRIMARY_MAX);
+    const short = card(OWN, 'room');
+    expect(short.container.querySelector('[data-rc-part="story"]').classList.contains('is-primary')).toBe(true);
+    short.unmount();
+    const LONG = { ...OWN, questionDetail: `${OWN.questionDetail} `.repeat(4).trim() };
+    const long = card(LONG, 'room');
+    expect(long.container.querySelector('[data-rc-part="story"]').classList.contains('is-secondary')).toBe(true);
+    long.unmount();
+  });
+
+  it('the question at the front of a lesson stays in the lesson on the room\'s screen; an ALL-CAPS title is title-cased', () => {
     const { container } = card(PULLED, 'room');
     expect(container.querySelector('[data-rc-part="title"]').textContent).toBe('The Importance of Thresholds');
-    expect(container.querySelector('[data-rc-part="story"]').textContent).toBe(PULLED_LESSON);
-    const turn = container.querySelector('.q-turn');
-    expect(turn.textContent).toBe(`${YOUR_TURN}${ASKS}`);
+    expect(container.querySelector('[data-rc-part="story"]').textContent).toBe(`${ASKS} ${PULLED_LESSON}`);
+    expect(container.querySelector('.q-turn')).toBeNull();
   });
 
   it('with no title the lesson leads; with neither, the task', () => {
     const noTitle = { ...OWN, title: '' };
     expect(stageRoom(noTitle, 'room').lead).toBe('story');
-    const { container } = card(noTitle, 'room', { instruction: OWN_TASK });
+    const { container } = card(noTitle, 'room');
     expect(container.querySelector('h1[data-rc-part="story"]')).not.toBeNull();
     const bare = { ...OWN, title: '', questionDetail: '' };
     expect(stageRoom(bare, 'room').lead).toBe('task');
@@ -181,6 +188,11 @@ describe('what the room sees while a question is up (owner, 18 Oct 2026)', () =>
     const src = readFileSync(join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
     expect(src).toMatch(/import \{[^}]*roomContentFor[^}]*\} from '\.\/config\/roomContent'/);
     expect(src).toMatch(/<QuestionCard\s+phase="ASK"[\s\S]{0,400}room=\{askRoomData\s*\?\s*roomContentFor\('ANSWERING', profile, askRoomData\)/);
+    // The stage's ASK card is handed no instruction and no expand handler.
+    const ask = src.slice(src.indexOf("{hostPhase === 'ASK' && currentQuestion && ("), src.indexOf("{hostPhase === 'ASK' && currentGameType === 'poll'"));
+    expect(ask).toMatch(/<QuestionCard/);
+    expect(ask).not.toMatch(/instruction=/);
+    expect(ask).not.toMatch(/onExpand=/);
     expect(src).toMatch(/const askRoomData = [^;]*questionRoomData\(askRecord, \{ task: getHostInstructionText\(askRecord\)/);
   });
 });

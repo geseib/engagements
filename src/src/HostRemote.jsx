@@ -2204,8 +2204,9 @@ function HostRemote() {
                 now false. `POST /games/{id}/stage-focus` gives the focus a
                 durable per-round representation and a broadcast, exactly as
                 stage-beat.js did for the RESULTS beat, and `Show the room`
-                below is the control. It enlarges the question AND any single
-                response, which is what the owner asked for. */}
+                below is the control. It puts the question (in the room's own
+                view, never the retired white overlay) or any single response
+                up for the room, which is what the owner asked for. */}
             <section className="hr-card" aria-label="This round">
               <h2 className="hr-card-heading">This round</h2>
               <div className="hr-grid">
@@ -2220,7 +2221,7 @@ function HostRemote() {
                     for while walking away from the laptop, and a button that
                     disappears between rounds is one they have to re-find every
                     time. `round` is null in LOBBY and after the session ends,
-                    which is exactly when there is nothing to enlarge. */}
+                    which is exactly when there is nothing to show. */}
                 <Button
                   variant="secondary" size={44}
                   aria-expanded={focusOpen}

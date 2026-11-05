@@ -41,9 +41,12 @@ describe('the wall (present.css)', () => {
     expect(fontSize(rule(PRESENT, '.present .present-rc-lead.is-hero'))).toBe('calc(var(--L-hero) * var(--fit))');
   });
 
-  it('support is the secondary step and a kicker keeps the eyebrow (meta) step', () => {
+  it('support is the secondary step; the lesson secondary, or primary when short', () => {
     expect(fontSize(rule(PRESENT, '.present .present-rc-support'))).toBe('calc(var(--L-secondary) * var(--fit))');
-    expect(rule(PRESENT, '.present .present-rc-title')).toMatch(/--ui-t-primary:\s*calc\(var\(--L-secondary\) \* var\(--fit\)\)/);
+    expect(fontSize(rule(PRESENT, '.present .present-rc-story'))).toBe('calc(var(--L-secondary) * var(--fit))');
+    expect(fontSize(rule(PRESENT, '.present .present-rc-story.is-primary'))).toBe('calc(var(--L-primary) * var(--fit))');
+    // rejects (owner, 5 Nov 2026): the "Your turn" band and the how-to line on the wall.
+    expect(PRESENT).not.toMatch(/\.present-turn|\.present-rc-task|\.present-rc-title/);
   });
 
   it.each(Object.keys(PRESENT_LADDERS))('%s: at --fit-min the lead is still at or above the floor', (p) => {

@@ -6,9 +6,9 @@
  * from styles/stage.css as text and their contrast is measured against both
  * skins' values (styles/skins/*.css), composited up the paint stack:
  *
- *   - the lesson sits at the secondary step and the title leads at hero /
- *     primary (roomContentPalette holds the lead); "Your turn" reads the
- *     secondary step; the generic instruction (Call) the body step;
+ *   - the lesson sits at the secondary step, or primary when short, and
+ *     the title leads at hero / primary (roomContentPalette holds the lead);
+ *     no "Your turn" band and no how-to line (owner, 5 Nov 2026);
  *   - the pick is painted with the skin's gold ROLE, never a literal;
  *   - every new pairing clears 4.5:1 in Classic and Present;
  *   - the new blocks carry no colour literal and no pixel font size.
@@ -71,10 +71,8 @@ const CARD = mix(hex('#1B2942'), BG, 0.74);
 describe.each(['classic', 'present'])('%s', (name) => {
   const s = skin(name);
 
-  it('"Your turn": the text and its label on the band (accent at .10 over the field)', () => {
-    const band = mix(s.accent, BG, 0.10);
-    expect(contrast(TEXT, band)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(s.accentText, band)).toBeGreaterThanOrEqual(4.5);
+  it('the title and the lesson on the field', () => {
+    expect(contrast(TEXT, BG)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('the category eyebrow and the talk label on the field', () => {
@@ -103,11 +101,13 @@ describe.each(['classic', 'present'])('%s', (name) => {
 });
 
 describe('the rules (styles/stage.css)', () => {
-  it('ANSWERING: the lesson and "Your turn" at the secondary step; the generic line at body', () => {
+  it('ANSWERING: the lesson at the secondary step, a short one at primary; no band and no how-to rule', () => {
     expect(decl(rule(STAGE, '.q-lesson'), 'font-size')).toBe('var(--t-secondary)');
-    expect(decl(rule(STAGE, '.q-turn-t'), 'font-size')).toBe('var(--t-secondary)');
+    expect(decl(rule(STAGE, '.q-lesson.is-primary'), 'font-size')).toBe('var(--t-primary)');
     expect(decl(rule(STAGE, '.qdetail'), 'font-size')).toBe('var(--t-body)');
-    expect(decl(rule(STAGE, '.q-turn-k'), 'font-size')).toBe('var(--t-meta)');
+    // rejects (owner, 5 Nov 2026): the instruction on the room's screen, and
+    // the retired enlarge affordance's cursors.
+    expect(STAGE).not.toMatch(/\.q-turn|\.q-howto|\.q-task|data-expandable|\.q-remind\.is-openable|\.recap\.is-openable/);
   });
 
   it('VOTING: every answer at the secondary step; the title reminder at primary', () => {
@@ -135,7 +135,7 @@ describe('the rules (styles/stage.css)', () => {
   it('the new blocks carry no colour literal and no pixel font size', () => {
     const from = (marker) => STAGE.lastIndexOf('/*', STAGE.indexOf(marker));
     const blocks = [
-      STAGE.slice(from('THE TITLE AND THE LESSON LEAD'), STAGE.indexOf('/* GATHERING RESPONSES')),
+      STAGE.slice(from('THE TITLE AND THE LESSON, NOTHING ELSE'), STAGE.indexOf('/* GATHERING RESPONSES')),
       STAGE.slice(from("THE ROOM'S SCREENS, REDRAWN")),
     ];
     blocks.forEach((b) => {

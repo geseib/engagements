@@ -122,8 +122,9 @@ const running = {
       ],
     },
     /*
-      ASK: QuestionCard (title leads, the lesson under it, "Your turn" band from
-      the question's own instruction; title "Show the full question" expands).
+      ASK: QuestionCard (title leads, the whole lesson under it; no instruction
+      on the room's screen since 5 Nov 2026 — the phones carry it; the card
+      opens nothing, the white enlarge overlay is gone).
       Meter "Answered x / n". Primary RW.startVoting (C&A) or RW.showResults
       (no-vote types, hostRunsVotePhase); disabled with RW.nobodyAnswered;
       early press arms in place (RW.armVote/armResults, RW.anyway). Secondary
@@ -138,7 +139,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The question goes up with its title first, any background under it, and a "Your turn" band when the question says what to do. Click the title to show the whole question in a larger window. Read it out; the room answers on their own devices.',
+          text: 'The question goes up with its title first and any background under it, as large as the screen allows. How to answer is not on the room\'s screen: every phone shows it above the answer box. Read the question out; the room answers on their own devices.',
         },
         {
           t: 'list',
@@ -243,7 +244,7 @@ const running = {
           t: 'list',
           items: [
             'Click an answer to read it in full, or use "Show response 1 of 6" in Your part now, then **Next response**, then **Stop showing**.',
-            'Click the question line above the answers to put the question back up.',
+            'To put the question back up, use **Show the question** in your phone\'s **This round** card. The question replaces the answers until you press **Back to the responses** (or **Back to the results**), Esc, or **Stop showing the question** on the phone.',
             'Stay as long as the conversation is good; nothing times out.',
             '**What we heard** moves on to Workie\'s read of the round: see What we heard and Ask the room.',
           ],

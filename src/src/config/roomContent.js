@@ -46,15 +46,13 @@
  *  --------------  ---------------------------------------  ------------------------------
  *  LOBBY           LEAD join (address, code, QR); session   same
  *                  title kicker; count
- *  ANSWERING       LEAD the title (hero when short); the     same, + the generic
- *                  lesson under it (support, secondary,     instruction as a line that
- *                  never dropped); "Your turn": the         may give way
- *                  question's own instruction, or the
- *                  question pulled from the front of the
- *                  lesson (support, never dropped); a
- *                  generic instruction left off; category
- *                  eyebrow; count (owner, 18 Oct 2026,
- *                  docs/design/room-content-v2)
+ *  ANSWERING       LEAD the title (hero when short); the     same
+ *                  whole lesson under it (support, never
+ *                  dropped: primary when it is short,
+ *                  else secondary); NO instruction, the
+ *                  question's own or generic: the phones
+ *                  carry it (owner, 5 Nov 2026); category
+ *                  eyebrow; count
  *  QUESTION_FOCUS  as ANSWERING, no count                   as ANSWERING, no count
  *  VOTING          LEAD every answer, whole and numbered    same
  *                  (all at once when overviewFits, else
@@ -207,6 +205,8 @@ export function questionRoomData(question, {
     task: turn || str(task),
     taskOwn: Boolean(turn),
     story,
+    // The lesson as written, for the room's screens, which draw no "Your turn".
+    lesson: str(q.detail || q.questionDetail),
     category: str(q.category),
     sessionTitle: str(sessionTitle),
     roundLabel: str(roundLabel),
@@ -303,41 +303,51 @@ function topLine(p, moment, verbose, d) {
 }
 
 /**
- * ANSWERING and QUESTION_FOCUS: THE TITLE AND THE LESSON LEAD (owner, 18 Oct
- * 2026: "the instructions is the optional one. the title often is nice to have
- * big too"; docs/design/room-content-v2). They are what changes from round to
- * round and what the room reads, so the title is the lead (hero when short)
- * and the lesson sits under it at the secondary step, never dropped. The
- * question to answer is one "Your turn" band (`task` with `taskOwn`), never
- * dropped. A generic instruction is left off Room, TV and Table, where the top
- * line already says where to answer; Call keeps it as a line that may give way.
- * With no title the lesson leads; with neither, the task.
- *
- * History: 17 Oct the task led and the lesson was dropped; 18 Oct morning the
- * lesson led with the task under it (39bd137c). Both drew the generic words
- * largest somewhere.
+ * A lesson this short is the body at the primary step; longer, at secondary.
+ * The step is chosen here, from the words, so the stage and the room's window
+ * draw one lesson at one size (the fitters then scale both together).
  */
-function questionUp(p, moment, verbose, d) {
+export const STORY_PRIMARY_MAX = 200;
+export const storySize = (text) => (str(text).length <= STORY_PRIMARY_MAX ? 'primary' : 'secondary');
+
+/**
+ * ANSWERING and QUESTION_FOCUS: THE TITLE AND THE LESSON, AND NOTHING ELSE
+ * (owner, 5 Nov 2026: "taking the instructions out and making the main body
+ * larger is more useful"). The title is the lead (hero when short) and the
+ * whole lesson sits under it, never dropped: at the primary step when short
+ * (STORY_PRIMARY_MAX), else secondary. No instruction on any room screen and
+ * any profile, neither the question's own (the "Your turn" band of 18 Oct)
+ * nor a set's or type's generic one: every phone shows it above the answer
+ * box, where the people answering read it. The space goes to the body, which
+ * the fitters grow into. With no title the lesson leads; with neither, the
+ * task is the only words there are, and it leads.
+ *
+ * THE LESSON IS WHOLE. questionRoomData pulls a question from the front of a
+ * lesson into `task` for the console and the phones (`story` is the rest);
+ * the room reads the lesson as written (`lesson`), so that sentence is not
+ * lost with the band.
+ *
+ * History: 17 Oct the task led and the lesson was dropped; 18 Oct the title
+ * led, the lesson under it and the task in a "Your turn" band (owner, 18 Oct
+ * 2026, docs/design/room-content-v2), which on TV at 1280x720 was cut off.
+ */
+function questionUp(p, moment, d) {
   const task = str(d.task);
   const title = str(d.title);
-  const story = str(d.story);
-  const own = Boolean(d.taskOwn) && task;
+  const story = str(d.lesson) || str(d.story);
   const leadKey = title ? 'title' : story ? 'story' : 'task';
   p.part('category', str(d.category) ? ROLE.KICKER : ROLE.DROPPED, 'meta', str(d.category));
   if (title) p.part('title', ROLE.LEAD, leadSize(title), title);
   else p.part('title', ROLE.DROPPED);
   if (story) {
     if (leadKey === 'story') p.part('story', ROLE.LEAD, leadSize(story), story);
-    else p.part('story', ROLE.SUPPORT, 'secondary', story, { keep: true });
+    else p.part('story', ROLE.SUPPORT, storySize(story), story, { keep: true });
   } else {
     p.part('story', ROLE.DROPPED);
   }
   if (task) {
-    const repeats = norm(task) === norm(story) || norm(task) === norm(title);
     if (leadKey === 'task') p.part('task', ROLE.LEAD, leadSize(task), task);
-    else if (repeats) p.part('task', ROLE.DROPPED);
-    else if (own) p.part('task', ROLE.SUPPORT, 'secondary', task, { keep: true });
-    else p.part('task', verbose ? ROLE.SUPPORT : ROLE.DROPPED, 'body', task, { drop: true });
+    else p.part('task', ROLE.DROPPED);
   }
   if (moment === 'ANSWERING') p.part('count', ROLE.COUNT, 'meta');
   return leadKey;
@@ -352,7 +362,7 @@ function ca(p, moment, verbose, d) {
       return 'join';
     case 'ANSWERING':
     case 'QUESTION_FOCUS':
-      return questionUp(p, moment, verbose, d);
+      return questionUp(p, moment, d);
     case 'VOTING':
       // The answers being weighed lead, whole (owner, 18 Oct 2026: "nice to
       // see a bar chart results but not at the expense of seeing what was
@@ -481,8 +491,8 @@ function build(p, moment, verbose, d) {
 /**
  * @param moment   one of CA_MOMENTS or BUILD_MOMENTS (anything else is a quiet lead)
  * @param profile  room | tv | call | table (anything else is Room)
- * @param data     the moment's words: { title, task, taskOwn, story, category,
- *                 sessionTitle, roundLabel, cue } for Call & Answer;
+ * @param data     the moment's words: { title, task, taskOwn, story, lesson,
+ *                 category, sessionTitle, roundLabel, cue } for Call & Answer;
  *                 { prompt, detail, options, whys, claude, step } for a Build Room
  */
 export function roomContentFor(moment, profile, data = {}) {

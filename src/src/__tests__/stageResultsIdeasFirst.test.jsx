@@ -18,7 +18,7 @@
  * names; the winning text clamped or dropped for the sake of the chart.
  */
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 
 jest.mock('../auth/AuthContext', () => ({
   __esModule: true,
@@ -167,17 +167,61 @@ test('more answers than the page: "and N more answers" under the runners-up, the
   expect(document.querySelector('.more-answers').textContent).toBe(`and ${9 - shown} more answers`);
 }, 15000);
 
-/* PUT THE QUESTION ON THE WALL (owner, 16 Oct 2026): on the stage, where the
-   cards put a response up, the question line above them puts the question up. */
-test('the question line above the cards puts the question up, and the fitter may not drop it', async () => {
+/* NO ENLARGE ON THE ROOM'S SCREEN (owner, 5 Nov 2026: "i dont think the
+   enlarge the question button is useful it turns the modal background white
+   but really isnt much larger. lets get rid of it"). The question line above
+   the cards is the reminder and nothing else, and the fitter may not drop it. */
+test('the question line above the cards opens nothing, and the fitter may not drop it', async () => {
   await mount({ anonymous: false });
-  const q = screen.getByRole('button', { name: 'Show the question on the screen' });
+  expect(screen.queryByRole('button', { name: 'Show the question on the screen' })).toBeNull();
+  const q = document.querySelector('.q-remind');
   expect(q.textContent).toBe('Temperature control');
+  expect(q.tagName).toBe('H2');
+  expect(q.hasAttribute('role')).toBe(false);
+  expect(q.hasAttribute('tabindex')).toBe(false);
   expect(q.hasAttribute('data-drop')).toBe(false);
-  expect(document.querySelector('.expanded-lesson-overlay')).toBeNull();
   fireEvent.click(q);
-  expect(document.querySelector('.expanded-lesson-overlay')).not.toBeNull();
+  expect(document.querySelector('[class*="expanded-lesson"]')).toBeNull();
+  expect(document.querySelectorAll('.cards .card').length).toBeGreaterThanOrEqual(3);
 }, 15000);
+
+/* THE QUESTION BACK UP, ON ONE SCREEN: the Remote's "Show the question" (a
+   `{ focus: 'question' }` frame) draws the same card as ASK, in the stage's
+   own dusk, in place of the results; the back button, Esc or the Remote's
+   "Stop showing" puts the results back. No white overlay. */
+test('a question focus puts the ASK card up in place of the results; back and Esc put the results back', async () => {
+  const ws = jest.requireMock('../WebSocketClient').default;
+  await mount({ anonymous: false });
+  const handlerFor = (type) => {
+    const calls = ws.onMessage.mock.calls.filter(([t]) => t === type);
+    return calls.length ? calls[calls.length - 1][1] : null;
+  };
+  const onFocus = handlerFor('stageFocusChanged');
+  expect(typeof onFocus).toBe('function');
+
+  act(() => { onFocus({ type: 'stageFocusChanged', gameId: GAME, questionNumber: '002', focus: 'question', index: null, rev: 41 }); });
+  await waitFor(() => expect(document.querySelector('.content h1.q')).not.toBeNull());
+  expect(document.querySelector('.content h1.q').textContent).toBe('Temperature control');
+  expect(document.querySelector('.content .q-lesson').textContent).toBe('Say it in one line');
+  expect(document.querySelectorAll('.cards .card')).toHaveLength(0);
+  expect(document.querySelector('[class*="expanded-lesson"]')).toBeNull();
+  expect(document.querySelector('.content').getAttribute('data-grow')).toBe('1.35');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Back to the results' }));
+  await waitFor(() => expect(document.querySelectorAll('.cards .card').length).toBeGreaterThanOrEqual(3));
+  expect(document.querySelector('.content h1.q')).toBeNull();
+
+  act(() => { onFocus({ type: 'stageFocusChanged', gameId: GAME, questionNumber: '002', focus: 'question', index: null, rev: 43 }); });
+  await waitFor(() => expect(document.querySelector('.content h1.q')).not.toBeNull());
+  fireEvent.keyDown(window, { key: 'Escape' });
+  await waitFor(() => expect(document.querySelectorAll('.cards .card').length).toBeGreaterThanOrEqual(3));
+
+  // The Remote's "Stop showing the question" is a `none` frame: it closes too.
+  act(() => { onFocus({ type: 'stageFocusChanged', gameId: GAME, questionNumber: '002', focus: 'question', index: null, rev: 45 }); });
+  await waitFor(() => expect(document.querySelector('.content h1.q')).not.toBeNull());
+  act(() => { onFocus({ type: 'stageFocusChanged', gameId: GAME, questionNumber: '002', focus: 'none', index: null, rev: 46 }); });
+  await waitFor(() => expect(document.querySelectorAll('.cards .card').length).toBeGreaterThanOrEqual(3));
+}, 20000);
 
 /* ONE RESULT, PUT UP (frame 12): its place and a ladder of bars beside it,
    with no figures while names are hidden. */

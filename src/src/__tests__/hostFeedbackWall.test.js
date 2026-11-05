@@ -140,7 +140,7 @@ describe('featuring', () => {
     // Gated on featuredComment itself, not merely the phase — a round with
     // nothing featured must not show the wall's un-featured invitation
     // ("What do you make of it?") outside an actual feedback round.
-    expect(stage).toMatch(/hostPhase === 'FIELD_NOTES'\) && featuredComment\)/);
+    expect(stage).toMatch(/hostPhase === 'FIELD_NOTES'\) && featuredComment && !stageQuestionUp\)/);
   });
 });
 
