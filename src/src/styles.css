@@ -1502,7 +1502,7 @@ body {
 }
 .setup-loading { color: #B6C2D4; font-size: 13px; }
 
-/* skin-allowance SC-02: colour=102 font=1 primary=29 */
+/* skin-allowance SC-02: colour=101 font=1 primary=29 */
 /* --- The remote ---------------------------------------------------------- */
 /* The word "join" must never appear in here: this QR is behind the host
    sign-in, and it shipped once under a "Join In" heading — so a host who told
@@ -2289,13 +2289,6 @@ body {
   margin-bottom: 8px;
 }
 
-.school-name {
-  color: #666;
-  font-size: 14px;
-  font-style: italic;
-  margin-bottom: 15px;
-}
-
 .lesson-title {
   font-family: var(--font-display);
   font-size: 1.8rem;
@@ -2353,10 +2346,6 @@ body {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   background: #f0f0f0;
   object-fit: contain;
-}
-
-.artwork-image-expanded {
-  max-height: 65vh;
 }
 
 .artwork-image-voting {
@@ -3878,7 +3867,7 @@ body {
   box-shadow: 0 5px 15px rgba(255, 215, 0, 0.2);
 }
 
-/* skin-allowance SC-04: colour=170 font=0 primary=36 */
+/* skin-allowance SC-04: colour=162 font=0 primary=33 */
 /* Trivia Report Styles */
 .report-trivia-results {
   background: #f8f9fa;
@@ -4517,120 +4506,6 @@ body {
   color: #666;
   margin-top: 30px;
   font-style: italic;
-}
-
-/* Expanded Lesson Modal */
-.expanded-lesson-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.8);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-/* ─── THE QUESTION, ENLARGED FOR THE ROOM ────────────────────────────────────
-   Opened by clicking the stage's `.q` heading, and reported in the same breath
-   as the response spotlight: "a modal pops up but is the same size or smaller
-   than what was shown".
-
-   Here it was literally smaller. `.q` on the stage is set in `--L-primary`
-   (Room 40-68px, TV 52-88px). Expanding it dropped the same words to a fixed
-   1.8rem — 28.8px — and greyed them to #555. So the control named "Show the
-   full question" made the question roughly a THIRD of the size it already was,
-   which is the same inversion the spotlight had and the reason both are fixed
-   together.
-
-   Sizes come from the four per-profile ladders on the root element
-   (`styles/stage.css`), never from a scalar — see the note on `.stage-spot`
-   for the `--k` incident that rule comes from.
-
-   STILL PAPER-ON-DUSK, DELIBERATELY UNCHANGED. This card is a white sheet with
-   raw #333/#555 hex on a dusk stage, which is real design debt — no theme
-   declared, no tokens — but it is a RESTYLE, not this bug, and the reported
-   fault is scale. Logged rather than smuggled in. The one colour that does move
-   is the question's own text, from #555 to #333, because "so all can really
-   read the text" is about legibility and a 7.5:1 grey for the primary content
-   of the card is part of what was wrong with it.
-   ───────────────────────────────────────────────────────────────────────── */
-.expanded-lesson-content {
-  background: white;
-  border-radius: 20px;
-  padding: clamp(32px, 4vh, 64px) clamp(36px, 4vw, 72px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  cursor: default;
-  width: min(1600px, 92vw);
-  max-height: 92vh;
-  overflow-y: auto;
-  text-align: left;
-}
-
-.expanded-lesson-header {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 25px;
-}
-
-/* THE QUESTION ITSELF — the card's primary content, at the stage's primary
-   rung. It is the same string `.q` renders behind the overlay, so anything less
-   than `--L-primary` means the enlarge button shrank it. */
-.expanded-lesson-title {
-  font-family: var(--font-display);
-  font-size: var(--L-primary);
-  font-weight: 600;
-  color: #333;
-  margin-bottom: clamp(20px, 2.6vh, 36px);
-  line-height: 1.25;
-}
-
-.expanded-lesson-subtitle {
-  font-family: var(--font-display);
-  font-size: 2.75rem;
-  font-weight: 800;
-  margin-bottom: 20px;
-  color: #333;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-/* Supporting detail sits a rung below the question, not at a fixed 1.45rem
-   that lands under stage BODY size on every profile. */
-.expanded-lesson-detail {
-  font-size: var(--L-body);
-  color: #555;
-  line-height: 1.6;
-  margin-bottom: 30px;
-  background: #f8f9fa;
-  padding: 25px;
-  border-radius: 12px;
-  border-left: 4px solid var(--primary);
-}
-
-.expanded-lesson-prompt {
-  font-size: var(--L-meta);
-  color: var(--primary);
-  font-weight: 600;
-  text-align: center;
-  padding: 20px;
-  background: rgba(27, 41, 66, 0.1);
-  border-radius: 12px;
-  margin-top: 20px;
-}
-
-.clickable-lesson {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.clickable-lesson:hover {
-  transform: scale(1.02);
-  color: var(--primary);
 }
 
 /* Custom Confirmation Modal */

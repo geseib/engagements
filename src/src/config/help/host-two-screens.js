@@ -227,7 +227,7 @@ const twoScreens = {
           t: 'list',
           items: [
             { title: 'Room, TV, Table', text: 'Only what the room needs, as large as it fits.' },
-            { title: 'Call', text: 'For a shared screen read on people\'s own displays. It carries a little more: for example a set\'s general instruction as a small line under the question.' },
+            { title: 'Call', text: 'For a shared screen read on people\'s own displays. It carries a little more: for example the session\'s title in the top line.' },
           ],
         },
       ],
@@ -242,7 +242,7 @@ const twoScreens = {
           head: ['Moment', 'On the room\'s window'],
           rows: [
             ['Lobby', 'The session\'s title large, its details under it, how many are in the room, and on the right the QR, the address and the **Session code**.'],
-            ['Answering', 'The category, the title, the lesson under it, and the question itself in a **Your turn** band. A count of who has answered, never a name.'],
+            ['Answering', 'The category, the title and the lesson under it, as large as they fit. How to answer is on every phone, not here. A count of who has answered, never a name.'],
             ['Voting', 'When every answer fits, all of them, whole and numbered, with how many have voted. When they do not fit, one answer at a time with its number. No names, no tally.'],
             ['Results', '**What the room backed**: **The room\'s pick** in full, the others with a bar for their backing against the pick, and **Talk about it**, a question to discuss. Names and points show only in a round that shows names. When there are too many to fit, the rest fold into "and N more answers".'],
           ],
@@ -282,7 +282,7 @@ const twoScreens = {
           t: 'list',
           items: [
             { title: 'One response up', text: 'At results, its place and a short ladder showing where it sits. During voting, its number among all of them, never a name.' },
-            { title: 'The question back up', text: 'The lesson and **Your turn** again, during voting or results.' },
+            { title: 'The question back up', text: 'The title and the lesson again, during voting or results.' },
             { title: 'What we heard', text: '**Workie is writing** until the read arrives, then Workie\'s read a page at a time ("Page 1 of 4"), the same page your console marks.' },
             { title: 'Feedback', text: 'The round\'s title and "Provide feedback on the round from your phone, laptop or tablet.", or the comment you put up.' },
             { title: 'A question for the room', text: 'The question with its options or scale and a count; then bars for Choose, the average for Rate, and for Ideas only the ideas you pick.' },
@@ -523,7 +523,7 @@ const twoScreens = {
             { title: 'The main button', text: 'At the bottom, the same next move as your laptop, with the second move above it. An early move asks you to tap again.' },
             { title: 'Who the room is waiting on', text: 'While the room answers or votes, **Still to answer** or **Still to vote** names who has not yet, and the names go as people submit. It never shows who wrote what.' },
             { title: 'What we heard', text: 'Which page the room is on, **Back a page**, and Workie\'s points with Ask the room beside them.' },
-            { title: 'This round', text: 'A button that puts the question or one response up large for the room.' },
+            { title: 'This round', text: '**Show the question** puts the question back up; **Show the room** puts one response up.' },
             { title: 'Scoreboard', text: '**Show the scoreboard** or **Hide the scoreboard**, its next page, and its look.' },
             { title: 'Session', text: 'Three doors with the laptop\'s names: **Up next** (the running order, **Choose a question**, **Write a question**, the categories), **Rounds so far** (the report first) and **People**. Then **Join code**, **Room\'s screen**, and **Main menu**, which returns the phone to the code screen; the session keeps running.' },
             { title: 'Choose a question', text: 'The laptop\'s picker as a sheet, from **Up next** or the round\'s **Change**. **Ask next** returns with **Undo**.' },

@@ -377,10 +377,12 @@ describe('Continue on an unstarted session', () => {
  * because it rode in on the question.
  */
 describe('the stage takes a set instruction from the question, not only the catalogue', () => {
-  // A SET's instruction is the generic kind: since 18 Oct 2026 Room, TV and
-  // Table leave it off the room's screen ("the instructions is the optional
-  // one"), and Call, read on people's own screens, still shows it. So these
-  // run on Call, where the instruction reaching the stage is still visible.
+  // Since 5 Nov 2026 no room screen draws an instruction under a question
+  // ("taking the instructions out and making the main body larger"). The one
+  // place the stage still draws the resolved instruction is a question with
+  // no title and no lesson, where it is the only words there are and leads
+  // (config/roomContent.js questionUp). So these questions carry neither:
+  // what reaches the stage is still exactly the instruction being raced.
   beforeEach(() => { window.localStorage.setItem('engage.displayProfile', 'call'); });
   afterEach(() => { window.localStorage.removeItem('engage.displayProfile'); });
 
@@ -396,7 +398,7 @@ describe('the stage takes a set instruction from the question, not only the cata
           ok: true, status: 200,
           json: async () => ({
             id: 1, questionNumber: 1, setId: 'setA', setScope: 'platform',
-            title: 'Q1', questionDetail: 'D1', detail: 'D1',
+            title: '', questionDetail: '', detail: '',
             // No `customInstructions` of its own — this is the SET's voice,
             // not the question's, so resolveInstruction only reaches it when
             // the set-level value is actually populated from here.
@@ -482,7 +484,7 @@ describe('the stage takes a set instruction from the question, not only the cata
           ok: true, status: 200,
           json: async () => ({
             id: 1, questionNumber: 1, setId: 'setA', setScope: 'platform',
-            title: 'Q1', questionDetail: 'D1', detail: 'D1',
+            title: '', questionDetail: '', detail: '',
             setCustomInstruction: INSTRUCTION, setRoundNoun: 'Prompt',
           }),
           text: async () => '{}',

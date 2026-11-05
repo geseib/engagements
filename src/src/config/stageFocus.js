@@ -184,7 +184,7 @@ export function normaliseFocus(value) {
 /**
  * The focus as the two pieces of client state the stage already has.
  *
- * `GameHostPage` holds `lessonExpanded` (the question, blown up) and
+ * `GameHostPage` holds `lessonExpanded` (the question back up) and
  * `spotlightIndex` (one response, full-screen) and they are MUTUALLY EXCLUSIVE
  * in a way nothing enforced before this: both are independent booleans/indices
  * set by separate buttons, so a page could hold both at once and stack one

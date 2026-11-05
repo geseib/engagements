@@ -452,6 +452,24 @@ describe('ASK', () => {
     expect(q.compareDocumentPosition(brief) & 4).toBeTruthy();
   });
 
+  // rejects (owner, 5 Nov 2026): the instruction leaving the phones with the
+  //          room's screen. The stage and /present dropped "Your turn" and the
+  //          how-to line so the question body could be larger; the phone is
+  //          where the people answering read how to answer, so it stays here.
+  test('call-and-answer: the phone still shows the question\'s own instruction as "Your task"', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    server.question = { ...server.question, customInstructions: 'One habit, one sentence on its cost.' };
+    installFetch(server);
+    await join();
+    server.state = 'ASK#001';
+    await resync();
+    await screen.findByRole('textbox', { name: /Your response/i });
+    const task = document.querySelector('.plr-stage .plr-task');
+    expect(task).not.toBeNull();
+    expect(task.querySelector('.plr-lab').textContent).toBe('Your task');
+    expect(task).toHaveTextContent('One habit, one sentence on its cost.');
+  });
+
   // rejects: the receipt disappearing. handleSubmitAnswer clears the composer on
   //          send, so without this the only record of what a player wrote is
   //          `mySubmittedAnswer`, which exists to find their own ballot row and

@@ -217,38 +217,30 @@ const SURVEY_READ_STATES = new Set(['SURVEY#OPEN', 'SURVEY#CLOSED', 'ENDED']);
    are in config/questionCard.js now, beside the card that reads them
    (components/QuestionCard.jsx). */
 
+/** Where a question focus replaces the stage's body on one screen (ASK is the question already). */
+const QUESTION_HELD_PHASES = ['VOTE', 'RESULTS', 'FIELD_NOTES'];
+
+/** The words on the results' top card (docs/design/room-content-v2 frame 5). */
+const RESULTS_PICK = "The room's pick";
+
 /**
- * THE QUESTION LINE ABOVE THE STAGE'S CARDS, PRESSABLE (owner, 16 Oct 2026):
- * wherever the host can put a response up, the question can go back up too.
- * One screen: it opens the question large, over the stage. Two screens: the
- * same press puts it on the wall (expandQuestion publishes the focus).
+ * THE QUESTION LINE ABOVE THE STAGE'S CARDS.
  *
  * THE TITLE AS THE REMINDER (owner, 18 Oct 2026, docs/design/room-content-v2
  * frames 4 and 5; config/roomContent.js VOTING and RESULTS): the round's title
  * at the primary step above the answers, title-cased when the set wrote it in
  * capitals. Support, and essential — no data-drop: the fitter may not take
  * away the one line saying what is being voted on or what the result is of.
+ *
+ * NOT PRESSABLE (owner, 5 Nov 2026). It used to open the question "large"
+ * in a white overlay that was not much larger; that is gone. The question
+ * goes back up from the phone Remote's "Show the question" (on one screen the
+ * stage then draws the ASK card in place of the answers) or, with two
+ * screens, the console's "The question" row (the wall's QUESTION_FOCUS).
  */
-/** The words on the results' top card (docs/design/room-content-v2 frame 5). */
-const RESULTS_PICK = "The room's pick";
-
-function StageQuestionRecap({ question, onOpen }) {
+function StageQuestionRecap({ question }) {
   return (
-    <h2
-      className="q-remind is-openable"
-      data-rc-part="title"
-      data-rc="support"
-      role="button"
-      tabIndex={0}
-      aria-label="Show the question on the screen"
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-    >
+    <h2 className="q-remind" data-rc-part="title" data-rc="support">
       {roomTitle(question.title || question.question)}
     </h2>
   );
@@ -508,12 +500,17 @@ function GameHostPage() {
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
   const [currentQuestionVotes, setCurrentQuestionVotes] = useState([]);
   const [manualStateChange, setManualStateChange] = useState(false);
+  /* THE QUESTION IS UP: the round's `{ focus: 'question' }`, as the server
+     last said or this page last sent (the phone Remote's "Show the question",
+     the console's "The question" row). On one screen the stage draws the
+     question in its ASK card in place of the answers at VOTE and RESULTS
+     (`stageQuestionUp` below); on two screens it is the wall's
+     QUESTION_FOCUS. The name is older than that: it once opened a white
+     "expanded lesson" overlay, retired 5 Nov 2026. */
   const [lessonExpanded, setLessonExpanded] = useState(false);
   /* WHAT KIND OF FOCUS THE WALL HOLDS ('none' | 'question' | 'answer' | 'join'),
      as the server last said or this page last sent. The console reads it to
-     mark "The question" on the wall (owner, 16 Oct 2026); on two screens a
-     question focus is the wall's, so it does not also open the laptop's
-     expanded-question overlay, which is a one-screen thing. */
+     mark "The question" on the wall (owner, 16 Oct 2026). */
   const [wallFocus, setWallFocus] = useState('none');
   // THE ONE HOST PANEL. It replaced both edge tabs, both side panels and the
   // full-screen question browser — four surfaces, one dock button. Closed by
@@ -2930,18 +2927,32 @@ Focus on actionable business strategy insights.`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState, gameId, useWebSocket]);
 
-  // When the room finishes answering, close the expanded-question overlay so
-  // the host is looking at the stage again. The celebratory full-screen alert
-  // that used to fire here is deleted: it covered the stage — the advance
-  // control included — for three seconds at exactly the moment the host wanted
-  // to move on. The dock's status line already says "safe to move on", without
+  // The celebratory full-screen alert that used to fire when the room
+  // finished answering is deleted: it covered the stage — the advance control
+  // included — for three seconds at exactly the moment the host wanted to
+  // move on. The dock's status line already says "safe to move on", without
   // taking the screen to say it.
+
+  /* THE QUESTION HELD UP, AND ESC TO PUT IT AWAY (one screen). At ASK the
+     stage already IS the question, so a question focus there changes nothing
+     on this screen and must not quietly hold the keys either (nor in the
+     lobby, where there is no question): only while the answers or the
+     results are up (QUESTION_HELD_PHASES) does it replace what the room
+     sees and take → and Space (shortcutsSuppressed), as a response held up
+     does. Esc goes back, and tells the Remote. With the console the focus is
+     the wall's, and the console's own row puts it away. */
+  const questionHeld = lessonExpanded
+    && QUESTION_HELD_PHASES.includes(hostPhaseForBeat(phaseOfGameState(gameState), resultsBeat));
   useEffect(() => {
-    if (gameState.startsWith('ASK#') && players.length > 0
-        && answeredCount >= players.length && lessonExpanded) {
+    if (!questionHeld || useConsole) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       setLessonExpanded(false);
-    }
-  }, [gameState, players.length, answeredCount, lessonExpanded]);
+      if (publishFocusRef.current) publishFocusRef.current({ focus: 'none' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [questionHeld, useConsole]);
 
   // 🔗 Initialize game ID and event title from URL or generate new one
   useEffect(() => {
@@ -7201,7 +7212,7 @@ Focus on actionable business strategy insights.`;
         || showReport || showSurveyResults || showSurveyWalkthrough || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
-      lessonExpanded, isLoadingData, qrMode,
+      lessonExpanded: questionHeld, isLoadingData, qrMode,
       // With two surfaces a response on the wall is a step Auto walks, not a
       // pause: the laptop's spotlight is the host's view of the wall.
       spotlightOpen: !twoSurfaces && spotlightIndex !== null,
@@ -7299,7 +7310,7 @@ Focus on actionable business strategy insights.`;
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
     playersWhoVoted.length, createdSetup, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
-    showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
+    showConfirmModal, showExpandedQR, questionHeld, isLoadingData, qrMode,
     spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces, wallFocus]);
 
   /*
@@ -7376,7 +7387,7 @@ Focus on actionable business strategy insights.`;
   const scoreboardKeysOn = scoreboardKeysLive({
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
-    lessonExpanded, isLoadingData, qrMode: qrCovers,
+    lessonExpanded: questionHeld, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
@@ -7896,6 +7907,8 @@ Focus on actionable business strategy insights.`;
   const hostPhase = gameState === 'ENDED'
     ? 'ENDED'
     : hostPhaseForBeat(roundPhase, resultsBeat);
+  // The question back up, on THIS screen: its ASK card in place of the answers.
+  const stageQuestionUp = questionHeld && !useConsole;
 
   // Are `answers` THIS round-phase's? VOTE and RESULTS leave their responses'
   // space blank until they are (config/stageAnswers.js) — the owner: "it
@@ -8186,7 +8199,7 @@ Focus on actionable business strategy insights.`;
     // The ask preview is a dialog: Space and the arrows are its own.
     // …and so is the one-screen choice before writing a question (impromptu ask).
     showConfirmModal: showConfirmModal || Boolean(askComposer) || ownChoiceOpen || pickerChoiceOpen, showExpandedQR,
-    showReportsModal, lessonExpanded, isLoadingData, qrMode: qrCovers,
+    showReportsModal, lessonExpanded: questionHeld, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
     scoreboardOpen: scoreboard.open,
@@ -8795,8 +8808,13 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  /* The question, blown up for the room. Same deal as openSpotlight. */
-  const expandQuestion = () => {
+  /* The question, back up for the room (Session menu → Show how this works).
+     Same deal as openSpotlight: on one screen the stage draws it in its ASK
+     card, on two it is the wall's QUESTION_FOCUS. Only inside a round: in the
+     lobby there is no question, and a focus set there would surface later. */
+  const showQuestion = () => {
+    if (roundOfState(gameStateRef.current) === null) return;
+    setSpotlightIndex(null);
     setLessonExpanded(true);
     publishFocus({ focus: 'question' });
   };
@@ -9889,6 +9907,8 @@ Focus on actionable business strategy insights.`;
           joinPanelLive ? 'join' : '',
           // The round timer's line under the meter (2f) adds a row: re-measure.
           phaseTimer && phaseTimer.onWall !== false ? 'time' : '',
+          // The question back up replaces the answers: re-measure.
+          stageQuestionUp ? 'question' : '',
         ].join('|')}
         /* NO STEPS STRIP ON ONE SCREEN (experience plan §3.3, 2h): it is
            folded into the room's view, whose eyebrow and rail say where the
@@ -10161,7 +10181,7 @@ Focus on actionable business strategy insights.`;
             `[data-join]` lays the content out in a narrower column with the
             join block on the right; the fitter re-measures (fitKey) and steps
             the type down, and nothing leaves the screen. */}
-        <div className="content" data-join={joinPanelLive ? '1' : undefined} data-grow={STAGE_GROW[hostPhase] || '1'}>
+        <div className="content" data-join={joinPanelLive ? '1' : undefined} data-grow={STAGE_GROW[stageQuestionUp ? 'ASK' : hostPhase] || '1'}>
           {joinPanelLive && gameId && (
             <StageJoinPanel playUrl={playUrl} joinUrl={joinDisplayUrl} code={eventCode || gameId} />
           )}
@@ -10239,22 +10259,54 @@ Focus on actionable business strategy insights.`;
             {/* WHAT THE ROOM SEES (owner, 18 Oct 2026, docs/design/room-content-v2):
                 a Call & Answer round draws the parts config/roomContent.js
                 names for this profile, from the same call the room's window
-                makes — the title leads, the lesson under it, the question's
-                own instruction in "Your turn". `askRoomData` reads the same
-                question record the instruction is resolved from, so its own
-                instruction (customInstructions) decides "Your turn". Other
-                types keep the card's own DOM. */}
+                makes — the title leads and the whole lesson under it. Other
+                types keep the card's own DOM: the title, the prompt, trivia's
+                options (a poll's board is drawn below it).
+                NO INSTRUCTION ON THE ROOM'S SCREEN (owner, 5 Nov 2026: "taking
+                the instructions out and making the main body larger is more
+                useful"): neither "Your turn" nor the how-to-answer line. The
+                card is handed none, so the body takes the space (ASK's
+                data-grow); every phone still shows how to answer.
+                NOTHING TO ENLARGE: the card opens nothing (QuestionCard). */}
             {hostPhase === 'ASK' && currentQuestion && (
               <QuestionCard
                 phase="ASK"
                 question={currentQuestion}
                 gameType={currentGameType}
-                instruction={getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
-                onExpand={expandQuestion}
                 room={askRoomData
                   ? roomContentFor('ANSWERING', profile, askRoomData)
                   : null}
               />
+            )}
+
+            {/* THE QUESTION, BACK UP, ON ONE SCREEN (owner, 5 Nov 2026,
+                replacing the white "expanded lesson" overlay: "it turns the
+                modal background white but really isnt much larger"). When the
+                phone Remote's "Show the question" (or Session menu → Show how
+                this works) puts the question up during voting or the results,
+                the stage draws the same card as ASK — the room's
+                QUESTION_FOCUS content, in the stage's own dusk — in place of
+                the answers, at ASK's data-grow. Esc, the button below or the
+                Remote's "Stop showing the question" puts the answers back.
+                Two screens: it is the wall's, and the console's row. */}
+            {stageQuestionUp && currentQuestion && (
+              <>
+                <QuestionCard
+                  phase="ASK"
+                  question={currentQuestion}
+                  gameType={currentGameType}
+                  room={askRoomData
+                    ? roomContentFor('QUESTION_FOCUS', profile, askRoomData)
+                    : null}
+                />
+                <div className="fn-controls stage-qfocus" data-drop="1" data-testid="stage-question-back">
+                  <button type="button" onClick={collapseQuestion}>
+                    {hostPhase === 'VOTE' ? 'Back to the responses'
+                      : hostPhase === 'FIELD_NOTES' ? `Back to ${RW.whatWeHeard}` : 'Back to the results'}
+                  </button>
+                  <span>Esc</span>
+                </div>
+              </>
             )}
 
             {/* A TYPED POLL: its options on the wall the moment it is asked,
@@ -10263,7 +10315,7 @@ Focus on actionable business strategy insights.`;
               <PollBoard question={currentQuestion.poll} tally={pollTallyNow} live />
             )}
 
-            {hostPhase === 'VOTE' && (
+            {hostPhase === 'VOTE' && !stageQuestionUp && (
               <>
                 {/* THE CUE, THE TITLE, EVERY ANSWER (owner, 18 Oct 2026,
                     docs/design/room-content-v2 frame 4): "nice to see a bar
@@ -10277,7 +10329,7 @@ Focus on actionable business strategy insights.`;
                 <div className="kicker" data-rc-part="cue" data-rc="kicker">
                   {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
-                {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
+                {currentQuestion && <StageQuestionRecap question={currentQuestion} />}
                 {currentQuestion?.image && (
                   <img
                     className="stage-art"
@@ -10395,7 +10447,7 @@ Focus on actionable business strategy insights.`;
                     stageShell.test.jsx holds. A control that is not on the
                     stage cannot be sacrificed from it. */}
 
-            {hostPhase === 'RESULTS' && (
+            {hostPhase === 'RESULTS' && !stageQuestionUp && (
               <>
                 {/* NO KICKER ON RESULTS. "Round 3 · Results" sat above a card
                     whose first line now restates the question (QuestionCard's
@@ -10510,7 +10562,7 @@ Focus on actionable business strategy insights.`;
                      without asking anyone to own up, and is the first thing
                      the fitter may give up. */
                   <>
-                  {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
+                  {currentQuestion && <StageQuestionRecap question={currentQuestion} />}
                   <div className="cards is-ideas" data-rc-part="ideas" data-rc="lead">
                     {answerPage.items.map((answer, i) => {
                       const idx = answerPage.offset + i;
@@ -10695,7 +10747,7 @@ Focus on actionable business strategy insights.`;
               </>
             )}
 
-            {hostPhase === 'FIELD_NOTES' && (
+            {hostPhase === 'FIELD_NOTES' && !stageQuestionUp && (
               <>
                 <div className="kicker">{RW.whatWeHeard}</div>
                 {/* Four states, one component (components/AISummaryStatus.jsx):
@@ -10810,7 +10862,7 @@ Focus on actionable business strategy insights.`;
                 that would be a non-sequitur mid-tally or mid-field-notes, so
                 it must never render there with nothing featured. */}
             {(hostPhase === 'FEEDBACK'
-              || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && featuredComment)) && (
+              || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && featuredComment && !stageQuestionUp)) && (
               // The wall is its own component: the question, one instruction line,
               // and the comment the host put up as a pull quote (FeedbackWall.jsx).
               // The count is the meter's; the arrivals are the meter's list.
@@ -11104,7 +11156,7 @@ Focus on actionable business strategy insights.`;
           answerCount={answers.length}
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
-          onShowHowToPlay={() => setLessonExpanded(true)}
+          onShowHowToPlay={showQuestion}
           onSwitchGame={requestLeave}
           /* AN EVENT'S ITEM (2d, with 2h's order): the Session menu's first
              row, Agenda (up one level, never instead of Main menu) and Bring
@@ -11291,57 +11343,6 @@ Focus on actionable business strategy insights.`;
           room is, continuously, without taking the screen to say it. The
           loading overlay above stays: it reports a real wait. */}
 
-      {/* Expanded Lesson Modal */}
-      {lessonExpanded && questions.length > 0 && !(useConsole && wallFocus === 'question') && (
-        <div className="expanded-lesson-overlay" onClick={collapseQuestion}>
-          <div className="expanded-lesson-content" onClick={(e) => e.stopPropagation()}>
-            <div className="expanded-lesson-header">
-              <div className="field-badge">
-                {questions[0].field || questions[0].category}
-              </div>
-              {questions[0].school && (
-                <div className="school-name">{questions[0].school}</div>
-              )}
-            </div>
-            <div className="expanded-lesson-title">
-              {currentGameType === 'trivia' ? 
-                (questions[0].title) :
-                (questions[0].title || questions[0].question)
-              }
-            </div>
-            {questions[0].image && (
-              <img
-                src={questions[0].image}
-                alt={questions[0].title || 'Artwork'}
-                className="artwork-image artwork-image-expanded"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            )}
-            {currentGameType === 'trivia' && (questions[0].questionDetail || questions[0].detail) && (
-              <div className="expanded-lesson-detail">
-                {questions[0].questionDetail || questions[0].detail}
-              </div>
-            )}
-            {questions[0].detail && currentGameType !== 'wavelength' && (
-              <div className="expanded-lesson-detail">
-                {questions[0].detail}
-              </div>
-            )}
-            {/* Wavelength: the term and nothing about it — a stored detail is
-                a definition, and definitions are the players' job. The
-                expanded view adds only the reminder of what to do. */}
-            {currentGameType === 'wavelength' && (
-              <div className="expanded-lesson-detail wavelength-topic-expanded">
-                Everyone lists up to ten words or short phrases this term brings to mind.
-              </div>
-            )}
-            <div className="expanded-lesson-prompt">
-              <strong>{getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}</strong>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* The are-you-sure dialog, now components/ConfirmDialog.jsx: ← cancels,
           → carries the advance through, and the buttons wear their keys — the
           owner's own gesture, since the hand that triggered this was already

@@ -212,7 +212,7 @@ generic filler trigger one rewrite (`get-ai-summary.js`); what remains is stored
 `ReadCheck` and shown to the host only (`GET …/ai-summary/host`).
 
 What every room screen shows, per moment and room screen size, is decided in one place:
-`src/src/config/roomContent.js`: the title and the lesson lead, the question goes in "Your turn", voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
+`src/src/config/roomContent.js`: the title and the lesson lead, with no instruction on the room's screen (the phones carry it, since 5 Nov 2026), voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
 
 ## Documentation
 

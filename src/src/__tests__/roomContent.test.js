@@ -4,15 +4,15 @@
  * config/roomContent.js decides, per moment and display profile, which parts
  * of a moment the room's screens show and with what emphasis. These tests hold
  * the decisions table in its header: the title and the lesson lead whenever a
- * question or a lesson is up, the question's own task in "Your turn" (owner,
- * 18 Oct 2026, docs/design/room-content-v2); voting shows every answer and
+ * question or a lesson is up, with no instruction on any room screen (owner,
+ * 5 Nov 2026; the 18 Oct "Your turn" band is gone); voting shows every answer and
  * results the pick with no counts; Call carries the extra; nothing ever
  * carries a name; Claude's status is never dropped in a Build Room.
  */
 import {
   roomContentFor, shows, roleOf, sizeOf, textOf, isVerbose, taskIsOwn,
   CA_MOMENTS, BUILD_MOMENTS, MINIMAL_PROFILES, ROLE, LIST_LEADS, TALK_LINE,
-  questionRoomData, splitLessonQuestion, roomTitle, overviewFits,
+  questionRoomData, splitLessonQuestion, roomTitle, overviewFits, STORY_PRIMARY_MAX,
 } from '../config/roomContent';
 import { PROFILES } from '../config/displayProfile';
 
@@ -103,7 +103,6 @@ describe('Call & Answer: a question or a lesson is up', () => {
         const rc = roomContentFor(moment, profile, d);
         expect(rc.lead).toBe('title');
         expect(roleOf(rc, 'story')).toBe(ROLE.SUPPORT);
-        expect(sizeOf(rc, 'story')).toBe('secondary');
         expect(rc.essential).toContain('story');
         expect(rc.dropOrder).not.toContain('story');
         expect(rc.order.indexOf('title')).toBeLessThan(rc.order.indexOf('story'));
@@ -111,24 +110,47 @@ describe('Call & Answer: a question or a lesson is up', () => {
     });
   });
 
-  it.each(UP)('%s: the question\'s own task is "Your turn", never dropped, on every profile', (moment) => {
+  // rejects (owner, 5 Nov 2026): "taking the instructions out and making the
+  // main body larger is more useful". The 18 Oct "Your turn" band, and Call's
+  // generic line, on any room screen and any profile.
+  it.each(UP)('%s: no instruction on any profile, the question\'s own or a generic one', (moment) => {
     PROFILES.forEach((profile) => {
-      const rc = roomContentFor(moment, profile, DATA);
-      expect(roleOf(rc, 'task')).toBe(ROLE.SUPPORT);
-      expect(sizeOf(rc, 'task')).toBe('secondary');
-      expect(rc.essential).toContain('task');
-      expect(rc.order.indexOf('story')).toBeLessThan(rc.order.indexOf('task'));
+      [DATA, { ...DATA, taskOwn: false }].forEach((d) => {
+        const rc = roomContentFor(moment, profile, d);
+        expect(shows(rc, 'task')).toBe(false);
+        expect(rc.dropOrder).not.toContain('task');
+        expect(JSON.stringify(rc)).not.toContain(LONG_TASK);
+      });
     });
   });
 
-  it.each(UP)('%s: a generic instruction is left off Room, TV and Table; on Call it is a line that may give way', (moment) => {
-    MINIMAL_PROFILES.forEach((profile) => {
-      expect(shows(roomContentFor(moment, profile, { ...DATA, taskOwn: false }), 'task')).toBe(false);
+  it.each(UP)('%s: the body is larger: a short lesson at the primary step, a long one at secondary', (moment) => {
+    expect(STORY.length).toBeLessThanOrEqual(STORY_PRIMARY_MAX);
+    const LONG_STORY = `${STORY} ${STORY}`;
+    expect(LONG_STORY.length).toBeGreaterThan(STORY_PRIMARY_MAX);
+    PROFILES.forEach((profile) => {
+      expect(sizeOf(roomContentFor(moment, profile, DATA), 'story')).toBe('primary');
+      expect(sizeOf(roomContentFor(moment, profile, { ...DATA, story: LONG_STORY }), 'story')).toBe('secondary');
     });
-    const call = roomContentFor(moment, 'call', { ...DATA, taskOwn: false });
-    expect(roleOf(call, 'task')).toBe(ROLE.SUPPORT);
-    expect(sizeOf(call, 'task')).toBe('body');
-    expect(call.dropOrder).toContain('task');
+  });
+
+  it.each(UP)('%s: the room reads the lesson whole, the question at its front included', (moment) => {
+    const LESSON = 'Describe how you apply the concept of thresholds in your work. Architect Christopher Alexander taught that thresholds are crucial for human comfort.';
+    const d = questionRoomData({ title: 'Thresholds', detail: LESSON }, { task: 'Answer on your phone.' });
+    // The console and the phones still get the question pulled out…
+    expect(d.task).toMatch(/^Describe how you apply/);
+    expect(d.story).toMatch(/^Architect/);
+    // …the room does not lose it with the band.
+    expect(textOf(roomContentFor(moment, 'room', d), 'story')).toBe(LESSON);
+  });
+
+  it.each(UP)('%s: with no title the lesson leads; with neither, the task', (moment) => {
+    PROFILES.forEach((profile) => {
+      expect(roomContentFor(moment, profile, { ...DATA, title: '' }).lead).toBe('story');
+      const rc = roomContentFor(moment, profile, { ...DATA, title: '', story: '' });
+      expect(rc.lead).toBe('task');
+      expect(textOf(rc, 'task')).toBe(LONG_TASK);
+    });
   });
 
   it.each(UP)('%s: the category is a small eyebrow on every profile', (moment) => {
@@ -146,11 +168,6 @@ describe('Call & Answer: a question or a lesson is up', () => {
       expect(rc.lead).toBe('task');
       expect(textOf(rc, 'task')).toBe(LONG_TASK);
     });
-  });
-
-  it('a task that only repeats the lesson or the title is not shown twice', () => {
-    expect(shows(roomContentFor('ANSWERING', 'room', { ...DATA, task: STORY }), 'task')).toBe(false);
-    expect(shows(roomContentFor('ANSWERING', 'room', { ...DATA, task: DATA.title }), 'task')).toBe(false);
   });
 
   it('a short title is drawn at hero, a long one at primary', () => {
