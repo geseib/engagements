@@ -228,9 +228,10 @@ const joining = {
     {
       /*
         The session knows a player by this browser (components/joinResult.js
-        getClientId), not by name alone. Same browser: "Welcome back." with
-        "Rejoin as {name}" / "Join as someone else" (PlayerPage rejoinPrompt,
-        checked on dev). Another browser: join-game.js answers NAME_TAKEN.
+        getClientId), not by name alone. Same tab: "Welcome back, {name}."
+        with "Rejoin as {name}" / "Join as someone else"; a new tab of the
+        same browser: "Are you {name}?" / "I'm someone else" (PlayerPage
+        rejoinPrompt, utils/sessionSeat.js; dev QA 5 Nov). Another browser: join-game.js answers NAME_TAKEN.
         The lobby's "Lost this page?" line (a disclosure, 5 Nov 2026) opens
         to the same steps and repeats the code.
       */
@@ -240,11 +241,11 @@ const joining = {
       blocks: [
         {
           t: 'p',
-          text: 'Reopen the link, or the join screen, on the same phone and the same browser. Your screen says "Welcome back." Tap **Rejoin as** your name, and your answers and points come back with you.',
+          text: 'Reopen the link on the same phone and the same browser. In the same tab your screen says "Welcome back" with your name; in a new tab it asks "Are you" and your name first. Tap **Rejoin as** your name, and your answers and points come back with you.',
         },
         {
           t: 'p',
-          text: '**Join as someone else** forgets that name on this phone and opens an empty join form.',
+          text: '**Join as someone else** (in a new tab, **I’m someone else**) forgets that name on this phone and opens an empty join form.',
         },
         {
           t: 'p',

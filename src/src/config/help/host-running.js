@@ -145,7 +145,7 @@ const running = {
           items: [
             'The meter counts the answers ("Answered 1 / 4"). Your part now says "Some are still answering", then **Safe to move on** when everyone is in.',
             'The main button is **Start voting** for Call & Answer and **Show results** for the other types. It stays grey until someone has answered.',
-            'Pressed early, it does not open a dialog: it changes to "Start voting anyway" and says who is still writing ("1 of 3 still writing"). Press again within a few seconds to go on; wait and it settles back.',
+            'Pressed early, it does not open a dialog: it changes to "Start voting anyway" and says who is still writing ("1 of 3 still writing"). It waits, ringed, with the reason beside it, until you press again to go on; Esc, another button, or the room moving on lets it go. "Start round 2" asks the same way while questions you planned are not asked yet.',
             '**Skip this round** is behind **⋯** beside the main button. It asks first: the room loses the round, and its answers are not counted.',
           ],
         },

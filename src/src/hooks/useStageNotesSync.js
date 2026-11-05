@@ -67,9 +67,12 @@ export default function useStageNotesSync({
     wait, and only the latest is sent when it returns, so the server cannot
     apply page 2 and then page 1 and walk the room back.
 
-    A POST THAT FAILS IS SENT AGAIN (finding 3): the first post of a read can
-    reach the server before the beat itself does (409), and without a retry
-    the server never learns the count the Remote steps against.
+    A POST THAT FAILS IS SENT AGAIN (finding 3): the first post of a read
+    could reach the server before the beat itself did (409), and without a
+    retry the server never learns the count the Remote steps against. The
+    host page's `post` now waits for the beat it sent (GameHostPage
+    publishNotesPage; dev QA 5 Nov), so that 409 no longer happens there; the
+    retry stays for a beat another screen sent and a failed network.
   */
   const inFlightRef = useRef(false);
   const wantedRef = useRef(null);

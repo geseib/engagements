@@ -247,9 +247,31 @@ describe('the anonymity card', () => {
 
   // rejects: dropping the limits sentence, or softening it into a promise of
   // secrecy the system cannot keep.
-  test('states the limit — names, not identities', () => {
+  test('states the limit — only names are hidden', () => {
     openVotingFormat();
-    expect(screen.getByText(/hides names, not identities/i)).toBeInTheDocument();
+    expect(screen.getByText(/Only names are hidden, from the host too, until voting closes\./)).toBeInTheDocument();
+    expect(screen.getByText(/people may still\s+recognise each other/i)).toBeInTheDocument();
+  });
+
+  // rejects: dev QA 5 Nov — Advanced still said "This hides names, not
+  // identities." after the ballot had moved on. One shared string now.
+  test('the Advanced card says the ballot\'s own sentence, from the one words config', () => {
+    // eslint-disable-next-line global-require
+    const { NAMES_HIDDEN } = require('../config/playerWords');
+    openVotingFormat();
+    const line = document.querySelector('.gsd-opt-limit');
+    expect(line.textContent.startsWith(NAMES_HIDDEN)).toBe(true);
+    expect(line.textContent).not.toMatch(/not identities/i);
+    // eslint-disable-next-line global-require
+    const fs = require('fs');
+    // eslint-disable-next-line global-require
+    const path = require('path');
+    const src = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    // Neither surface carries the sentence as a literal of its own.
+    expect(src('PlayerPage.jsx')).not.toContain(NAMES_HIDDEN);
+    expect(src('components/SessionOptions.jsx')).not.toContain(NAMES_HIDDEN);
+    expect(src('PlayerPage.jsx')).toContain('{NAMES_HIDDEN}');
+    expect(src('components/SessionOptions.jsx')).toContain('{NAMES_HIDDEN}');
   });
 
   // rejects: gating on anything other than "does this format hold a vote".

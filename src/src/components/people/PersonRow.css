@@ -72,6 +72,16 @@
 .prow.prow--rail .prow-doing.is-done { color: var(--success-text); font-weight: 700; }
 .prow.prow--rail .prow-doing.is-wait,
 .prow.prow--rail .prow-doing.is-unknown { color: var(--muted); }
+/* AWAY IN THE RAIL (dev QA 5 Nov): the word, muted, at the label size, in a
+   doing slot widened to 40px on that row only. The fact and ⋯ columns are
+   fixed from the right edge, so they still line up; the name gives the 20px. */
+.prow.prow--rail.is-away-word {
+  grid-template-columns: 8px minmax(0, 1fr) 40px 48px 28px;
+}
+.prow.prow--rail .prow-doing.is-away {
+  color: var(--muted); font-size: var(--prow-t-label); font-weight: 600; text-align: right;
+}
+.prow.prow--rail[data-status="away"] .prow-name { color: var(--muted); }
 .prow.prow--rail .prow-fact { font-variant-numeric: tabular-nums; }
 .prow .prow-fact .prow-right { color: var(--success-text); font-weight: 800; margin-right: 4px; }
 .prow .prow-fact .prow-wrong { color: var(--danger-text); font-weight: 800; margin-right: 4px; }

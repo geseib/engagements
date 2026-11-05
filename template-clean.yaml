@@ -287,6 +287,12 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # presence.js: a player's page opening tells the host (presenceChanged).
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -300,6 +306,12 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # presence.js: a player's page closing tells the host (presenceChanged).
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

@@ -319,6 +319,17 @@ body {
   padding-left: 0.6em;
   border-left: 3px solid var(--warn);
 }
+/* The same live region while nothing is armed: mounted, empty, out of the
+   row (absolute, so the actions' gap does not count it), still in the
+   accessibility tree so its words are announced when they arrive. */
+.host-action-bar__armed-slot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 /* THE MAIN BUTTON STAYS ORANGE WHEN ARMED (PLAN principle 4; dev QA 2 Nov:
    it switched colour from state to state). An armed primary keeps its fill
    and takes the warn ring; only a quiet button takes the warn wash. */

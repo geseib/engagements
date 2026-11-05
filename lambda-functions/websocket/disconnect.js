@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, DeleteCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { announcePresence } = require('./presence');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -38,6 +39,9 @@ exports.handler = async (event) => {
         }
       }));
       console.log(`✅ WebSocket connection removed: ${connectionId} from ${connection.PK}`);
+      // A person's page closed: the host's room tile and People rail mark
+      // them away now, not at the next reload (presence.js; dev QA 5 Nov).
+      await announcePresence('disconnect', connection, { db, tableName: process.env.TABLE_NAME });
     } else {
       console.log(`⚠️ Connection ${connectionId} not found in database`);
     }

@@ -642,7 +642,8 @@ describe('T7b the Stage and room safety', () => {
     fireEvent.click(within(dockEl).getByRole('button', { name: 'Next: 3' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postsTo('run/next')).toHaveLength(0);
-    expect(within(dockEl).getByRole('alert')).toHaveTextContent("Claude hasn't finished 2. Press again to send 3.");
+    // The bar's polite live region (HostActionBar, dev QA 5 Nov), not an alert.
+    expect(within(dockEl).getByTestId('bar-armed')).toHaveTextContent("Claude hasn't finished 2. Press again to send 3.");
     fireEvent.click(within(dockEl).getByRole('button', { name: 'Next: 3 anyway' }));
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
     expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1', force: true });

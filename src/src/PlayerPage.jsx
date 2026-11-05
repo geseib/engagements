@@ -23,9 +23,10 @@ import { getClientId, classifyJoinFailure } from './components/joinResult';
 import SessionCodeField from './components/SessionCodeField';
 import PlayerEnded, { PlayerEndedDock } from './components/PlayerEnded';
 import { codeFromUrl } from './hooks/useJoinCode';
+import { readSeat, saveSeat, forgetSeat, sessionCodeFrom } from './utils/sessionSeat';
 import {
   JOIN, EARLY, WAIT, SENT, RECEIPT, RESULTS, ENDED, LOOK_UP, STEP, IN_SESSION, barWhere, receiptFor,
-  SEND, HELD, SEND_FAILED,
+  SEND, HELD, SEND_FAILED, NAMES_HIDDEN,
 } from './config/playerWords';
 import {
   roundOf, pendingVerdict, savePendingAnswer, loadPendingAnswer, clearPendingAnswer,
@@ -734,29 +735,33 @@ function PlayerPage({ event = null } = {}) {
 
     // 🔗 PLAYER: Get game ID from URL params (optional)
     const urlParams = new URLSearchParams(window.location.search);
-    const gameIdFromUrl = urlParams.get('gameId');
-    
+    // `?gameId=` (every link this app makes) or `?code=` (dev QA 5 Nov: a
+    // `/play?code=` link came back to a blank form; only gameId was read).
+    const gameIdFromUrl = sessionCodeFrom(window.location.search);
+
     if (gameIdFromUrl) {
       console.log(`🎯 PLAYER: Found game ID in URL: ${gameIdFromUrl}`);
       setGameId(gameIdFromUrl);
       setGameIdFromUrl(true);
 
-      // 👤 PLAYER: Check for automatic reconnection
+      // 👤 PLAYER: Check for automatic reconnection. THIS BROWSER'S SEAT
+      // (utils/sessionSeat.js): this tab's own copy first, else the browser's.
       const nameFromUrl = urlParams.get('name') || '';
-      const savedName = localStorage.getItem(`playerName_${gameIdFromUrl}`);
-      
+      const seat = readSeat(gameIdFromUrl);
+      const savedName = seat ? seat.name : null;
+
       console.log(`🔍 PLAYER: Checking reconnection - URL name: "${nameFromUrl}", Saved name: "${savedName}"`);
-      
+
       if (nameFromUrl) {
         // Name in URL - try to auto-join
         console.log(`🚀 PLAYER: Attempting auto-join with name from URL: ${nameFromUrl}`);
         setNameInput(nameFromUrl);
-        
+
         if (savedName === nameFromUrl) {
           // Previously joined this game with this name — confirm before rejoining
           // instead of silently auto-joining (B2).
           console.log(`✅ PLAYER: Saved name matches — staging rejoin prompt`);
-          setRejoinPrompt({ gameId: gameIdFromUrl, name: nameFromUrl });
+          setRejoinPrompt({ gameId: gameIdFromUrl, name: nameFromUrl, thisTab: seat.thisTab });
         } else {
           // Try to join automatically
           console.log(`🔄 PLAYER: Auto-joining with URL name (not previously saved)`);
@@ -766,7 +771,7 @@ function PlayerPage({ event = null } = {}) {
         // No name in URL but we have saved name - pre-fill the form and offer rejoin (B2)
         console.log(`💾 PLAYER: Pre-filling form with saved name: ${savedName}`);
         setNameInput(savedName);
-        setRejoinPrompt({ gameId: gameIdFromUrl, name: savedName });
+        setRejoinPrompt({ gameId: gameIdFromUrl, name: savedName, thisTab: seat.thisTab });
       }
     } else {
       console.log(`🔗 PLAYER: No game ID in URL - showing manual join form`);
@@ -861,7 +866,8 @@ function PlayerPage({ event = null } = {}) {
     setJoined(true);
     setJoinCollision(null);
     setRejoinPrompt(null);
-    localStorage.setItem(`playerName_${gid}`, name);
+    // The browser's copy and this tab's (utils/sessionSeat.js).
+    saveSeat(gid, name);
 
     if (data.isReconnection || data.rejoined) {
       setRejoinedPlayer(true);
@@ -3324,7 +3330,7 @@ function PlayerPage({ event = null } = {}) {
     const gone = String(name || playerName || '').trim();
     if (gameId && gone) clearPendingAnswer(gameId, gone);
     setPendingAnswer(null);
-    try { if (gameId) localStorage.removeItem(`playerName_${gameId}`); } catch (_) { /* storage off */ }
+    forgetSeat(gameId);
     webSocketClient.disconnect();
     setJoined(false);
     setRejoinPrompt(null);
@@ -3352,7 +3358,7 @@ function PlayerPage({ event = null } = {}) {
   const handleRejoinDecline = () => {
     if (!rejoinPrompt) return;
     console.log(`🙅 PLAYER: Declining rejoin — joining as someone else`);
-    localStorage.removeItem(`playerName_${rejoinPrompt.gameId}`);
+    forgetSeat(rejoinPrompt.gameId);
     setNameInput('');
     setPlayerName('');
     setRejoinPrompt(null);
@@ -3624,7 +3630,15 @@ function PlayerPage({ event = null } = {}) {
     failed a WATCH screen for having a button on it, three times, once per
     device profile, and the failure was right.
   */
+  /*
+    THIS TAB, OR ONLY THIS BROWSER (dev QA 5 Nov; the 5 Nov rule for an
+    event, EventAttendeePage's "Are you Ges?"). This tab's own seat (a reload,
+    or coming back in the same tab) is "Welcome back, Priya." A seat only the
+    browser holds (a new tab, maybe a second person at the same laptop) is
+    asked as a question, never assumed: "Are you Priya?" / I'm someone else.
+  */
   if (!joined && rejoinPrompt) {
+    const asking = rejoinPrompt.thisTab === false;
     return (
       <PlayerShell
         phase="join"
@@ -3636,15 +3650,18 @@ function PlayerPage({ event = null } = {}) {
               Rejoin as {rejoinPrompt.name}
             </Button>
             <Button variant="secondary" size={56} onClick={handleRejoinDecline}>
-              Join as someone else
+              {asking ? 'I’m someone else' : 'Join as someone else'}
             </Button>
           </>
         )}
       >
-        <h1 className="plr-h1 plr-h1--primary">Welcome back.</h1>
+        <h1 className="plr-h1 plr-h1--primary" data-testid="rejoin-heading">
+          {asking ? `Are you ${rejoinPrompt.name}?` : `Welcome back, ${rejoinPrompt.name}.`}
+        </h1>
         <p className="plr-lede plr-muted">
-          This device joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
+          {asking ? 'This browser' : 'This device'} joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
           <strong>{rejoinPrompt.name}</strong>.{' '}
+          {asking ? 'If that is you, carry on where you were. If not, join with your own name. ' : ''}
           {/* A survey has answers and no score (the brief says which this is). */}
           {briefSaysSurvey
             ? 'Rejoining brings your answers back with you.'
@@ -4950,9 +4967,7 @@ function PlayerPage({ event = null } = {}) {
               "Only names" carries the qualifier the long form spelled out
               ("This hides names, not identities"): it never says anonymous,
               because a room of twelve can still recognise a voice. */}
-          <p className="plr-anon plr-anon--line">
-            Only names are hidden, from the host too, until voting closes.
-          </p>
+          <p className="plr-anon plr-anon--line">{NAMES_HIDDEN}</p>
         </>
       );
 

@@ -46,6 +46,7 @@ import { gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
 import { NAMES_MODES, namesMode } from '../config/surveyNames';
 import { advancedSummary } from '../config/setupDefaults';
+import { NAMES_HIDDEN } from '../config/playerWords';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
@@ -432,9 +433,10 @@ export default function SessionOptions({
                 : <><b>It is off</b> — every answer is labelled with its author from the moment voting opens.</>}
             </p>
 
-            {/* Never overclaim. Shipped verbatim. */}
+            {/* Never overclaim. The ballot's own sentence (playerWords
+                NAMES_HIDDEN), so the two cannot drift again (dev QA 5 Nov). */}
             <p className="gsd-opt-limit">
-              This hides names, not identities. In a small group, people may still
+              {NAMES_HIDDEN} In a small group, people may still
               recognise each other’s answers.
             </p>
           </div>

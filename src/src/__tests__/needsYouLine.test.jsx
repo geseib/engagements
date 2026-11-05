@@ -117,7 +117,10 @@ describe('the socket frame updates the line in the same render tick', () => {
 
   test('the console mounts the line under Your part now, and the bell gets the session', () => {
     const host = readFileSync(join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-    expect(host).toMatch(/needs=\{<NeedsYouLine needs=\{needs\} onAct=\{onNeedsAct\}/);
+    // One line for both frames (oneScreenSetupNeeds.test.jsx): the private line
+    // wherever the room cannot read this laptop.
+    expect(host).toMatch(/needs=\{needsLine\}/);
+    expect(host).toMatch(/\? <NeedsYouLine needs=\{needs\} onAct=\{onNeedsAct\}/);
     expect(host).toMatch(/bellSession: needsBell/);
   });
 });

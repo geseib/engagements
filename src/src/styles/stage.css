@@ -1408,6 +1408,14 @@ a.dock-more{text-decoration:none}
 .dock .host-action-bar__primary:hover:not(:disabled){
   background:var(--primary);color:#14203A;filter:brightness(1.06);
   transform:none;box-shadow:none}
+/* AN ARMED MAIN BUTTON KEEPS ITS RING UNDER THE POINTER (dev QA 5 Nov). The
+   hover rule above is (0,4,0) and takes box-shadow away; styles.css's armed
+   ring is (0,3,0), so the ring vanished the moment it was drawn, with the
+   pointer still on the button that had just been pressed, and the press
+   looked like nothing. Restated here at (0,3,0) and (0,5,0). */
+.dock .host-action-bar__primary.is-armed,
+.dock .host-action-bar__primary.is-armed:hover:not(:disabled){
+  border-color:var(--warn);box-shadow:0 0 0 3px rgb(var(--warn-rgb) / .55)}
 .dock .host-action-bar__primary:disabled{
   background:rgba(155,168,190,.18);color:var(--muted);
   border:var(--hair) solid transparent;cursor:not-allowed;
