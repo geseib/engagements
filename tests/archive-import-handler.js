@@ -6,7 +6,8 @@
  * decides: who may restore, which path each item takes, that one bad item does not stop the
  * rest, and that the response names every set now live for every organisation.
  *
- * // rejects: a restore by a host or by an admin standing in a customer team; a batch that
+ * // rejects: a dry run that writes anything; a restore that is not read back;
+ * //          a restore by a host or by an admin standing in a customer team; a batch that
  * //          dies on its first bad item; a refusal that still writes; a legacy CSV that lands
  * //          active or renamed; an unsigned archive call.
  */
@@ -69,6 +70,7 @@ const LEGACY_CSV = '"Category","Title","Detail","OptionA","OptionB","OptionC","O
     assert.deepStrictEqual(res.body.results.failed, []);
     assert.deepStrictEqual(res.body.results.successful[0], {
       archiveId: live, kind: 'set', id: 'livequiz', name: 'livequiz', mode: 'created', version: 1, active: true,
+      check: { version: 1, questions: { expected: 1, found: 1 }, categories: { expected: 1, found: 1 }, matches: true },
     });
     assert.deepStrictEqual(res.body.results.successful.map((r) => r.mode), ['created', 'created', 'new-version']);
   });
@@ -121,6 +123,7 @@ const LEGACY_CSV = '"Category","Title","Detail","OptionA","OptionB","OptionC","O
     assert.deepStrictEqual(res.body.results.failed, []);
     assert.deepStrictEqual(res.body.results.successful[0], {
       archiveId: legacySet, kind: 'set', id: 'oldquiz', name: 'Old Quiz', mode: 'created', version: 1, active: false, legacy: true, questionCount: 1,
+      check: { version: 1, questions: { expected: 1, found: 1 }, categories: { expected: null, found: 1 }, matches: true },
     });
     assert.deepStrictEqual([legacyRow.name, legacyRow.description, legacyRow.active, legacyRow.createdBy], ['Old Quiz', 'Space facts', false, 'staff-1']);
   });
@@ -146,6 +149,71 @@ const LEGACY_CSV = '"Category","Title","Detail","OptionA","OptionB","OptionC","O
     assert.ok(entry && entry.legacy && entry.id.startsWith('imported-'), JSON.stringify(res.body));
     const row = h.rows('AIPROMPTS').find((r) => r.promptId === entry.id);
     assert.deepStrictEqual([row.name, row.description, row.status, row.isDefault], ['Summary', 'Reads the room', 'draft', false]);
+  });
+
+  console.log('\n5. a dry run says what would happen, and writes nothing');
+  h.reset();
+  h.seedSet({
+    setId: 'alreadylive', version: 3, rows: [{ SK: 'QUESTION#c001#001', Title: 'old' }],
+    meta: { name: 'Already live', active: true, versions: [{ version: 1 }, { version: 2 }, { version: 3 }] },
+  });
+  h.seedSet({ setId: 'parked', version: 1, rows: [{ SK: 'QUESTION#c001#001', Title: 'old' }], meta: { name: 'Parked', active: false } });
+  const fresh = seedSnapshot(setSnapshot('freshquiz', { active: true }));
+  const overLive = seedSnapshot(setSnapshot('alreadylive', { name: 'Already live', active: true }));
+  const overParked = seedSnapshot(setSnapshot('parked', { name: 'Parked' }));
+  const dryOrg = seedSnapshot(setSnapshot('acmeretro', {}, { scope: 'org' }));
+  const dryLegacy = h.seedArchiveItem({ contentType: 'questionset', title: 'Old Quiz (dev)', tags: ['dev', 'trivia', 'questions:7'], content: LEGACY_CSV });
+  const tableBefore = JSON.stringify([...h.table.entries()]);
+  const objectsBefore = JSON.stringify([...h.objects.keys()]);
+  res = await run(h.adminEvent({ selectedItems: [fresh, overLive, overParked, dryOrg, dryLegacy], dryRun: true }));
+  await check('nothing was written: no row, no object, the table byte-equal to before', () => {
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(h.writes, []);
+    assert.strictEqual(JSON.stringify([...h.table.entries()]), tableBefore);
+    assert.strictEqual(JSON.stringify([...h.objects.keys()]), objectsBefore);
+  });
+  await check('the legacy CSV was not handed to the uploader', () => {
+    assert.strictEqual(metaRow('oldquiz'), undefined);
+  });
+  await check('a new set says so, with its counts and that it will be active on arrival', () => {
+    assert.strictEqual(res.body.dryRun, true);
+    assert.deepStrictEqual(res.body.plan[0], {
+      archiveId: fresh, kind: 'set', id: 'freshquiz', name: 'freshquiz', mode: 'created',
+      currentVersion: null, currentlyActive: null, active: true, questionCount: 1, categoryCount: 1,
+    });
+  });
+  await check('an existing set is a new version of the one that is live now', () => {
+    const [, liveOne, parkedOne] = res.body.plan;
+    assert.deepStrictEqual([liveOne.mode, liveOne.currentVersion, liveOne.currentlyActive, liveOne.active], ['new-version', 3, true, true]);
+    // No status in the snapshot: the restore keeps what the set has, so the plan must say inactive.
+    assert.deepStrictEqual([parkedOne.mode, parkedOne.currentVersion, parkedOne.currentlyActive, parkedOne.active], ['new-version', 1, false, false]);
+  });
+  await check('a refusal is reported as one, and a legacy item from its row', () => {
+    assert.deepStrictEqual(res.body.failed.map((f) => [f.archiveId, f.refused]), [[dryOrg, true]]);
+    const legacy = res.body.plan.find((p) => p.archiveId === dryLegacy);
+    assert.deepStrictEqual(legacy, { archiveId: dryLegacy, kind: 'set', name: 'Old Quiz', mode: 'created', active: false, legacy: true, questionCount: 7, categoryCount: null });
+  });
+  await check('a dry run by a host is refused like the real thing', async () => {
+    const refused = await run(h.hostEvent({ selectedItems: [fresh], dryRun: true }));
+    assert.strictEqual(refused.status, 403);
+  });
+
+  console.log('\n6. after a restore, each set is read back and its counts set beside the snapshot');
+  h.reset();
+  const big = seedSnapshot(snap.buildSetEnvelope({
+    tier: 'dev', scope: 'platform', setId: 'bigquiz', version: 2, metadata: { name: 'Big Quiz', engagementType: 'trivia', active: true },
+    rows: [
+      { SK: 'CATEGORY#c001', Name: 'A' }, { SK: 'CATEGORY#c002', Name: 'B' },
+      { SK: 'QUESTION#c001#001', Title: 'Q1' }, { SK: 'QUESTION#c001#002', Title: 'Q2' }, { SK: 'QUESTION#c002#001', Title: 'Q3' },
+      { SK: 'REVIEW', status: 'approved' },
+    ],
+    media: [], snapshotId: 'snap-big', exportedAt: '2026-11-05T09:00:00.000Z',
+  }));
+  res = await run(h.adminEvent({ selectedItems: [big] }));
+  await check('the check reports 3/3 questions and 2/2 categories, and that they match', () => {
+    assert.deepStrictEqual(res.body.results.successful[0].check, {
+      version: 1, questions: { expected: 3, found: 3 }, categories: { expected: 2, found: 2 }, matches: true,
+    });
   });
 
   finish();

@@ -288,4 +288,108 @@ async function restorePromptSnapshot(deps, envelope, ctx) {
   return { kind: 'prompt', id: promptId, name: row.name || promptId, mode: existing ? 'new-version' : 'created', version, status, isDefault };
 }
 
-module.exports = { restoreSetSnapshot, restorePromptSnapshot, resolvePromptLink };
+/*
+  ── WHAT A RESTORE WOULD DO, AND WHAT IT DID ─────────────────────────────────
+  The admin screen asks both questions (docs/design/archive-promotion/REVIEW.md, improvements
+  2 and 3): before the confirm, "new set, or a new version of the live one, and how big";
+  after it, "is what landed the size of what was backed up". Both are READS. A plan never
+  writes, and that is pinned by tests/archive-import-handler.js §5, which counts every write.
+*/
+
+/** The question and category counts a set snapshot carries, lifecycle rows excluded. */
+function snapshotCounts(envelope) {
+  const rows = (Array.isArray(envelope && envelope.rows) ? envelope.rows : [])
+    .filter((row) => row && typeof row.SK === 'string' && !snap.LIFECYCLE_SKS.includes(row.SK));
+  return {
+    questions: rows.filter((row) => row.SK.startsWith('QUESTION#')).length,
+    categories: rows.filter((row) => row.SK.startsWith('CATEGORY#')).length,
+  };
+}
+
+/** The version a metadata row says is live: activeVersion, else the highest recorded, else null. */
+function currentVersionOf(meta) {
+  const active = toVersion(meta && meta.activeVersion);
+  if (active) return active;
+  const known = knownVersions(meta);
+  return known.length ? known[known.length - 1] : null;
+}
+
+/** What restoreSetSnapshot would do with this envelope. Reads one row; writes nothing. */
+async function planSetSnapshot(deps, envelope) {
+  const from = envelope.exportedFrom || {};
+  const setId = String(from.setId || '').trim();
+  if (!setId) throw new Error('This backup names no set id, so there is nothing to restore it as.');
+  const counts = snapshotCounts(envelope);
+  if (counts.questions === 0) throw new Error('This backup holds no questions, so there is nothing to restore.');
+  const found = await deps.db.send(new GetCommand({ TableName: deps.tableName, Key: setMetadataKey(setRef({ scope: tenant.PLATFORM, setId })) }));
+  const existing = found && found.Item;
+  const snapshotActive = typeof (envelope.metadata && envelope.metadata.active) === 'boolean' ? envelope.metadata.active : null;
+  const currentlyActive = existing ? existing.active !== false : null;
+  // The same rule restoreSetSnapshot applies: the snapshot's status if it has one; otherwise a
+  // new set lands inactive and an existing one keeps the status it has.
+  const active = snapshotActive !== null ? snapshotActive : (existing ? currentlyActive : false);
+  const settings = snap.settingsFrom(envelope.metadata);
+  return {
+    kind: 'set',
+    id: setId,
+    name: settings.name || (existing && existing.name) || setId,
+    mode: existing ? 'new-version' : 'created',
+    currentVersion: existing ? currentVersionOf(existing) : null,
+    currentlyActive,
+    active,
+    questionCount: counts.questions,
+    categoryCount: counts.categories,
+  };
+}
+
+/** What restorePromptSnapshot would do with this envelope. Reads one row; writes nothing. */
+async function planPromptSnapshot(deps, envelope) {
+  const from = envelope.exportedFrom || {};
+  const promptId = String(from.promptId || '').trim();
+  if (!promptId) throw new Error('This backup names no prompt id, so there is nothing to restore it as.');
+  const metadata = envelope.metadata || {};
+  const found = await deps.db.send(new GetCommand({ TableName: deps.tableName, Key: promptKey({ scope: tenant.PLATFORM, promptId }) }));
+  const existing = found && found.Item;
+  return {
+    kind: 'prompt',
+    id: promptId,
+    name: metadata.name || (existing && existing.name) || promptId,
+    mode: existing ? 'new-version' : 'created',
+    currentVersion: existing ? (toVersion(existing.version) || null) : null,
+    status: metadata.status || 'draft',
+  };
+}
+
+/**
+ * Re-read a set this request just restored and count what is live. `expected` is
+ * `{questions, categories}`; a null expectation is not compared (a legacy CSV records no
+ * category count). Never throws: a failed read is reported as the check's own error.
+ */
+async function checkRestoredSet(deps, setId, expected) {
+  try {
+    const ref = setRef({ scope: tenant.PLATFORM, setId });
+    const found = await deps.db.send(new GetCommand({ TableName: deps.tableName, Key: setMetadataKey(ref) }));
+    const meta = found && found.Item;
+    if (!meta) return { questions: { expected: expected.questions, found: 0 }, categories: { expected: expected.categories, found: 0 }, matches: false, error: 'The set is not there after the restore.' };
+    const version = toVersion(meta.activeVersion);
+    const { items } = await queryPartition(deps.db, deps.tableName, setPartition(ref, version));
+    const live = {
+      questions: items.filter((row) => String(row.SK).startsWith('QUESTION#')).length,
+      categories: items.filter((row) => String(row.SK).startsWith('CATEGORY#')).length,
+    };
+    const same = (key) => expected[key] === null || expected[key] === undefined || expected[key] === live[key];
+    return {
+      version,
+      questions: { expected: expected.questions ?? null, found: live.questions },
+      categories: { expected: expected.categories ?? null, found: live.categories },
+      matches: same('questions') && same('categories'),
+    };
+  } catch (error) {
+    return { matches: false, error: `The check could not read the set back: ${error.message}` };
+  }
+}
+
+module.exports = {
+  restoreSetSnapshot, restorePromptSnapshot, resolvePromptLink,
+  snapshotCounts, planSetSnapshot, planPromptSnapshot, checkRestoredSet,
+};

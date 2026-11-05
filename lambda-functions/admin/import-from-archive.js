@@ -17,6 +17,14 @@
  * WHAT IT SAYS: per item what happened, which sets are now live for every organisation, and
  * which images could not be brought back, so a restore cannot quietly publish anything. One
  * bad item is reported and the rest carry on.
+ *
+ * THEN IT CHECKS. Each restored set is read back and its live question and category counts are
+ * reported beside the snapshot's (`check` on the entry), so "it worked" is a read, not a claim.
+ *
+ * `dryRun: true` ASKS WHAT WOULD HAPPEN, AND WRITES NOTHING. Each item is downloaded and parsed,
+ * the set or prompt it names is looked up, and the answer is per item: a new set or a new
+ * version of vN, whether that one is live now, its counts, and whether it will be active on
+ * arrival. No row, no object and no image is written (tests/archive-import-handler.js §5).
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
@@ -31,7 +39,9 @@ const promptVersions = require('./shared/prompt-versions');
 const { promptNameFromTags, resolveLocalPromptId } = require('./shared/archive-prompt-link');
 const archive = require('./shared/archive-client');
 const snap = require('./shared/archive-snapshot');
-const { restoreSetSnapshot, restorePromptSnapshot } = require('./shared/archive-restore');
+const {
+  restoreSetSnapshot, restorePromptSnapshot, snapshotCounts, planSetSnapshot, planPromptSnapshot, checkRestoredSet,
+} = require('./shared/archive-restore');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
 const s3Client = new S3Client({});
@@ -70,6 +80,7 @@ exports.handler = async (event) => {
   if (!Array.isArray(selectedItems) || selectedItems.length === 0) {
     return respond(400, { error: 'selectedItems array is required and must not be empty' });
   }
+  if (payload.dryRun === true) return respond(200, await planRestore(selectedItems));
 
   const deps = {
     db,
@@ -98,6 +109,9 @@ exports.handler = async (event) => {
         const entry = item.ContentType === 'prompt' || isLegacyPromptDoc(parsed.doc)
           ? await restoreLegacyPrompt(archiveId, item, parsed.doc)
           : await restoreLegacySet(event, archiveId, item, content);
+        if (entry.kind === 'set' && entry.id) {
+          entry.check = await checkRestoredSet(deps, entry.id, { questions: entry.questionCount ?? null, categories: null });
+        }
         results.successful.push(entry);
         continue;
       }
@@ -112,7 +126,10 @@ exports.handler = async (event) => {
         ? await restoreSetSnapshot(deps, parsed.envelope, ctx)
         : await restorePromptSnapshot(deps, parsed.envelope, ctx);
       const { media: restoredMedia, wasActive, ...entry } = outcome;
-      results.successful.push({ archiveId, ...entry });
+      const check = parsed.kind === 'set'
+        ? await checkRestoredSet(deps, outcome.id, snapshotCounts(parsed.envelope))
+        : undefined;
+      results.successful.push({ archiveId, ...entry, ...(check ? { check } : {}) });
       if (restoredMedia) {
         media.copied += restoredMedia.copied;
         media.kept += restoredMedia.kept;
@@ -136,6 +153,49 @@ exports.handler = async (event) => {
     media,
   });
 };
+
+/**
+ * THE DRY RUN. The same per-item decisions as the restore loop above — unknown schema, legacy,
+ * refusal, snapshot — answered with reads only. A legacy item is described from its row, since
+ * its restore goes through upload-questions.js, which this must not call.
+ */
+async function planRestore(selectedItems) {
+  const deps = { db, tableName: process.env.TABLE_NAME };
+  const plan = [];
+  const failed = [];
+  for (const raw of selectedItems) {
+    const archiveId = String(raw || '').trim();
+    try {
+      const { item, content } = await archive.downloadItem(archiveId);
+      const parsed = snap.parseArchiveContent(content);
+      if (parsed.kind === 'unknown') {
+        failed.push({ archiveId, refused: true, error: `This backup uses a format this version does not read (${JSON.stringify(parsed.schema)}), so it would not be restored.` });
+        continue;
+      }
+      if (parsed.kind === 'legacy') {
+        const isPrompt = item.ContentType === 'prompt' || isLegacyPromptDoc(parsed.doc);
+        const tags = Array.isArray(item.Tags) ? item.Tags : [];
+        const countTag = tags.map(String).find((tag) => /^questions:\d+$/.test(tag));
+        plan.push(isPrompt
+          ? { archiveId, kind: 'prompt', name: String((parsed.doc && parsed.doc.metadata && parsed.doc.metadata.name) || item.Title || '').replace(TIER_SUFFIX, '').trim(), mode: 'created', status: 'draft', legacy: true }
+          : { archiveId, kind: 'set', name: String(item.Title || '').replace(TIER_SUFFIX, '').trim(), mode: 'created', active: false, legacy: true, questionCount: countTag ? Number(countTag.slice(10)) : null, categoryCount: null });
+        continue;
+      }
+      const refusal = snap.refusalFor(parsed.envelope);
+      if (refusal) {
+        failed.push({ archiveId, refused: true, error: refusal });
+        continue;
+      }
+      const entry = parsed.kind === 'set'
+        ? await planSetSnapshot(deps, parsed.envelope)
+        : await planPromptSnapshot(deps, parsed.envelope);
+      plan.push({ archiveId, ...entry });
+    } catch (error) {
+      failed.push({ archiveId, error: error.message });
+    }
+  }
+  return { dryRun: true, plan, failed, totalRequested: selectedItems.length };
+}
 
 /** The environment a legacy item was tagged with. */
 function legacyTier(tags) {

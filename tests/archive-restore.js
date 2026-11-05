@@ -19,7 +19,9 @@ const tenant = require(path.join(SHARED, 'tenant.js'));
 const { setMetadataKey, setPartition, resolveSetPartition } = require(path.join(SHARED, 'set-version.js'));
 const { promptKey, promptBodyKey } = require(path.join(SHARED, 'prompt-access.js'));
 const snap = require(path.join(SHARED, 'archive-snapshot.js'));
-const { restoreSetSnapshot, restorePromptSnapshot } = require(path.join(SHARED, 'archive-restore.js'));
+const {
+  restoreSetSnapshot, restorePromptSnapshot, snapshotCounts, checkRestoredSet, planSetSnapshot,
+} = require(path.join(SHARED, 'archive-restore.js'));
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const { S3Client } = require('@aws-sdk/client-s3');
 
@@ -374,6 +376,30 @@ const setEnvelope = (overrides = {}) => snap.buildSetEnvelope({
     assert.strictEqual(row.active, true, 'the restore did not apply the snapshot’s status');
     assert.strictEqual(row.topic, undefined, 'the row under test has to still be unfiled for this to mean anything');
     assert.strictEqual(outcome.wasActive, false, 'and it has to have been switched off before');
+  });
+
+  console.log('\n10. the read-back after a restore, and the plan before one');
+  h.reset();
+  await check('snapshotCounts counts questions and categories, never the lifecycle rows', () => {
+    assert.deepStrictEqual(snapshotCounts(setEnvelope()), { questions: 2, categories: 2 });
+  });
+  h.seedSet({ setId: 'short', version: 2, meta: { name: 'Short', active: true }, rows: [{ SK: 'CATEGORY#c001', Name: 'A' }, { SK: 'QUESTION#c001#001', Title: 'only one' }] });
+  await check('a live set smaller than its snapshot is flagged as a mismatch, with both counts', async () => {
+    const result = await checkRestoredSet(deps, 'short', { questions: 2, categories: 2 });
+    assert.deepStrictEqual(result, {
+      version: 2, questions: { expected: 2, found: 1 }, categories: { expected: 2, found: 1 }, matches: false,
+    });
+  });
+  await check('a set that is not there at all is a mismatch, not a crash', async () => {
+    const result = await checkRestoredSet(deps, 'nowhere', { questions: 2, categories: 2 });
+    assert.strictEqual(result.matches, false);
+    assert.match(result.error, /not there/);
+  });
+  await check('a plan writes nothing, and says what the restore would do', async () => {
+    const before = h.writes.length;
+    const plan = await planSetSnapshot(deps, setEnvelope({ setId: 'short' }));
+    assert.strictEqual(h.writes.length, before);
+    assert.deepStrictEqual([plan.mode, plan.currentVersion, plan.currentlyActive, plan.active], ['new-version', 2, true, false]);
   });
 
   finish();
