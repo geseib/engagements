@@ -55,6 +55,26 @@ export function isTypingTarget(target) {
   not match :focus-visible and keeps Space = advance: hosts click a section,
   then press Space or the clicker to move on.
 */
+/*
+  A KEY THAT LANDED IN A HOST PANEL. The Session menu (`.setup-panel`) keeps
+  every key that lands in it. The question picker (`.qpk`, docs/design/
+  question-picker note 3) is not a dialog and does not trap focus, so only a
+  key that landed on one of its CONTROLS is the control's: Space presses the
+  focused Queue, and Space on its heading or a row still advances the room.
+  BOTH CLASS NAMES ARE LOAD-BEARING.
+*/
+const PANEL_CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"]';
+export function keyLandedInPanel(target) {
+  if (!target || typeof target.closest !== 'function') return false;
+  if (target.closest('.setup-panel')) return true;
+  if (!target.closest('.qpk')) return false;
+  try {
+    return Boolean(target.closest(PANEL_CONTROL));
+  } catch (e) {
+    return false;
+  }
+}
+
 export function isConsoleKeyboardTarget(target) {
   if (!target || typeof target.closest !== 'function') return false;
   if (!target.closest('.hc-rail, .hc-top, .hc-main')) return false;
@@ -294,7 +314,7 @@ export default function HostActionBar({
       // host's eye), so the rule is scoped to where the key actually landed.
       // Mouse-driven use keeps its accelerator; the keyboard gets the button
       // it is pointing at.
-      if (event.target?.closest?.('.setup-panel')) return;
+      if (event.target?.closest?.('.setup-panel') || keyLandedInPanel(event.target)) return;
       // Space only: → and ← have no meaning on a focused button or summary,
       // and the clicker sends them, so they keep driving the room.
       if (event.key !== 'ArrowRight' && isConsoleKeyboardTarget(event.target)) return;
@@ -323,7 +343,7 @@ export default function HostActionBar({
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
       if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
-      if (event.target?.closest?.('.setup-panel')) return;
+      if (event.target?.closest?.('.setup-panel') || keyLandedInPanel(event.target)) return;
       // preventDefault only when the press was actually taken: an unconsumed
       // ← (nothing to go back to) must keep scrolling a scrollable rail.
       if (onBackKey()) event.preventDefault();
@@ -343,7 +363,7 @@ export default function HostActionBar({
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
       if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
-      if (event.target?.closest?.('.setup-panel')) return;
+      if (event.target?.closest?.('.setup-panel') || keyLandedInPanel(event.target)) return;
       event.preventDefault();
       onAddTime();
     };

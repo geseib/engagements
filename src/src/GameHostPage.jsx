@@ -159,6 +159,14 @@ import CW, { ownQuestionWords as OQ } from './config/consoleWords';
 import { isOwnKey, OWN_KEY_PREFIX, ownNowAllowed, ownNowIsFirst, ownAtHead, withOwnNext, laterAnchors, withOwnRounds } from './config/ownQuestion';
 import OwnQuestionChoice from './components/OwnQuestionChoice';
 import useOwnQuestionKey from './components/stage/useOwnQuestionKey';
+import QuestionPicker from './components/stage/QuestionPicker';
+import PrivateChoice from './components/PrivateChoice';
+import useQuestionPickerKey from './components/stage/useQuestionPickerKey';
+import useQuestionPicker from './components/stage/useQuestionPicker';
+import {
+  DEFAULT_PICKER_VIEW, PICKER_CHOICE_WORDS, pickerApplies, pickerBackLabel,
+  queueIndex, undoAskNextOps,
+} from './config/questionPicker';
 import { consolePeopleFor, personFactsFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
@@ -1148,6 +1156,18 @@ function GameHostPage() {
   const [ownBusy, setOwnBusy] = useState(false);
   const [ownError, setOwnError] = useState('');
   const [ownNotice, setOwnNotice] = useState(null);
+  /*
+    CHOOSE A QUESTION (docs/design/question-picker): one picker, four doors.
+    `picker` is { from: 'key'|'rail'|'row'|'part'|'menu', focusKey, oneScreen }
+    or null. Its view (search, categories, Show) and scroll position live
+    HERE for the session (D8), so closing and reopening returns the same list.
+    `pickNotice` is Your part now's "Next: … · Undo" after Ask next (D7),
+    until the phase changes or the host acts again (review R5).
+  */
+  const [pickerView, setPickerView] = useState(DEFAULT_PICKER_VIEW);
+  const pickerScrollRef = useRef(0);
+  const [pickNotice, setPickNotice] = useState(null);
+  const [pickQueued, setPickQueued] = useState([]);
   // The socket handlers are registered before loadQueue exists; they read it here.
   const loadQueueRef = useRef(() => {});
   const loadUpNextRef = useRef(() => {});
@@ -4909,7 +4929,7 @@ Focus on actionable business strategy insights.`;
       if (local.refused === 'full') {
         setSessionActionError('The queue is full — 24 questions is the limit. Remove one from the running order first.');
       }
-      return;
+      return false;
     }
 
     setQuestionQueue(local.queue);
@@ -4927,7 +4947,7 @@ Focus on actionable business strategy insights.`;
       // "moved" to the top and get the one that was actually there.
       setQuestionQueue(before);
       hostActionFailed(`Could not change the running order: ${result.error}`);
-      return;
+      return false;
     }
 
     // The server refused something the local copy accepted — only possible when
@@ -4941,12 +4961,13 @@ Focus on actionable business strategy insights.`;
     if (result.queue === null) {
       loadQueue();
       loadUpNext();
-      return;
+      return true;
     }
     setQuestionQueue(result.queue);
     // Queueing something changes what follows it, so the tail is re-planned.
     loadUpNext();
     setQueueVersion(result.version);
+    return true;
   }, [gameId, questionQueue, queueVersion, loadQueue, hostActionFailed]);
 
   const handleQueueQuestion = useCallback(
@@ -5094,6 +5115,113 @@ Focus on actionable business strategy insights.`;
     setOwnComposer(null);
     setOwnError('');
   }, []);
+
+  /*
+    ── CHOOSE A QUESTION (docs/design/question-picker) ──────────────────────
+
+    One picker for the C key, the rail's Round queue (and its planned rows),
+    Your part now's "Change what's next" and the Session menu's Up next. Every
+    action is a queue op this page already sends (runQueueOp and its
+    handlers, selectQuestion, handleDisableQuestion): there is no second copy
+    of the queue logic. On one screen every door asks first (D9, F5: every
+    time, the phone first); upcoming questions never draw on the room's
+    screen without that choice.
+  */
+  const pickerOn = Boolean(gameId) && pickerApplies(currentGameType, gameState);
+  const pickerState = useQuestionPicker({
+    allowed: () => Boolean(gameId) && pickerApplies(currentGameType, gameState),
+    twoSurfaces,
+    menuOpen: setupPanelOpen,
+    // Two surfaces never stack: the menu's door closes the menu first.
+    onMenuClose: () => setSetupPanelOpen(false),
+    onMenuReturn: () => openSetupAt('up-next'),
+  });
+  const { picker, setPicker } = pickerState;
+  const pickerChoiceOpen = pickerState.choiceOpen;
+  const setPickerChoiceOpen = pickerState.setChoiceOpen;
+  const openPickerHere = pickerState.open;
+  const closePicker = pickerState.close;
+  const showPickerHere = pickerState.showHere;
+  const hidePicker = pickerState.hide;
+  const openPicker = useCallback((args) => {
+    setOwnChoiceOpen(false);
+    setPickQueued([]);
+    return openPickerHere(args);
+  }, [openPickerHere]);
+
+  /* The picker reads the same browser data as the menu did (note 1). */
+  useEffect(() => {
+    if (picker) fetchQuestionsForBrowsing();
+  }, [Boolean(picker)]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* A new session starts with a fresh view (D8). */
+  useEffect(() => {
+    setPicker(null);
+    setPickerView(DEFAULT_PICKER_VIEW);
+    pickerScrollRef.current = 0;
+    setPickNotice(null);
+    setPickQueued([]);
+  }, [gameId, setPicker]);
+
+  /* The status line lasts until the phase changes (review R5). */
+  useEffect(() => { setPickNotice(null); }, [gameState]);
+
+  /* ASK NEXT CLOSES AND RETURNS TO THE ROUND (F2), with "Next: … · Undo". */
+  const pickAskNext = useCallback(async (key, row) => {
+    const before = queueIndex(questionQueue, key);
+    closePicker();
+    const landed = await handleQueueFirst(key);
+    if (landed) setPickNotice({ key, title: (row && row.title) || '', before });
+  }, [questionQueue, closePicker, handleQueueFirst]);
+
+  /* QUEUE KEEPS IT OPEN (F2); Done then says "3 queued · Undo" (D7). */
+  const pickQueue = useCallback(async (question) => {
+    const key = String(question?.id ?? '').replace(/^QUESTION#/, '');
+    setPickNotice(null);
+    const landed = await handleQueueQuestion(question);
+    if (landed && key) setPickQueued((prev) => (prev.includes(key) ? prev : [...prev, key]));
+  }, [handleQueueQuestion]);
+
+  const pickUnqueue = useCallback((key) => {
+    setPickNotice(null);
+    setPickQueued((prev) => prev.filter((k) => k !== key));
+    return handleQueueRemove(key);
+  }, [handleQueueRemove]);
+
+  /* UNDO, as the queue route's own ops (config/questionPicker.js
+     undoAskNextOps), sequential like handleAutoMove's burst and reconciled
+     by reload. */
+  const runPickOps = useCallback(async (steps) => {
+    let version = queueVersion;
+    let failed = null;
+    const keys = steps.map((st) => st.key);
+    setQueueBusyKeys((prev) => [...new Set([...prev, ...keys])]);
+    for (const st of steps) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await postQueueOp({ apiBase: API_BASE, gameId, op: st.op, questionKey: st.key, expectedVersion: version });
+      if (!result.ok) { failed = result.error; break; }
+      if (result.version !== null && result.version !== undefined) version = result.version;
+    }
+    setQueueBusyKeys((prev) => prev.filter((k) => !keys.includes(k)));
+    if (failed) hostActionFailed(`Could not change the running order: ${failed}`);
+    loadQueue();
+    loadUpNext();
+    return !failed;
+  }, [gameId, queueVersion, loadQueue, loadUpNext, hostActionFailed]);
+
+  const undoPick = useCallback(async () => {
+    const n = pickNotice;
+    if (!n || n.undone) return;
+    const ok = await runPickOps(undoAskNextOps(n.before).map((op) => ({ op, key: n.key })));
+    if (ok) setPickNotice({ ...n, undone: true });
+  }, [pickNotice, runPickOps]);
+
+  const undoPickQueued = useCallback(async () => {
+    const keys = pickQueued.slice();
+    if (!keys.length) return;
+    const ok = await runPickOps(keys.map((key) => ({ op: 'remove', key })));
+    if (ok) setPickQueued([]);
+  }, [pickQueued, runPickOps]);
 
   const removeOwnQuestion = useCallback(async (key) => {
     if (!isOwnKey(key)) return;
@@ -6983,6 +7111,8 @@ Focus on actionable business strategy insights.`;
    */
   const closeAllSidePanels = () => {
     setSetupPanelOpen(false);
+    // The picker's asked marks are round-scoped too (question picker note 3).
+    setPicker(null);
     closeQuestionBrowser();
   };
 
@@ -7316,6 +7446,21 @@ Focus on actionable business strategy insights.`;
       && normalizeGameType(currentGameType) === 'call-and-answer'
       && !ownComposer && !ownChoiceOpen && gameState !== 'ENDED',
     onWrite: () => openOwnComposer(),
+  });
+
+  /*
+    C: CHOOSE A QUESTION (question picker D2, F6). Q's `enabled` without the
+    Call & Answer term (F7: Trivia and Poll too, never a survey, Wavelength
+    or the Build Room), never while the picker or its one-screen choice is
+    already up.
+  */
+  useQuestionPickerKey({
+    enabled: sessionPanelKeyOn && !createdSetup && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && !confirmLeave && Boolean(gameId)
+      && pickerApplies(currentGameType, gameState)
+      && !picker && !pickerChoiceOpen && !ownComposer && !ownChoiceOpen,
+    onChoose: () => openPicker({ from: 'key' }),
   });
 
   // F: the host's screen full screen, and back (hooks/useFullscreenKey.js).
@@ -8040,7 +8185,7 @@ Focus on actionable business strategy insights.`;
   const anyOverlayOpen = shortcutsSuppressed({
     // The ask preview is a dialog: Space and the arrows are its own.
     // …and so is the one-screen choice before writing a question (impromptu ask).
-    showConfirmModal: showConfirmModal || Boolean(askComposer) || ownChoiceOpen, showExpandedQR,
+    showConfirmModal: showConfirmModal || Boolean(askComposer) || ownChoiceOpen || pickerChoiceOpen, showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
@@ -9474,6 +9619,62 @@ Focus on actionable business strategy insights.`;
      step 1 is answered nothing says this laptop is the room's screen (and
      the count-only bell, whose sheet Open opens, is not up yet), so Setup
      keeps the private line until one screen is chosen. */
+  /* CHOOSE A QUESTION, BUILT ONCE (question picker note 3): portalled into
+     the console's sheet host on the console, the Stage's `view` on one
+     screen. The way back names where it goes (D6). */
+  const PICK_STEP = {
+    LOBBY: 'Lobby', ASK: RW.stepAnswer, VOTE: RW.stepVote, RESULTS: RW.stepResults,
+    FIELD_NOTES: RW.whatWeHeard, FEEDBACK: RW.stepFeedback,
+  };
+  const pickerBack = picker ? pickerBackLabel({
+    from: picker.from,
+    round: hostPhase !== 'LOBBY' ? lessonNumber : 0,
+    step: PICK_STEP[hostPhase] || '',
+  }) : '';
+  const pickerEl = picker ? (
+    <QuestionPicker
+      key={picker.focusKey || picker.from}
+      place={consoleOn ? 'sheet' : 'stage'}
+      questions={browsingQuestions}
+      loadingQuestions={loadingQuestions}
+      usedQuestionIds={usedQuestionIds}
+      categories={categories}
+      categoryCounts={categoryCounts}
+      categoryBitmasks={categoryBitmasks}
+      activeCategoryIds={activeCategoryIds}
+      questionQueue={questionQueue}
+      queueBusyKeys={queueBusyKeys}
+      upNext={upNext}
+      currentQuestionId={currentQuestionId}
+      gameType={currentGameType}
+      view={pickerView}
+      onViewChange={setPickerView}
+      scrollRef={pickerScrollRef}
+      focusKey={picker.focusKey}
+      backLabel={pickerBack}
+      backWhere={picker.from === 'menu' ? 'the Session menu' : 'the round'}
+      onClose={() => { setPickQueued([]); closePicker(); }}
+      onQueue={pickQueue}
+      onUnqueue={pickUnqueue}
+      onAskNext={pickAskNext}
+      onAskNow={(question) => { setPickNotice(null); selectQuestion(question); }}
+      onDisable={(key, opts) => { setPickNotice(null); handleDisableQuestion(key, opts); }}
+      onWrite={ownWritable ? () => { closePicker({ focus: false }); openOwnComposer(); } : null}
+      onOpenCategories={() => { closePicker({ focus: false }); openSetupAt('up-next'); }}
+      queuedHere={pickQueued.length}
+      onUndoQueued={pickQueued.length ? undoPickQueued : null}
+      oneScreen={Boolean(picker.oneScreen)}
+      onHide={picker.oneScreen ? hidePicker : null}
+      onUsePhone={picker.oneScreen ? () => { closePicker({ focus: false }); openSetupAt('remote'); } : null}
+    />
+  ) : null;
+  /* YOUR PART NOW'S LINE (D3, D7; R2): the notice after Ask next, or the
+     quiet door, while a next round exists. */
+  const pickNoticeProp = pickNotice ? { title: pickNotice.title, undone: Boolean(pickNotice.undone), onUndo: undoPick } : null;
+  const nextRoundExists = consoleRounds.some((r) => r.state === 'next')
+    || (typeof roundOf === 'number' && roundOf > 0 ? lessonNumber < roundOf : true);
+  const changeNextDoor = pickerOn && nextRoundExists ? () => openPicker({ from: 'part' }) : null;
+
   const roomReadsThisLaptop = !twoSurfaces && (!setupFrame || setupChoice === 'classic');
   const needsLine = !roomReadsThisLaptop
     ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
@@ -9596,6 +9797,8 @@ Focus on actionable business strategy insights.`;
             onOpenSection: openSetupAt,
             // The impromptu ask's rail door: the same composer step (D2).
             onWriteQuestion: ownWritable ? () => openOwnComposer() : null,
+            // Choose a question's rail door, and each planned row (picker D3, D4).
+            onChoose: pickerOn ? ({ focusKey = null } = {}) => openPicker({ from: focusKey ? 'row' : 'rail', focusKey }) : null,
             scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
             // Askers lifted to the top of People, with Let them / Not now on the row.
             asking: needs.items.filter((i) => i.kind === 'name-request' || i.kind === 'name-open'),
@@ -9620,6 +9823,8 @@ Focus on actionable business strategy insights.`;
             interceptAdvance: consoleInterceptAdvance,
             onBackKey: consoleOnBackKey,
             onReviewLate: openLateList,
+            pickNotice: pickNoticeProp,
+            onChangeNext: changeNextDoor,
           } : {
             // roundStep's own status, without the room's count: the pulse says it (one fact, once).
             status: viewing
@@ -9635,6 +9840,8 @@ Focus on actionable business strategy insights.`;
             interceptAdvance: consoleInterceptAdvance,
             onBackKey: consoleOnBackKey,
             onReviewLate: openLateList,
+            pickNotice: pickNoticeProp,
+            onChangeNext: changeNextDoor,
           }}
           needs={needsLine}
         >
@@ -9658,7 +9865,7 @@ Focus on actionable business strategy insights.`;
         /* An armed press ("3 questions not asked yet. Press again to move
            on.") holds the chrome too (dev QA 5 Nov): its words are in Your
            part now, and fading them would undo the warning. */
-        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || showReportsModal || stageArmed}
+        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || pickerChoiceOpen || Boolean(picker) || showReportsModal || stageArmed}
         urgent={((needs && needs.items) || []).filter((i) => i.level === NEEDS_LEVELS.NOW).length}
         /* The fitter's deps live in Stage but the content that changes lives
            here. Without this a question arriving, an answer list growing or a
@@ -9706,7 +9913,7 @@ Focus on actionable business strategy insights.`;
             />
           )
           : null}
-        view={viewStep
+        view={pickerEl && !consoleOn ? pickerEl : viewStep
           ? (
             <StepView
               step={viewStep}
@@ -9793,6 +10000,8 @@ Focus on actionable business strategy insights.`;
                Passing `meter` unchanged is deliberate: two sources for one
                fraction is how they drift apart. */
             progress={meter ? { ...meter, complete: everybodyIn } : null}
+            pickNotice={pickNoticeProp}
+            onChangeNext={changeNextDoor}
           >
             {/* Not reimplemented here. HostActionBar keeps its keyboard
                 handling, its typing-target guard and its disabled hint; only
@@ -10716,6 +10925,24 @@ Focus on actionable business strategy insights.`;
           onClose={() => setOwnChoiceOpen(false)}
         />
       )}
+      {/* CHOOSE A QUESTION ON ONE SCREEN ASKS FIRST (question picker D9, F5):
+          every time, the phone first. "Show them here" draws the picker
+          with its amber "The room can see this list" line. */}
+      {pickerChoiceOpen && (
+        <PrivateChoice
+          words={PICKER_CHOICE_WORDS}
+          testIdPrefix="picker-choice"
+          hereIcon="Eye"
+          remoteConnected={false}
+          onOpenPhone={() => setPickerChoiceOpen(false)}
+          onConnectPhone={() => { setPickerChoiceOpen(false); openSetupAt('remote'); }}
+          onHere={showPickerHere}
+          onClose={() => setPickerChoiceOpen(false)}
+        />
+      )}
+      {/* On the console the picker takes the content area: the sheet host
+          over the room tile and the main area (F1). */}
+      {pickerEl && consoleOn && consoleSheetHost ? createPortal(pickerEl, consoleSheetHost) : null}
       {askComposer && !useConsole && (
         <AskComposer
           suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
@@ -10788,6 +11015,7 @@ Focus on actionable business strategy insights.`;
           loadingQuestions={loadingQuestions}
           usedQuestionIds={usedQuestionIds}
           onSelectQuestion={selectQuestion}
+          onChoose={pickerOn ? () => openPicker({ from: 'menu' }) : null}
           questionQueue={questionQueue}
           queueBusyKeys={queueBusyKeys}
           upNext={upNext}

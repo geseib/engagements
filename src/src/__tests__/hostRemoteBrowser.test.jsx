@@ -327,10 +327,13 @@ describe('the phone question browser', () => {
   // Rejects: any wiring where `Choose next question` does not reach the set —
   // a decision module can be perfect while the button opens nothing.
   it('opens from This round and lists the set', async () => {
+    // Since the question picker (D10): Up next, then Choose a question.
     serve();
     await connect();
 
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
 
     expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
@@ -361,6 +364,8 @@ describe('the phone question browser', () => {
     await connect();
 
     fireEvent.click(screen.getByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
 
     expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
   });
@@ -384,6 +389,8 @@ describe('the phone question browser', () => {
     serve();
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
     await screen.findByText(TRIVIA.title);
 
     const urls = global.fetch.mock.calls.map(([url]) => String(url));
@@ -401,6 +408,8 @@ describe('the phone question browser', () => {
     serve();
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
     await screen.findByText(TRIVIA.title);
 
     expect(screen.getByText(TRIVIA.optionB)).toBeInTheDocument();
@@ -416,6 +425,8 @@ describe('the phone question browser', () => {
     const posts = serve({ state: 'ASK#003' });
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));
@@ -438,6 +449,8 @@ describe('the phone question browser', () => {
     const posts = serve({ state: 'ASK#003' });
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^ask next/i }));
@@ -446,8 +459,12 @@ describe('the phone question browser', () => {
     expect(posts[0].url).toBe('https://api.test/games/4821/queue');
     expect(posts[0].body).toMatchObject({ op: 'first', questionKey: '004' });
     expect(posts.some((p) => p.url.includes('next-question'))).toBe(false);
-    // and the host stays in the list, where the row moving is the answer
-    expect(screen.getByText(TRIVIA.title)).toBeInTheDocument();
+    // and the picker returns to the round, saying what it did, with Undo
+    // (question picker F2, D7, D10), as Ask now already does.
+    const notice = await screen.findByTestId('remote-pick-notice');
+    expect(notice).toHaveTextContent(`Next: ${TRIVIA.title}`);
+    expect(screen.getByTestId('remote-pick-undo')).toBeInTheDocument();
+    expect(screen.queryByTestId('remote-choose-sheet')).toBeNull();
   });
 
   // Rejects: a phone list that is not the stage's. The owner: "It would be
@@ -529,6 +546,8 @@ describe('the phone question browser', () => {
     serve();
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^preview/i }));
@@ -547,6 +566,8 @@ describe('the phone question browser', () => {
     serve({ state: 'ASK#003' });
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    // Up next's door to the picker sheet (docs/design/question-picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));

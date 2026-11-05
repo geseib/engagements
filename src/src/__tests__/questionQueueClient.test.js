@@ -207,7 +207,7 @@ describe('what comes next, for the phone', () => {
     const fetchFn = jest.fn().mockResolvedValue(ok({ upNext: [row], blocked: null }));
     const result = await fetchUpNext({ fetchFn, apiBase: 'https://api/', gameId: '1234' });
     expect(result).toEqual({
-      ok: true, upNext: [row], blocked: [], advisories: [], excluded: [], error: null,
+      ok: true, upNext: [row], blocked: [], advisories: [], excluded: [], asked: [], error: null,
     });
   });
 

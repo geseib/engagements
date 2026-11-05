@@ -76,7 +76,9 @@
 
 .hrq-meta {
   margin: 8px 0 0;
-  font-size: .6875rem;
+  /* 12px, the floor: the picker sheet's check (question picker shoot) found
+     this eyebrow at 11px. */
+  font-size: .75rem;
   font-weight: 700;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -416,3 +418,23 @@
   flex: none;
   align-self: flex-start;
 }
+
+/* THE PICKER'S TWO SELECTS (docs/design/question-picker D10): Show and
+   Category, side by side at 44px, and the "4 in Pricing · Clear" line. */
+.hrq-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+.hrq-select { display: block; min-width: 0; }
+.hrq-select select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: var(--radius-sm, 8px);
+}
+.hrq-select select:focus-visible { outline: 3px solid var(--info); outline-offset: 2px; }
+.hrq-filtered { margin: 0; font-size: .875rem; color: var(--muted); }
+.hrq-clear { font: inherit; font-weight: 700; color: var(--info); background: none; border: 0; padding: 0 2px; min-height: 44px; cursor: pointer; }
+.hrq-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

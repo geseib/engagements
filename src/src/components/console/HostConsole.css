@@ -112,6 +112,14 @@
    a quiet link (never the orange), and a round the host wrote wears Yours. */
 .hc-write { display: inline-flex; align-items: center; gap: 4px; }
 .hc-list .hc-yours { align-self: center; }
+/* CHOOSE A QUESTION (docs/design/question-picker D3, D4): the Round queue's
+   door to the picker, outlined in --info so it reads as the section's one
+   way in, with its key; a planned row is a plain button that opens it. */
+.hc-choose { display: inline-flex; align-items: center; gap: 6px; margin: 0 14px 8px; padding: 6px 10px; border: 1px solid var(--info); border-radius: 8px; font-size: 13px; }
+.hc-kbd { display: inline-block; min-width: 1.2em; padding: 0 4px; border: 1px solid var(--rule-strong); border-radius: 4px; font-family: var(--font-ui); font-size: 12px; font-weight: 700; line-height: 1.4; text-align: center; color: var(--text); }
+.hc-row-door { display: flex; gap: 8px; align-items: baseline; width: 100%; min-width: 0; font: inherit; color: inherit; background: transparent; border: 0; border-radius: 6px; padding: 0; text-align: left; cursor: pointer; }
+.hc-row-door:hover { color: var(--info); }
+.hc-row-door:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* A section's link (ui/Button, tertiary) at the section's foot. */
 .hc-sec > .hc-sec-link { --ui-size: 12px; margin: 0 8px 10px; }
 .hc-late-acts .ui-btn { --ui-size: 13px; min-height: 0; padding-top: 0; padding-bottom: 0; }

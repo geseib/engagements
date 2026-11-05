@@ -343,7 +343,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Write a question** opens the composer in the Session menu\'s **Up next** (see Writing a question of your own); **All rounds** opens the Session menu\'s **Rounds so far**.' },
+            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Choose a question** (C), or a round not yet played, opens the question picker. **Write a question** opens the composer in **Up next**; **All rounds** opens the Session menu\'s **Up next**.' },
             { title: 'People', text: 'Who is here and who has answered (see The People column). **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
             { title: 'Late & not reviewed', text: 'Only while something waits: how many late answers and comments, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the Session menu\'s **Rounds so far**, where **Review** opens the full list (see Late answers and comments).' },
             { title: 'Session menu', text: 'Top right. It opens over the room tile and the main area, never over Your part now, and holds Up next, Rounds so far, People, Screens, Joining and How it runs, with **End session…** and **Main menu** at its foot. The People column\'s **All N, and who left** opens its People section.' },
@@ -422,7 +422,8 @@ const twoScreens = {
             { keys: 'S', text: 'Show or hide the scoreboard; Esc closes it. Works from the room\'s window too.' },
             { keys: 'V', text: 'Change the scoreboard\'s look while it is up. Works from the room\'s window too.' },
             { keys: '\\', text: 'Open or close the Session panel.' },
-            { keys: 'Q', text: 'Write a question of your own (Call & Answer): the Session menu opens at Rounds with the composer.' },
+            { keys: 'C', text: 'Choose a question (Call & Answer, Trivia and Poll): the question picker opens over the main area. Esc or **Done** goes back. On one screen it asks first, with your phone first.' },
+            { keys: 'Q', text: 'Write a question of your own (Call & Answer): the Session menu opens at **Up next** with the composer.' },
             { keys: 'F', text: 'Full screen for the window you are in, and back.' },
           ],
         },
@@ -524,7 +525,8 @@ const twoScreens = {
             { title: 'What we heard', text: 'Which page the room is on, **Back a page**, and Workie\'s points with Ask the room beside them.' },
             { title: 'This round', text: 'A button that puts the question or one response up large for the room.' },
             { title: 'Scoreboard', text: '**Show the scoreboard** or **Hide the scoreboard**, its next page, and its look.' },
-            { title: 'Session', text: 'Three doors with the laptop\'s names: **Up next** (the running order, **Write a question**, the categories, the set), **Rounds so far** (the report first) and **People**. Then **Join code**, **Room\'s screen**, and **Main menu**, which returns the phone to the code screen; the session keeps running.' },
+            { title: 'Session', text: 'Three doors with the laptop\'s names: **Up next** (the running order, **Choose a question**, **Write a question**, the categories), **Rounds so far** (the report first) and **People**. Then **Join code**, **Room\'s screen**, and **Main menu**, which returns the phone to the code screen; the session keeps running.' },
+            { title: 'Choose a question', text: 'The laptop\'s picker as a sheet, from **Up next** or the round\'s **Change**. **Ask next** returns with **Undo**.' },
             { title: 'End session', text: '**End session…** at the foot of those tabs asks **End this session?** in place.' },
             { title: 'Feedback round', text: 'How many comments have come in, and **Said in the room**, to add something said aloud to the round\'s comments.' },
           ],

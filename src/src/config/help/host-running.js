@@ -287,6 +287,7 @@ const running = {
             { keys: 'S', text: 'Show or hide the scoreboard (Trivia and Call & Answer).' },
             { keys: 'V', text: 'Change the scoreboard\'s look while it is up.' },
             { keys: '\\', text: 'Open and close the Session panel.' },
+            { keys: 'C', text: 'Choose a question.' },
             { keys: 'Q', text: 'Write your own question.' },
             { keys: 'F', text: 'Full screen, and back again. Esc also leaves.' },
             { keys: 'Esc', text: 'Close whatever is open.' },
@@ -403,7 +404,7 @@ const sessionPanel = {
           t: 'table',
           head: ['Section', 'What it is for'],
           rows: [
-            ['**Up next**', 'The running order, **Write a question**, **Choose from the set**, the categories.'],
+            ['**Up next**', 'The running order, **Write a question**, **Choose a question**, the categories.'],
             ['**Rounds so far**', 'The report first, the late answers, then every round played.'],
             ['**People**', 'Everyone, and who left.'],
             ['**Screens**', 'One screen or two, the room\'s window, your phone, the scoreboard.'],
@@ -425,11 +426,13 @@ const sessionPanel = {
       Questions tab: SessionSetupPanel ~633 (Categories, "N left", on/off,
       "N questions remaining"), QueueList.jsx ("Running order", "Nothing queued
       — automatic order below", "Coming up — automatic order", Disabled this
-      session, queue full), browser ("Choose the next question", search,
-      chips All / categories / "Unasked only" / "Enabled only", tags Asked /
-      Off / Queued #n, buttons Queue/Unqueue, Ask next, Ask now / Ask again
-      now with their titles). Lobby "Set the running order" (runningOrder.js)
-      in an event preview only.
+      session, queue full), the question picker (components/stage/
+      QuestionPicker.jsx, config/questionPicker.js PICKER_WORDS: Choose a
+      question, The set would serve next, Not asked / All, category boxes,
+      tags Asked / Off / Next / Queued #n, Queue/Unqueue, Ask next, Ask now /
+      Ask again now in ⋯, Done, the one-screen choice and room line; the
+      doors C, rail, Change what's next, Up next; PickLine's Next: … · Undo).
+      Lobby "Set the running order" (runningOrder.js) in an event preview only.
     */
     {
       id: 'choosing-ask-next',
@@ -444,7 +447,7 @@ const sessionPanel = {
           t: 'list',
           items: [
             { title: '**Running order**', text: 'The round on screen, then your queued questions, then the automatic order; five rows, then **Show all**. Each row has ↑ ↓ to move it, and ⋯ for **Ask next**, **Ask now**, **Put aside for this session** and taking it out of the queue (Edit and Remove on a question of yours).' },
-            { title: '**Write a question** and **Choose from the set**', text: 'Two ways to add a round. Choose from the set opens every question in the set in place, with a title search, one Category select (all, the categories that are on, or one) and **Hide asked** on. Tags say **Asked**, Off or Queued. **‹ Up next** goes back.' },
+            { title: '**Write a question** and **Choose a question**', text: 'Two ways to add a round. Choose a question opens the question picker (below); its back control returns to Up next.' },
             { title: '**Categories**', text: 'One line: how many are on and how many questions are left. **Change** opens the switches under More options, where **Put aside this session** (with Restore) and the session\'s goal are too.' },
           ],
         },
@@ -455,6 +458,33 @@ const sessionPanel = {
             ['**Queue**', 'Adds it to the end of the running order. The round on screen carries on.'],
             ['**Ask next**', 'Puts it at the top of the running order. It is asked when the current round ends.'],
             ['**Ask now** (in ⋯)', 'Puts it on the stage, or the room\'s window, straight away; the round on screen ends. For a question already asked it reads **Ask again now**.'],
+          ],
+        },
+      ],
+    },
+    /*
+      THE QUESTION PICKER (docs/design/question-picker, approved 5 Nov 2026):
+      components/stage/QuestionPicker.jsx and its doors (useQuestionPickerKey
+      C, ConsoleRail's Choose a question and planned rows, PickLine's Change
+      what's next, SessionSetupPanel's Up next), PrivateChoice on one screen,
+      HostRemote's picker sheet.
+    */
+    {
+      id: 'question-picker',
+      title: 'Choosing a question',
+      icon: 'MagnifyingGlass',
+      blocks: [
+        {
+          t: 'p',
+          text: 'One picker, wherever you open it: **C**, the rail\'s **Round queue** (or a round not yet played), **Change what\'s next** in Your part now, or **Up next** in the Session menu. It covers the main area only; the rail, Your part now and Space keep working. Call & Answer, Trivia and Poll.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'What it lists', text: 'First **The set would serve next**, what comes if you change nothing, then every question not asked. The search reads the question text too. **Not asked** or **All**, and category boxes, narrow the list only: to stop a category for the session, use **Up next › Categories**. The preview never shows the answer.' },
+            { title: 'Ask next and Queue', text: '**Ask next** (or Enter) puts it at the top of the running order and returns you to the round, where Your part now says **Next:** with **Undo** until the round moves on. **Queue** adds it to the end and keeps the picker open.' },
+            { title: 'The way back', text: 'The back control names where it goes. **Esc** and **Done** close it in one press and put focus back where you were; in the search box Esc clears the search first. Your search and boxes are kept for the session.' },
+            { title: 'On one screen', text: 'Every door asks first: **Choose on your phone**, or **Show them here**. Shown here, a line says **The room can see this list**, with **Hide** and **Use my phone instead**. It asks every time.' },
           ],
         },
       ],

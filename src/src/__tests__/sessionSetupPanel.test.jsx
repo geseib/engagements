@@ -28,7 +28,6 @@ jest.mock('qrcode.react', () => ({
 // Imported AFTER jest.mock above, which jest hoists — the order is required,
 // not accidental. (Was an `import/first` disable directive.)
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
-import { browserRow, filterBrowserRows } from '../config/setupPanel';
 
 const players = [
   { name: 'Ada', score: 3, email: 'ada@example.com' },
@@ -100,13 +99,7 @@ const openMore = (section) => {
   if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
 };
 const openCats = () => { openTab('Up next'); openMore('up-next'); };
-const openBrowser = () => { openTab('Up next'); fireEvent.click(screen.getByTestId('up-next-choose')); };
-const showAsked = () => fireEvent.click(screen.getByTestId('hide-asked'));
 const openRemote = () => { openTab('Screens'); fireEvent.click(screen.getByTestId('connect-phone')); };
-const askNowIn = (row) => {
-  fireEvent.click(within(row).getByTestId('browser-row-menu'));
-  return within(row).getByTestId('browser-row-menu-ask-now');
-};
 
 describe('the panel as a surface', () => {
   test('its root carries the class the SPACE guard keys off', () => {
@@ -163,22 +156,13 @@ describe('the panel as a surface', () => {
       openTab(tab);
       expect(container.querySelector('.setup-panel')).not.toBeNull();
     }
-    openBrowser();
-    expect(container.querySelector('.setup-panel')).not.toBeNull();
   });
 
-  test('only the Choose from the set step (the question browser) widens the panel', () => {
-    // rejects: widening unconditionally. Every pixel of panel is a pixel of
-    // projected stage the room loses, and the other sections are short rows
-    // that would just sit in an empty column.
-    const { container } = renderPanel();
-
-    openTab('Up next');
-    expect(container.querySelector('.setup-panel')).not.toHaveClass('setup-panel--wide');
-    openBrowser();
-    expect(container.querySelector('.setup-panel')).toHaveClass('setup-panel--wide');
-
-    for (const tab of SECTIONS.slice(1)) {
+  test('no section widens the panel: choosing a question is the picker now', () => {
+    // rejects: the old wide Choose step coming back inside the menu. Every
+    // pixel of panel is a pixel of projected stage the room loses.
+    const { container } = renderPanel({ onChoose: () => {} });
+    for (const tab of SECTIONS) {
       openTab(tab);
       expect(container.querySelector('.setup-panel')).not.toHaveClass('setup-panel--wide');
     }
@@ -362,139 +346,26 @@ describe('the Questions tab — categories', () => {
   });
 });
 
-describe('the Questions tab — the browser', () => {
-  test('the whole set is listed, not one category', () => {
-    // rejects: the shipped design's worst structural decision — the only way
-    // in was a per-category magnifier that scoped the fetch to one category,
-    // so a host could never see the whole set at once.
-    renderPanel();
-    openBrowser();
-    expect(screen.getAllByTestId('browser-row')).toHaveLength(3);
-  });
-
-  test('no correct answer, and no option text, reaches the screen', () => {
-    // rejects: rendering the mockup's option block. The fixture records its
-    // answer as the option's own TEXT — the variant that makes a row carrying
-    // the options carry the answer — and every display profile shares this
-    // surface with the room.
-    const { container } = renderPanel();
-    openBrowser();
-    expect(container.textContent).not.toContain('Seat-based to usage-based billing');
-    expect(container.textContent).not.toContain('A 5% list increase');
-    expect(container.textContent).not.toContain('Because usage tracks value.');
-    // rejects: the shipped browser's `correct-answer` row, which printed
-    // "Correct: OptionB" under the options on a surface the room can see.
-    expect(container.querySelector('.correct-answer')).toBeNull();
-    expect(container.textContent).not.toMatch(/Correct:/);
-  });
-
-  test('it still says what a host needs to choose by', () => {
-    renderPanel();
-    openBrowser();
-    const row = screen.getAllByTestId('browser-row')[0];
-    expect(row.textContent).toMatch(/Which pricing change/);
-    expect(row.textContent).toMatch(/Pricing Power/);
-    expect(row.textContent).toMatch(/Hard/);
-    expect(row.textContent).toMatch(/Multiple choice/);
-    expect(screen.getAllByTestId('browser-row')[1].textContent).toMatch(/Free-text response/);
-  });
-
-  test('search narrows the list and the count says so', () => {
-    // rejects: shipping the search box without the count. "Showing 1 of 3" is
-    // what tells a host the list is filtered rather than short.
-    renderPanel();
-    openBrowser();
-    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'packaging' } });
-    expect(screen.getAllByTestId('browser-row')).toHaveLength(1);
-    expect(screen.getByTestId('browser-count').textContent).toMatch(/1 of 3/);
-  });
-
-  test('search is titles only: a word only in a question\'s detail matches nothing', () => {
-    // rejects: this browser opting into `matchDetail` — the set editor's
-    // preview searches details, and this call site is the one place that
-    // keeps the stage's search to titles (spec 2026-09-19 §6). Only the
-    // option's default was pinned; nothing failed if the call site turned it on.
-    const withDetail = questions.map((q) => (q.id === 'q-1'
-      ? { ...q, questionDetail: 'Elasticity decides who keeps the margin.' } : q));
-    // the premise: the word is really there, in the detail and only there
-    expect(filterBrowserRows(withDetail.map((q) => browserRow(q)), { search: 'elasticity', matchDetail: true }))
-      .toHaveLength(1);
-    renderPanel({ questions: withDetail });
-    openBrowser();
-    expect(screen.getByPlaceholderText('Search titles…')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'elasticity' } });
+describe('the Questions tab — the door to the question picker', () => {
+  /* The set's browser is the question picker now (docs/design/question-picker
+     D3): Up next keeps a door, not a copy. Every browser behaviour that lived
+     here moved to questionPicker.test.jsx with it. */
+  test('Choose a question is a door that hands off, and draws no list', () => {
+    const onChoose = jest.fn();
+    const { container } = renderPanel({ onChoose });
+    openTab('Up next');
+    const door = screen.getByTestId('up-next-choose');
+    expect(door).toHaveTextContent('Choose a question');
+    fireEvent.click(door);
+    expect(onChoose).toHaveBeenCalledTimes(1);
     expect(screen.queryAllByTestId('browser-row')).toHaveLength(0);
-    expect(screen.getByTestId('browser-count')).toHaveTextContent('showing 0 of 3');
+    expect(container.querySelector('.setup-panel')).not.toHaveClass('setup-panel--wide');
   });
 
-  test('the Category select filters the list without disabling the category', () => {
-    // rejects: reusing the on/off toggle as the filter. Narrowing what you are
-    // reading and removing a category from the game are different acts, and
-    // conflating them takes a pool away from a host who only wanted to look.
-    const onToggleCategory = jest.fn();
-    renderPanel({ onToggleCategory });
-    openBrowser();
-    fireEvent.change(screen.getByTestId('choose-category'), { target: { value: 'Competitive Response' } });
-    expect(screen.getAllByTestId('browser-row')).toHaveLength(1);
-    expect(onToggleCategory).not.toHaveBeenCalled();
-  });
-
-  test('used questions are one press away, dimmed, and offer Ask again now', () => {
-    // "Hide asked" is on by default in the Choose step (docs/design/session-menu
-    // §3); off, the asked rows stay in the list, dimmed. rejects: hiding them
-    // with no way back — "did I already use this?" is the question a host
-    // asks most.
-    renderPanel({ usedQuestionIds: ['q-2'] });
-    openBrowser();
-    showAsked();
-    const rows = screen.getAllByTestId('browser-row');
-    expect(rows).toHaveLength(3);
-    expect(rows[1].className).toMatch(/is-used/);
-    expect(askNowIn(rows[1])).toHaveTextContent(/ask again now/i);
-    expect(askNowIn(screen.getAllByTestId('browser-row')[0])).toHaveTextContent(/^Ask now/);
-  });
-
-  test('"Hide asked" hides them, on by default', () => {
-    renderPanel({ usedQuestionIds: ['q-2'] });
-    openBrowser();
-    expect(screen.getByTestId('hide-asked')).toBeChecked();
-    expect(screen.getAllByTestId('browser-row')).toHaveLength(2);
-  });
-
-  test('choosing a question raises the original, not the projection', () => {
-    // rejects: handing back `browserRow`'s output, which has no `id` the
-    // next-question endpoint would accept and none of the fields the round
-    // needs.
-    const onSelectQuestion = jest.fn();
-    renderPanel({ onSelectQuestion });
-    openBrowser();
-    fireEvent.click(askNowIn(screen.getAllByTestId('browser-row')[0]));
-    expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
-  });
-
-  test('while questions are loading it says so', () => {
-    // rejects: dropping the spinner the shipped modal had. Fetching is remote.
-    renderPanel({ questions: [], loadingQuestions: true });
-    openBrowser();
-    expect(screen.getByText(/loading questions/i)).toBeInTheDocument();
-  });
-
-  test('an empty set gets an empty state, not a blank panel', () => {
-    renderPanel({ questions: [], loadingQuestions: false });
-    openBrowser();
-    expect(screen.getByText(/no questions/i)).toBeInTheDocument();
-  });
-
-  test('‹ Up next goes back, and so does Escape, without closing the menu', () => {
-    const onClose = jest.fn();
-    renderPanel({ onClose });
-    openBrowser();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('choose-step')).toBeNull();
-    openBrowser();
-    fireEvent.click(screen.getByTestId('choose-back'));
-    expect(screen.queryByTestId('choose-step')).toBeNull();
+  test('no handler, no door (a dead control is the one people reach for first)', () => {
+    renderPanel();
+    openTab('Up next');
+    expect(screen.queryByTestId('up-next-choose')).toBeNull();
   });
 });
 
@@ -697,305 +568,3 @@ describe('the Settings tab', () => {
   });
 });
 
-/**
- * THE TWO NAME DECISIONS THE OWNER MOVED OUT OF THE CODE.
- *
- * Both were rules the implementation applied by itself: author reveal was a
- * per-round button plus a per-round display toggle, and the waiting list was
- * withheld below five responses with no override at all. Both are now one
- * session-level setting each, in this tab, and the reasoning that used to be a
- * condition ships as copy beside them.
- *
- * The panel is presentational — the state and the setters are GameHostPage's —
- * so what is asserted here is what a host sees and what the control emits.
- * roomMeterWaiting.test.jsx holds the other end of the wire.
- */
-describe('the Settings tab is where the names decisions are made', () => {
-  const openNames = (props = {}) => {
-    const result = renderPanel({ gameType: 'call-and-answer', ...props });
-    openTab('How it runs');
-    openMore('run');
-    return result;
-  };
-
-  test('the author setting is offered, off by default, and reads as a question about names', () => {
-    // rejects: shipping the section with the box pre-ticked. Default hidden is
-    // the owner's call and it is also the safe direction — turning it on cannot
-    // be taken back.
-    openNames();
-    const box = screen.getByTestId('attribute-authors');
-    expect(box.checked).toBe(false);
-    expect(screen.getByLabelText(/show who wrote each response/i)).toBe(box);
-  });
-
-  test('off is described as it behaves: hidden while voting, named when voting closes', () => {
-    // The owner, 2026-09-23: "keep anonymous until after people vote … they
-    // get points for upvoting." That is what off does — closing the vote
-    // reveals the round and results show each author with their points.
-    //
-    // rejects: "names nobody, all session", which the note said and the
-    // product never did, and which made the option confusing.
-    const { container } = openNames();
-    const notes = [...container.querySelectorAll('.setup-note')].map((n) => n.textContent).join(' ');
-    expect(notes).toMatch(/while the room answers and\s+votes/);
-    expect(notes).toMatch(/when voting closes, each shows its author and points/);
-    expect(notes).not.toMatch(/all session/);
-  });
-
-  test('ticking it emits the FLAG, not the checkbox — one flag, inverted once', () => {
-    // THE TRAP THIS GUARDS. The stored per-game flag is `anonymousUntilReveal`
-    // ("withhold the names"); the host-facing question is "show the names".
-    // They are inverses, and the inversion happens exactly here.
-    //
-    // rejects: emitting the checkbox value straight through, which silently
-    // means the opposite of what it says and would hand a room every author's
-    // name the moment a host ticked a box labelled "show", then hide them when
-    // it was cleared. Also rejects introducing a second boolean beside
-    // `anonymousUntilReveal` to dodge the inversion.
-    const onAnonymousUntilRevealChange = jest.fn();
-    const { unmount } = openNames({ onAnonymousUntilRevealChange });
-    fireEvent.click(screen.getByTestId('attribute-authors'));
-    expect(onAnonymousUntilRevealChange).toHaveBeenCalledWith(false);
-    unmount();
-
-    // ...and back the other way, which is the direction a copy-paste gets wrong.
-    onAnonymousUntilRevealChange.mockClear();
-    openNames({ anonymousUntilReveal: false, onAnonymousUntilRevealChange });
-    fireEvent.click(screen.getByTestId('attribute-authors'));
-    expect(onAnonymousUntilRevealChange).toHaveBeenCalledWith(true);
-  });
-
-  test('the irreversible direction is named as irreversible, next to the control', () => {
-    // THE GOVERNING PRINCIPLE: where a real trade-off exists, tell the host at
-    // the point of decision instead of deciding for them. The two directions
-    // genuinely differ — one reaches the server and one does not — and a host
-    // standing in front of a room needs to know which is which BEFORE pressing.
-    //
-    // rejects: dropping the warning, and rejects the symmetric lie that it can
-    // simply be toggled back.
-    const { container } = openNames();
-    const section = container.querySelector('.setup-settings');
-    expect(section.textContent).toMatch(/cannot be taken back/i);
-    expect(section.textContent).toMatch(/does not un-send/i);
-  });
-
-  test('the waiting-names setting is offered, ON by default, and says what it lists', () => {
-    // DEFAULT ON, and that is the whole retirement of the five-response block.
-    // The list is never up unless the host hovers or clicks the meter, so
-    // defaulting on puts nothing on a wall by itself — while defaulting off
-    // would rebuild the old block for the owner's own room, a team of four,
-    // where the response count never reaches five.
-    //
-    // rejects: a default-off replacement, and rejects copy that leaves the
-    // polarity ambiguous — a list of who HAS answered is the participation
-    // league table this product refuses to draw.
-    openNames();
-    const box = screen.getByTestId('name-waiting');
-    expect(box.checked).toBe(true);
-    fireEvent.click(box);
-    expect(screen.getByLabelText(/name who is still waiting/i)).toBe(box);
-  });
-
-  test('the caution states the risk AND the live count, and does not block anything', () => {
-    // THE SENTENCE THAT REPLACED THE BLOCK. `MIN_ANONYMOUS_ANSWERS` used to
-    // return null below five responses; it now words this.
-    //
-    // rejects: shipping the retirement with no explanation at all — the risk is
-    // real and the host is the one who has to weigh it — and rejects a generic
-    // disclaimer with no number in it, which is what a host learns to skip.
-    const { container } = openNames({ answerCount: 2 });
-    const caution = screen.getByTestId('waiting-caution');
-    expect(caution.textContent).toMatch(/subtract one list from the other/i);
-    expect(caution.textContent).toMatch(/\b2 responses\b/);
-    expect(caution.dataset.strong).toBe('true');
-    // ...and the control it sits under is still usable. rejects: a disabled
-    // input, which is the old block wearing an explanation.
-    expect(screen.getByTestId('name-waiting').disabled).toBe(false);
-    expect(container.querySelector('.setup-note--warn')).not.toBeNull();
-  });
-
-  test('a round with responses to hide inside is cautioned differently', () => {
-    // rejects: one flat warning for every round, which tells a host nothing
-    // they can act on and trains them to ignore the one that matters.
-    openNames({ answerCount: 12 });
-    const caution = screen.getByTestId('waiting-caution');
-    expect(caution.dataset.strong).toBe('false');
-    expect(caution.textContent).toMatch(/\b12 responses\b/);
-  });
-
-  test('nothing about names is asked of a format that has no authorship', () => {
-    // The file's own principle: an option that cannot do anything is a question
-    // a host should not be asked. Trivia's response is a letter, so there is
-    // nothing authored to attribute.
-    //
-    // rejects: rendering the section for every game type, which would offer a
-    // trivia host a switch that changes nothing on screen.
-    const { container } = renderPanel({ gameType: 'trivia' });
-    openTab('How it runs');
-    openMore('run');
-    expect(container.querySelector('[data-testid="attribute-authors"]')).toBeNull();
-    expect(container.querySelector('.setup-settings').textContent).not.toMatch(/still waiting/i);
-  });
-
-  test('a session that already shows its authors is not asked about waiting names', () => {
-    // rejects: leaving the second control on screen once the first makes it
-    // moot. With the names up there is no subtraction to protect, so
-    // waitingRoster ignores this setting entirely — and a switch that moves
-    // nothing is exactly what this panel refuses to draw.
-    const { container } = renderPanel({ gameType: 'call-and-answer', anonymousUntilReveal: false });
-    openTab('How it runs');
-    openMore('run');
-    expect(container.querySelector('[data-testid="attribute-authors"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="name-waiting"]')).toBeNull();
-    expect(container.querySelector('[data-testid="waiting-caution"]')).toBeNull();
-  });
-
-  test('the caution goes quiet once this round\'s authors are out', () => {
-    // rejects: a warning that stays on screen after the thing it protects is
-    // already public. The round is revealed; there is no anonymity set left to
-    // shrink, and a caution that is always up is a caution nobody reads.
-    const { container } = renderPanel({
-      gameType: 'call-and-answer', answerCount: 2, authorsRevealed: true,
-    });
-    openTab('How it runs');
-    openMore('run');
-    expect(container.querySelector('[data-testid="name-waiting"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="waiting-caution"]')).toBeNull();
-  });
-
-  test('THE DISPLAY PROFILE IS NOT AN INPUT TO EITHER DECISION', () => {
-    // THE OWNER'S RULING, verbatim: *"Don't use screen type for name reveal
-    // decision. I often have a projector with a team of four. Just leave the
-    // decision to the host."* A projector is not a proxy for room size,
-    // audience or sensitivity.
-    //
-    // rejects: any implementation that pre-ticks, hides, disables or re-words
-    // either control based on `profile` — the shortcut that looks thoughtful
-    // and is exactly the inference the owner forbade. Asserted by rendering the
-    // same panel on all four profiles and requiring identical answers.
-    const seen = ['room', 'tv', 'call', 'table'].map((profile) => {
-      const { container, unmount } = renderPanel({ gameType: 'call-and-answer', profile, answerCount: 2 });
-      openTab('How it runs');
-      openMore('run');
-      const section = container.querySelector('.setup-settings');
-      const snapshot = {
-        attribute: container.querySelector('[data-testid="attribute-authors"]').checked,
-        waiting: container.querySelector('[data-testid="name-waiting"]').checked,
-        caution: container.querySelector('[data-testid="waiting-caution"]').dataset.strong,
-        text: section.textContent.replace(/Room — projector|TV — large panel|Call — screen share|Table — laptop/g, ''),
-      };
-      unmount();
-      return snapshot;
-    });
-    seen.forEach((snapshot) => expect(snapshot).toEqual(seen[0]));
-  });
-});
-
-/*
- * THE QUESTIONS TAB'S FILTERS AND TAGS.
- *
- *   "the question tab in the session, the unasked only filter does not work.
- *    also if the question are turned off with the top buttons there should be a
- *    way by default (a button that has enabled categories only however we can
- *    briefly call that button) also if the question has been asked, mark that
- *    quested as asked. and if turned off category, mark disabled. small tags
- *    loike are used in the admin question sets for active and ai those are nice
- *    tags."
- *
- * The unit tests in setupPanel.test.js pin the decisions. These pin that the
- * panel actually asks them — the filter bug was never in the filter, it was in
- * what the panel handed it, and no test of `filterBrowserRows` in isolation
- * could ever have caught that.
- */
-describe('the question browser filters on what the host can see', () => {
-  const rows = () => screen.getAllByTestId('browser-row');
-
-  // rejects: THE REPORTED BUG, END TO END. `usedQuestionIds` carries the
-  // prefixed id the game returns; the rows carry the bare id the browsing
-  // endpoint publishes. Compare them raw and nothing is ever used, so the
-  // filter drops nothing and the row never dims.
-  test('a question asked this session is tagged and filtered, despite the id prefix', () => {
-    renderPanel({ usedQuestionIds: ['QUESTION#q-2'] });
-    openBrowser();
-
-    // Hide asked is on by default: the asked one is filtered out.
-    expect(rows()).toHaveLength(2);
-    expect(screen.queryByText('Asked')).not.toBeInTheDocument();
-
-    showAsked();
-    expect(screen.getByText('Asked')).toBeInTheDocument();
-    expect(rows()).toHaveLength(3);
-  });
-
-  // rejects: the tag arriving without the dimming, or vice versa. They are one
-  // state and the row's class is what the stylesheet keys off.
-  test('the asked row is marked in the DOM as well as in words', () => {
-    const { container } = renderPanel({ usedQuestionIds: ['QUESTION#q-2'] });
-    openBrowser();
-    showAsked();
-    expect(container.querySelectorAll('.setup-qb__row.is-used')).toHaveLength(1);
-  });
-
-  /*
-   * The file's shared mask is `11100000` — everything on, which is right for
-   * the tests it was written for and useless here. These pass their own,
-   * switching Competitive Response off, which makes q-2 the disabled question.
-   * q-2 is also the one the asked tests above use, deliberately: the two tags
-   * have to be able to coexist on one row.
-   */
-  const oneCategoryOff = {
-    categoryBitmasks: {
-      'HostMask1-8': '10100000',
-      'HostMask9-16': '00000000',
-      'HostMask17-24': '00000000',
-    },
-  };
-
-  test('a question in a switched-off category is tagged Off', () => {
-    renderPanel(oneCategoryOff);
-    openBrowser();
-    expect(screen.getByText('Off')).toBeInTheDocument();
-  });
-
-  // rejects: shipping the Off tag with no way to act on it — the owner asked
-  // for the button, not just the label. Since the redesign it is an option of
-  // the one Category select: "Categories that are on".
-  test('"Categories that are on" drops the switched-off questions', () => {
-    renderPanel(oneCategoryOff);
-    openBrowser();
-    expect(rows()).toHaveLength(3);
-
-    fireEvent.change(screen.getByTestId('choose-category'), { target: { value: '__on' } });
-    expect(rows()).toHaveLength(2);
-    expect(screen.queryByText('Off')).not.toBeInTheDocument();
-  });
-
-  // rejects: the two filters being exclusive. "Enabled and unasked" is the
-  // literal question "what can I actually ask next".
-  test('the two filters compose', () => {
-    renderPanel({ ...oneCategoryOff, usedQuestionIds: ['QUESTION#q-1'] });
-    openBrowser();
-    fireEvent.change(screen.getByTestId('choose-category'), { target: { value: '__on' } });
-    // q-1 asked, q-2 off — only q-3 is both enabled and unasked.
-    expect(rows()).toHaveLength(1);
-    expect(screen.getByText('Packaging the top tier')).toBeInTheDocument();
-  });
-
-  // rejects: offering a filter that cannot do anything. Before a game starts
-  // there are no masks, nothing is switched off, and a button that filters
-  // nothing while implying otherwise is worse than no button.
-  test('"Categories that are on" is not offered when there is no live mask to read', () => {
-    renderPanel({ categories: [], categoryCounts: null, categoryBitmasks: null });
-    openBrowser();
-    expect(screen.queryByRole('option', { name: /categories that are on/i })).not.toBeInTheDocument();
-  });
-
-  // rejects: marking every question disabled on the setup screen, which is what
-  // an absent mask read as "nothing is enabled" would do.
-  test('nothing is tagged Off before a game has started', () => {
-    renderPanel({ categories: [], categoryCounts: null, categoryBitmasks: null });
-    openBrowser();
-    expect(screen.queryByText('Off')).not.toBeInTheDocument();
-    expect(rows()).toHaveLength(3);
-  });
-});

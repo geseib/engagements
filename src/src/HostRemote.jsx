@@ -33,7 +33,10 @@ import AskIcons from './components/AskIcons';
 import FW from './config/followUpWords';
 import { placeAsks } from './config/askAnchors';
 import { sendAsk, closeAsk, cancelAsk } from './utils/followUpsClient';
-import { postQueueOp } from './utils/questionQueueClient';
+import { postQueueOp, fetchUpNext } from './utils/questionQueueClient';
+import RemoteQuestionBrowser from './components/RemoteQuestionBrowser';
+import { normaliseQueue } from './config/questionQueue';
+import { PICKER_WORDS as PW, pickerApplies, undoAskNextOps, pickNoticeText } from './config/questionPicker';
 import { ownQuestionWords as OQ } from './config/consoleWords';
 import { ownNowAllowed, ownNowIsFirst } from './config/ownQuestion';
 import { normalizeGameType } from './config/gameTypes';
@@ -257,6 +260,19 @@ function HostRemote() {
    * went, and why.
    */
   const [panelTab, setPanelTab] = useState(null);
+  /*
+    CHOOSE A QUESTION ON THE PHONE (docs/design/question-picker D10): the
+    same picker as a full sheet, `panelTab === 'choose'`. `chooseFrom` names
+    the way back ('round' from the round view's line, 'up-next' from the
+    tab); `chooseView` is its search and filters for the session (D8);
+    `pickNotice` is "Next: … · Undo" after Ask next, until the phase changes.
+    `plan` is GET /up-next: the round view's next line and the asked keys.
+  */
+  const [chooseFrom, setChooseFrom] = useState('round');
+  const [chooseView, setChooseView] = useState({ search: '', show: 'unasked', category: '' });
+  const [pickNotice, setPickNotice] = useState(null);
+  const [plan, setPlan] = useState({ upNext: [], asked: null });
+  const [knownQuestions, setKnownQuestions] = useState([]);
   const [categories, setCategories] = useState([]);
   /* Why the category list is empty, when it is empty for a reason. `null` means
      nothing went wrong — see the load below. */
@@ -602,6 +618,30 @@ function HostRemote() {
   const unaskedCount = typeof snapshot?.categoryCounts?.totalRemaining === 'number'
     ? snapshot.categoryCounts.totalRemaining
     : null;
+
+  /* WHAT COMES NEXT, FOR THE ROUND VIEW'S LINE AND THE PICKER'S NOT ASKED
+     (question picker D10). Re-read when the phase or the running order
+     moves; a failure leaves the line out rather than guessing. */
+  const choosable = Boolean(gameId) && Boolean(setId) && pickerApplies(gameType, snapshot?.state || '');
+  const planState = snapshot?.state || '';
+  const planVersion = snapshot?.questionQueue?.version ?? null;
+  useEffect(() => {
+    if (!choosable || access.status !== ACCESS.OK) return undefined;
+    let cancelled = false;
+    (async () => {
+      const result = await fetchUpNext({ apiBase: apiBase(), gameId });
+      if (!cancelled && result && result.ok) setPlan({ upNext: result.upNext || [], asked: result.asked || [] });
+    })();
+    return () => { cancelled = true; };
+  }, [choosable, gameId, planState, planVersion, access.status]);
+  /* The notice lasts until the phase changes (review R5). */
+  useEffect(() => { setPickNotice(null); }, [planState]);
+  /* A new session: a fresh view. */
+  useEffect(() => {
+    setChooseView({ search: '', show: 'unasked', category: '' });
+    setPickNotice(null);
+    setPlan({ upNext: [], asked: null });
+  }, [gameId]);
 
   // categoryRows() from config/setupPanel.js — the one decode of the bitmask,
   // shared with the stage panel rather than written a second time here.
@@ -1444,6 +1484,41 @@ function HostRemote() {
   /** Take one back out of the running order — the undo for a stray Ask next. */
   const unqueue = useCallback((key) => queueOp('remove', key), [queueOp]);
 
+  /* ASK NEXT FROM THE PICKER RETURNS TO THE ROUND (question picker F2, D10),
+     as Ask now already does, with "Next: … · Undo" there. */
+  const askNextFromPicker = useCallback(async (row) => {
+    disarm();
+    const key = questionKey(String(row?.id ?? '').trim());
+    const before = normaliseQueue(snapshot?.questionQueue?.queue).indexOf(key);
+    const done = await queueOp('first', key);
+    if (!done) return;
+    setPanelTab(null);
+    setNotice('');
+    setPickNotice({ key, title: row?.title || '', before });
+    // Back at the top of the round, where the notice is: the sheet's scroll
+    // would otherwise leave the host below it.
+    if (typeof document !== 'undefined' && document.scrollingElement) document.scrollingElement.scrollTop = 0;
+  }, [queueOp, disarm, snapshot]);
+
+  /* Undo, as the queue route's own ops (undoAskNextOps): remove, or `later`
+     once per place it moved up. */
+  const undoPickHere = useCallback(async () => {
+    const n = pickNotice;
+    if (!n || n.undone) return;
+    for (const op of undoAskNextOps(n.before)) {
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await queueOp(op, n.key);
+      if (!ok) return;
+    }
+    setPickNotice({ ...n, undone: true });
+  }, [pickNotice, queueOp]);
+
+  const openChoose = useCallback((from) => {
+    setChooseFrom(from);
+    setPickNotice(null);
+    setPanelTab('choose');
+  }, []);
+
   /*
     THE HOST'S OWN QUESTION, FROM THE PHONE (impromptu ask, README D2, frame 5).
     The Rounds tab's "Write a question" opens the same composer as the laptop,
@@ -1568,6 +1643,13 @@ function HostRemote() {
 
   /* --------------------------------------------------------------- view */
 
+  /* The round view's next line: the plan's first round after the one on screen. */
+  const remoteNext = (() => {
+    const current = snapshot?.currentQuestionData ? questionKey(String(snapshot.currentQuestionData.id ?? '')) : '';
+    const row = (plan.upNext || []).find((r) => r && r.title && questionKey(String(r.questionId || '')) !== current);
+    return row ? { title: row.title } : null;
+  })();
+
   if (!gameId) {
     return (
       <div className="hr hr--entry" data-theme="dark">
@@ -1628,7 +1710,7 @@ function HostRemote() {
             trade three times as often, so getting back lives up here in the
             sticky bar, where it cannot scroll away either, and the dock below
             goes on carrying the one control that moves the session. */}
-        {panelTab && (
+        {panelTab && panelTab !== 'choose' && (
           <button
             className="hr-back"
             type="button"
@@ -1638,10 +1720,27 @@ function HostRemote() {
             <Icon name="ArrowLeft" weight="bold" size={20} color="currentColor" />
           </button>
         )}
+        {/* THE PICKER'S WAY BACK NAMES WHERE IT GOES (D6, D10): ‹ Round, or
+            ‹ Up next when the tab opened it. */}
+        {panelTab === 'choose' && (
+          <button
+            className="hr-back hr-back--label"
+            type="button"
+            aria-label={chooseFrom === 'up-next' ? 'Back to Up next' : 'Back to the round'}
+            onClick={() => setPanelTab(chooseFrom === 'up-next' ? 'up-next' : null)}
+            data-testid="remote-choose-back"
+          >
+            <Icon name="CaretLeft" weight="bold" size={18} color="currentColor" />
+            {chooseFrom === 'up-next' ? PW.phoneBackUpNext : PW.phoneBackRound}
+          </button>
+        )}
+        {panelTab === 'choose' && <h1 className="hr-bar-sheet">{PW.title}</h1>}
+        {panelTab === 'choose' ? null : (
         <div className="hr-bar-id">
           <span className="hr-bar-code">{gameId}</span>
           {title && <span className="hr-bar-title">{title}</span>}
         </div>
+        )}
         <span className={`hr-live ${connected ? 'is-live' : 'is-down'}`}>
           <Icon
             name={connected ? 'Broadcast' : 'WifiSlash'}
@@ -1717,6 +1816,36 @@ function HostRemote() {
               </Button>
             </section>
           )
+        ) : panelTab === 'choose' ? (
+          /* CHOOSE A QUESTION, THE PHONE'S SHEET (question picker D10): the
+             browser that already existed, with the picker's filters, inside
+             the body so the bar and the dock stay. */
+          <section className="hr-choose" aria-label={PW.title} data-testid="remote-choose-sheet">
+            {error && (
+              <p className="hr-flash hr-flash--error" role="alert">
+                <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+                {error}
+              </p>
+            )}
+            <RemoteQuestionBrowser
+              setId={setId}
+              gameId={gameId}
+              gameType={gameType}
+              unaskedCount={unaskedCount}
+              busy={!!busyAction || cooling}
+              queue={normaliseQueue(snapshot?.questionQueue?.queue)}
+              askNowArmedKey={typeof armedAction === 'string' && armedAction.startsWith('ask-now:')
+                ? armedAction.slice('ask-now:'.length)
+                : null}
+              onQuestions={setKnownQuestions}
+              onAskNext={askNextFromPicker}
+              onAskNow={askNow}
+              onUnqueue={unqueue}
+              view={chooseView}
+              onViewChange={setChooseView}
+              asked={Array.isArray(plan.asked) ? plan.asked : null}
+            />
+          </section>
         ) : panelTab ? (
           /* THE THREE LISTS. Rendered INSIDE the body rather than instead of
              the whole screen, which is what keeps the bar above and the dock
@@ -1784,6 +1913,8 @@ function HostRemote() {
               onAskNext={askNext}
               onAskNow={askNow}
               onUnqueue={unqueue}
+              onChoose={choosable ? () => openChoose('up-next') : null}
+              knownQuestions={knownQuestions}
               // The impromptu ask (README D2): the Rounds tab's door, the
               // queue's Yours rows, and the composer as a full-height sheet.
               ownQuestions={(snapshot?.questionQueue && snapshot.questionQueue.ownQuestions) || []}
@@ -1811,6 +1942,17 @@ function HostRemote() {
           </>
         ) : (
           <>
+            {/* AFTER ASK NEXT (question picker D7, D10): what it did, with
+                Undo, until the phase changes. */}
+            {pickNotice ? (
+              <p className="hr-flash hr-flash--notice hr-pick" role="status" data-testid="remote-pick-notice">
+                <Icon name="Check" weight="bold" size={18} color="currentColor" />
+                <span>{pickNotice.undone ? PW.putBack : pickNoticeText(pickNotice.title)}</span>
+                {pickNotice.undone ? null : (
+                  <button type="button" className="hr-pick-undo" onClick={undoPickHere} data-testid="remote-pick-undo">{PW.undo}</button>
+                )}
+              </p>
+            ) : null}
             {/* NEEDS YOU, above the status card (experience plan §3.3, 1b). */}
             {needs.items.length > 0 ? (
               <section className="ny hr-needs" aria-label={NEEDS_WORDS.title} data-testid="remote-needs">
@@ -2350,6 +2492,21 @@ function HostRemote() {
                 </div>
               )}
             </section>
+
+            {/* THE ROUND VIEW'S NEXT LINE (question picker D10): the phone
+                has no rail, so one line above the dock says what is next,
+                with Change opening the picker. */}
+            {choosable && remoteNext ? (
+              <div className="hr-card hr-next" data-testid="remote-next-line">
+                <span className="hr-next-t">
+                  {`${PW.pickNext} `}
+                  <b title={remoteNext.title}>{remoteNext.title}</b>
+                </span>
+                <button type="button" className="hr-next-change" onClick={() => openChoose('round')} data-testid="remote-next-change">
+                  {PW.phoneChange}
+                </button>
+              </div>
+            ) : null}
           </>
         )}
       </main>

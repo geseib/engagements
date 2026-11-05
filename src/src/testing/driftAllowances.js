@@ -206,8 +206,7 @@ module.exports = {
       "projector": 1
     },
     "components/stage/SessionSetupPanel.jsx": {
-      "AI summary": 2,
-      "game": 1
+      "AI summary": 2
     },
     "components/stage/WorkieSettings.jsx": {
       "the summary": 1

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import RW from '../../config/roundWords';
 import HostActionBar from '../HostActionBar';
+import PickLine from '../stage/PickLine';
 
 /**
  * WHAT THE HOST DOES NEXT, AT THE TOP OF THE CONSOLE (owner, 18 Oct 2026:
@@ -41,7 +42,7 @@ function StatusText({ status, onReviewLate }) {
   the button never jumps in from nothing. `emptyLabel` is that name; without
   it, nothing is drawn, as before. `ignoreKey` reaches the bar unchanged.
 */
-export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey, onReviewLate = null, emptyLabel = '', ignoreKey = null, capability = undefined, extra = null, timeChip = null, onAddTime = null }) {
+export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey, onReviewLate = null, emptyLabel = '', ignoreKey = null, capability = undefined, extra = null, timeChip = null, onAddTime = null, pickNotice = null, onChangeNext = null }) {
   /*
     NO DOCK ON TWO SCREENS. The Session panel and its scrim stop at
     `--dock-measured` (styles.css) so a bottom dock stays reachable; the
@@ -70,6 +71,9 @@ export default function ConsoleFooter({ status, nextOnWall = '', part, controls,
           {/* What the wall shows next (spec §3.5, first draft): only when given. */}
           {nextOnWall ? <p className="hc-next">{nextOnWall}</p> : null}
         </div>
+        {/* CHOOSE A QUESTION'S TWO LINES (question picker D3, D7): what Ask
+            next did, with Undo, or the quiet door to the picker. */}
+        <PickLine notice={pickNotice} onChangeNext={onChangeNext} />
       </div>
       <div className="hc-acts">
         {controls ? (

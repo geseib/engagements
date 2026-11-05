@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef } from 'react';
+import PickLine from './PickLine';
 import RoomWindowLink from './RoomWindowLink';
 import CompletionFlag from './CompletionFlag';
 import HelpButton from '../HelpButton';
@@ -195,10 +196,10 @@ export { keyName };
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
   statusLink = '', onStatusLink = null, home = null, setupCount = 0, setupCountLabel = '', setupOpen,
-  setupProps = null, help = '', onMainMenu = null, lead = '', children, ...rest
+  setupProps = null, help = '', onMainMenu = null, lead = '', pickNotice = null, onChangeNext = null, children, ...rest
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, help, onMainMenu, lead, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, help, onMainMenu, lead, pickNotice, onChangeNext, children]);
   // THE LATE COUNT AS A LINK (late items Task 4): `statusLink` is the last
   // part of the status ("1 late answer kept", or "Review" at the end), and
   // opens the host's late list. Only when the status really ends with it.
@@ -253,6 +254,10 @@ export default function Dock({
           {progress.complete && <CompletionFlag />}
         </span>
       )}
+      {/* CHOOSE A QUESTION'S LINE (question picker D3, D7): what Ask next
+          did, with Undo, or the quiet door to the picker. Only in Your part
+          now (`lead`), the host's own row. */}
+      {lead && (pickNotice || onChangeNext) ? <PickLine notice={pickNotice} onChangeNext={onChangeNext} /> : null}
       <span className="spacer" />
       {hint && <span className="hint">{hint}</span>}
       <DockKeyContext.Provider value={typeof kbd === 'string' ? kbd : null}>

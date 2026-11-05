@@ -1,0 +1,69 @@
+/* ============================================================
+   YOUR PART NOW'S "NEXT" LINE (docs/design/question-picker D3, D7).
+   Scope: .pkl. Dusk; it sits in Your part now on the console (.hc-now) and
+   on the stage (.dock--part), both data-theme="dark".
+
+   Measured, composited on --surface #1B2942:
+     --text  on the notice (success .14 over --surface)   10.6:1
+     --info  #7CA7E6 Undo / Change on the notice           5.1:1
+     --info  Change what's next on --surface               5.9:1
+   (questionPickerPalette.test.js holds them.)
+   Laptop ladder: 13px, the key cap 12px (the floor).
+   ============================================================ */
+.pkl {
+  --pkl-wash: rgb(var(--success-rgb) / .14);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  min-width: 0;
+  max-width: 100%;
+  /* Its own width in Your part now's grid, never the row's. */
+  justify-self: start;
+  align-self: flex-start;
+}
+.pkl.pkl--notice {
+  padding: 3px 12px;
+  border: 1px solid var(--success);
+  border-radius: 999px;
+  background: var(--pkl-wash);
+  color: var(--text);
+}
+.pkl.pkl--notice > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pkl .pkl-undo {
+  font: inherit;
+  font-weight: 700;
+  color: var(--info);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+}
+.pkl.pkl-change {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--info);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.pkl .pkl-undo:focus-visible, .pkl.pkl-change:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.pkl .pkl-kbd {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 4px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text);
+}
