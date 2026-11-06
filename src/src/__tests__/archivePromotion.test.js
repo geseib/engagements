@@ -16,7 +16,8 @@ import { rememberReturnPath, takeReturnPath, RETURN_KEY } from '../auth/returnPa
 describe('the tiers and where they live', () => {
   test('each tier names its own site, and never the retired eng.dev twin', () => {
     expect(TIER_HOSTS).toEqual({ dev: 'engage.dev.seibtribe.us', test: 'engage.test.seibtribe.us', prod: 'engage.seibtribe.us' });
-    expect(Object.values(TIER_HOSTS)).not.toContain('eng.dev.seibtribe.us');
+    // Every tier host is an engage.* name; the retired twin's hosts start with "eng." alone.
+    for (const host of Object.values(TIER_HOSTS)) expect(host.startsWith('engage.')).toBe(true);
     expect(tierOrigin('test')).toBe('https://engage.test.seibtribe.us');
     expect(tierOrigin('unknown')).toBe('');
   });
