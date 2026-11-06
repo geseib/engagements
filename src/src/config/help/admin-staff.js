@@ -663,12 +663,24 @@ const platform = {
       ],
     },
     /*
-      ArchivePanel.jsx: "Archive", "One shared store, all environments.";
-      "Export from <tier>…" → "Back up from <tier>" ("Engage and public
-      content only. Organisation content is encrypted per organisation and is
-      never archived."; sets and Engage prompts, "Export N sets/prompts");
-      filters Environment / Content type / Engagement type, search; columns
-      Item / From / Type / Size / Exported; row "Download", "Delete" →
+      ArchivePanel.jsx (no heading of its own since 2026-11-05: the console
+      head says "Archive"). "Export from <tier>…" → "Back up from <tier>"
+      ("Engage and public content only…"); "Search name or id", "Sort: Name /
+      Last backed up / Type"; each row: id, topic, type, Active/Inactive,
+      "Last backed up <when>" or "Never backed up here" (from THIS tier);
+      "Select all" takes the rows shown; "Export N sets/prompts" and, on dev
+      and test, "Promote to <next>…" → "N items ready for <next>", "Open
+      <next>'s Archive", "Copy archive ids". A promotion link opens the
+      target in Engage → Archive with banner "N items promoted from <tier> —
+      review and restore". The restore dialog opens on a preview per item
+      ("New set" / "New version of vN (currently live|inactive)", counts,
+      "Active|Inactive on arrival"); on prod "Restore N backups into PROD?",
+      "This writes to PROD.", "Type prod to confirm", "Restore N into PROD".
+      After a restore: "Checked after the restore" (found of expected,
+      Matches / Does not match, "Open the set"), and on test "Promote these
+      to prod".
+      Filters Environment / Content type / Engagement type, search; columns
+      Item / From / Type / Size / Exported (day and hh:mm); row "Download", "Delete" →
       "Delete the backup" ("removes it for dev, test and prod alike. The set
       it was made from is not touched."); select rows → "Import N selected" →
       "Restore N backups into <tier>?" ("A set that already exists gets a new
@@ -688,8 +700,8 @@ const platform = {
         {
           t: 'list',
           items: [
-            { title: 'Back up', text: 'Press Export from, followed by this environment\'s name, pick the sets and prompts, and export them.' },
-            { title: 'Restore', text: 'Tick rows, press Import … selected, and confirm. A set that already exists here gets a new version and switches to it; the old version stays in its history. An active Engage set is live for every organisation the moment it is restored.' },
+            { title: 'Back up', text: 'Press Export from, followed by this environment\'s name, pick the sets and prompts, and export them. Search by name or id, and sort by name, by when each was last backed up from here, or by type. Select all takes the rows the search shows. Each row says whether the set is active, its topic, and when it was last backed up from this environment.' },
+            { title: 'Restore', text: 'Tick rows, press Import … selected, and confirm. See Restoring from the archive below.' },
             { title: '**Download** and **Delete**', text: 'Download saves a backup as a file. Delete asks first (**Delete the backup**) and removes it for every environment; the set it was made from is not touched.' },
           ],
         },
@@ -698,6 +710,21 @@ const platform = {
           tone: 'info',
           title: 'When the archive does not answer',
           text: 'Nothing is wrong with this environment\'s sets. To move a set meanwhile, download its CSV from the editor\'s Questions and upload it in the other environment.',
+        },
+      ],
+    },
+    {
+      id: 'archive-restore',
+      title: 'Restoring from the archive',
+      icon: 'Package',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Before', text: 'The restore dialog first shows, for each backup, whether it is a new set or a new version of the one here (and whether that one is live now), its question and category counts, and whether it will be active on arrival. A set that already exists gets a new version and switches to it; the old version stays in its history. An active Engage set is live for every organisation the moment it is restored.' },
+            { title: 'After', text: 'Each restored set is read back: its questions and categories are shown beside the backup\'s, marked Matches or Does not match, with a link to open the set. Shared library is refreshed, so the sets are there without signing in again.' },
+            { title: 'On prod', text: 'The restore dialog is marked in red, names PROD, and its button waits until you type prod.' },
+          ],
         },
       ],
     },
@@ -717,6 +744,14 @@ const platform = {
         {
           t: 'p',
           text: 'The Archive section is shared: dev, test and prod all read and write the same store. That is how one of Engage\'s sets built on dev reaches prod: export it to the archive from one, import it on the other. A team\'s or a personal space\'s sets do not go through the archive.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'Promote to test… (on dev), Promote to prod… (on test)', text: 'In the export dialog, pick the sets and press Promote. They are backed up, and you get a link that opens the next environment\'s Archive in Engage with exactly those backups selected and the restore preview open. Sign in there if asked; the link survives the sign-in. Nothing changes there until you confirm.' },
+            { title: 'Copy archive ids', text: 'Every export offers the ids of the backups it made, to paste wherever you need to name the batch.' },
+            { title: 'Promote these to prod', text: 'After a restore on test, this link takes the same backups on to prod\'s Archive.' },
+          ],
         },
         {
           t: 'note',

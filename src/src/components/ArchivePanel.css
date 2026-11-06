@@ -30,7 +30,12 @@
      --arch-success-text #6FD0A4 on --bg           9.35:1  the dev chip, success alerts
      --danger-text #EF8C86 on --bg                 7.26:1  Delete, the outage heading
      --bg          #0F1A2E on --primary            8.86:1  the filled Import / Restore
-     --text        #F4EDE4 on --danger-deep        5.16:1  the filled Delete the backup
+     --text        #F4EDE4 on --danger-deep        5.16:1  the filled Delete the backup, Restore N into PROD
+     --text        on the info tint over --bg      12.70:1  the promotion banner and hand-on
+     --muted       on the info tint over --bg       6.14:1
+     --text        on the danger tint over --surface 11.35:1  the prod band
+     --danger-text on the danger tint over --surface  5.50:1  "This writes to PROD."
+     --arch-success-text on --surface              7.79:1  Active on arrival, Matches
 
    `--danger` is never text here. It keeps borders and tints only.
    ========================================================================== */
@@ -71,15 +76,9 @@
   flex-wrap: wrap;
   padding: 0 0 14px;
 }
+/* No title here: the console's work head (AdminShell) already says "Archive" and what it is,
+   and saying it twice was the doubled heading of the promotion review. */
 .arch-head-grow { flex: 1 1 auto; min-width: 0; }
-.arch-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--arch-t-title);
-  font-weight: 800;
-  line-height: 1.2;
-}
-.arch-lede { margin: 3px 0 0; color: var(--muted); font-size: var(--arch-t-label); }
 .arch-grow { flex: 1 1 auto; min-width: 0; }
 .arch-dim { color: var(--muted); }
 .arch-fine { color: var(--muted); font-size: var(--arch-t-label); }
@@ -214,11 +213,12 @@
 /* Six short fixed tokens and one name column that ellipsizes: the widths sum to
    100 so a nowrap chip can never grow the table (table-layout: fixed). */
 .arch-col-sel  { width: 4%; }
-.arch-col-item { width: 38%; }
-.arch-col-from { width: 10%; }
-.arch-col-type { width: 14%; }
+.arch-col-item { width: 35%; }
+.arch-col-from { width: 9%; }
+.arch-col-type { width: 13%; }
 .arch-col-size { width: 8%; text-align: right; }
-.arch-col-when { width: 12%; }
+/* Day AND time: four snapshots taken today must not read the same as four from this morning. */
+.arch-col-when { width: 17%; }
 .arch-col-acts { width: 14%; }
 .arch-sel input,
 .arch-col-sel input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
@@ -438,11 +438,115 @@
 }
 .arch-picklist label:hover { background: var(--arch-row-hover); }
 .arch-picklist input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); flex: none; }
-.arch-picklist .arch-nm { flex: 1 1 auto; }
 .arch-picklist .arch-dim { font-size: var(--arch-t-label); white-space: nowrap; }
+.arch-pick-empty { padding: 9px 6px; }
+.arch-pickbar { padding: 0 0 10px; }
+/* A row: the name and its id line take the room; the state chips wrap to the right of it.
+   margin-left: auto on the group, never justify-content: flex-end (hard rule 9). */
+.arch-pick-main { flex: 1 1 auto; min-width: 0; display: block; }
+.arch-pick-meta {
+  flex: 0 1 auto;
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  max-width: 60%;
+}
+.arch-never { font-style: italic; }
+
+/* ------------------------------------------- promotion: banner and hand-on -- */
+.arch-promo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  border: 1px solid rgb(var(--info-rgb) / .5);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--arch-tint-info);
+  color: var(--text);
+}
+.arch-promo strong { font-size: var(--arch-t-body); }
+.arch-promo-sub { display: block; color: var(--muted); font-size: var(--arch-t-label); margin-top: 2px; }
+.arch-next {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--arch-rule-strong);
+  border-radius: 8px;
+}
+.arch-next--promote {
+  border-color: rgb(var(--info-rgb) / .5);
+  background: var(--arch-tint-info);
+}
+.arch-next h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: var(--arch-t-head);
+  font-weight: 700;
+}
+.arch-next > p { margin: 0 0 10px; color: var(--text); line-height: 1.55; }
+.arch-next .arch-acts { margin-top: 10px; }
+.arch-next .arch-acts:first-child { margin-top: 0; }
+.arch-ids {
+  display: block;
+  margin-top: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.arch a.arch-btn { text-decoration: none; }
+.arch a.arch-btn--link { text-decoration: underline; }
+.arch-btn--big { min-height: 36px; padding: 0 16px; font-size: var(--arch-t-body); }
+.arch-checktbl { margin: 4px 0 0; }
+.arch-checktbl th { position: static; background: transparent; }
+.arch-col-cset { width: 40%; }
+.arch-col-cnum { width: 14%; text-align: right; }
+.arch-col-cstate { width: 17%; }
+.arch-col-copen { width: 15%; }
+.arch-ok { color: var(--arch-success-text); font-weight: 600; }
+.arch-bad { color: var(--danger-text); font-weight: 600; }
+
+/* ---------------------------------------------- the restore preview (plan) -- */
+.arch-plan { list-style: none; margin: 0 0 14px; padding: 0; max-height: 40vh; overflow: auto; border-top: 1px solid var(--arch-rule); }
+.arch-plan li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--arch-row-h);
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--arch-rule);
+}
+.arch-plan-no .arch-sub { white-space: normal; }
+.arch-chip--live { color: var(--arch-success-text); border-color: rgb(var(--success-rgb) / .5); }
+.arch-chip--version { border-color: rgb(var(--info-rgb) / .55); }
+
+/* ------------------------------------------------- the prod confirmation -- */
+/* Prod is the one restore every customer organisation sees, so it does not look like test:
+   a danger rule across the top, the tier named in a tinted band, a filled --danger-deep
+   button (--text on it, 5.16:1) and a typed word. Measured in archivePalette.test.js. */
+.arch-modal--prod {
+  border-color: rgb(var(--danger-rgb) / .6);
+  border-top: 4px solid var(--danger);
+}
+.arch-prodwarn {
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger);
+  border-radius: 6px;
+  background: var(--arch-tint-danger);
+  color: var(--text);
+}
+.arch-prodwarn strong { color: var(--danger-text); }
+.arch-typed { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; font-size: var(--arch-t-label); }
+.arch-typed strong { font-family: var(--arch-font-mono); }
+.arch-input--plain { padding-left: 9px; max-width: 220px; }
 
 @media (max-width: 700px) {
   .arch-col-type, .arch-col-size { display: none; }
-  .arch-tbl td:nth-child(4), .arch-tbl td:nth-child(5) { display: none; }
+  .arch-tbl:not(.arch-checktbl) td:nth-child(4), .arch-tbl:not(.arch-checktbl) td:nth-child(5) { display: none; }
   .arch-col-item { width: 50%; }
+  .arch-pick-meta { max-width: 100%; }
 }

@@ -93,6 +93,12 @@ describe.each(DUSK)('the tinted composites, which a token table cannot see — %
     ['--text on a selected row', T.text, at('--arch-tint-warn')],
     ['--muted on a selected row', T.muted, at('--arch-tint-warn')],
     ['--muted on a hovered row', T.muted, at('--arch-row-hover')],
+    ['--text on the info tint (the promotion banner, the hand-on to the next tier)', T.text, at('--arch-tint-info')],
+    ['--muted on the info tint (the banner\'s missing-ids line)', T.muted, at('--arch-tint-info')],
+    ['--text on the danger tint over --surface (the prod band in the restore dialog)', T.text, [T.surface, ...at('--arch-tint-danger')]],
+    ['--danger-text on the danger tint over --surface ("This writes to PROD.")', T.dangerText, [T.surface, ...at('--arch-tint-danger')]],
+    ['--arch-success-text on --surface (Active on arrival, Matches)', T.successText, [T.surface]],
+    ['--danger-text on --surface (Does not match, Will not be restored)', T.dangerText, [T.surface]],
   ])('%s clears AA', (_label, fg, layers) => {
     expect(ratio(fg, composited(layers, T.bg))).toBeGreaterThanOrEqual(AA);
   });
@@ -142,6 +148,23 @@ describe('the sheet keeps the rules', () => {
     expect(scrim).toMatch(/align-items:\s*flex-start/);
     expect(scrim).toMatch(/overflow-y:\s*auto/);
     expect(scrim).not.toMatch(/place-items:\s*center/);
+  });
+});
+
+describe('the prod restore does not look like the test one', () => {
+  const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const block = (sel) => { const at = stripped.indexOf(`${sel} {`); return at < 0 ? '' : stripped.slice(at, stripped.indexOf('}', at)); };
+  test('the prod dialog carries a danger rule across its top', () => {
+    expect(block('.arch-modal--prod')).toMatch(/border-top:\s*4px solid var\(--danger\)/);
+  });
+  test('the tier is named in a danger-tinted band whose copy is --text, never --danger', () => {
+    const band = block('.arch-prodwarn');
+    expect(band).toMatch(/background:\s*var\(--arch-tint-danger\)/);
+    expect(band).toMatch(/color:\s*var\(--text\)/);
+  });
+  test('the restore button on prod is the filled --danger-deep one (--text on it, measured above)', () => {
+    const jsx = read('components', 'ArchivePanel.jsx');
+    expect(jsx).toMatch(/isProd \? 'arch-btn--dangersolid' : 'arch-btn--primary'/);
   });
 });
 

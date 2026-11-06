@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import Modal from './Modal';
@@ -8,6 +8,8 @@ import ListControls from './ListControls';
 import useListControls from '../hooks/useListControls';
 import { GAME_TYPE_LIST, gameTypeLabel } from '../config/gameTypes';
 import { formatWhen } from '../config/tableCells';
+import { setTopicLabel } from '../config/setTopics';
+import { nextTier } from '../config/tierHosts';
 import { archiveGameType } from '../utils/archiveFiltering';
 import {
   TIERS,
@@ -19,7 +21,16 @@ import {
   exportSelection,
   describeExport,
   describeRestore,
+  formatExported,
+  lastBackups,
+  relativeTime,
+  PICKER_SORTS,
+  pickerRows,
+  describePlanEntry,
+  restoreChecks,
+  checkCount,
 } from '../utils/archiveItems';
+import { promoteLink, readPromotion, withoutPromotion } from '../utils/archivePromotion';
 import './ArchivePanel.css';
 
 /**
@@ -53,13 +64,25 @@ import './ArchivePanel.css';
  * "No archive items found" — on a promotion tool, the difference between "wait" and "nothing
  * was ever exported". A request that never got an answer renders the outage state, with the
  * request that failed and the way to move a set by hand meanwhile.
+ *
+ * PROMOTION (docs/design/archive-promotion/REVIEW.md, improvements 1–5). The tiers share only
+ * the archive, so "Promote to test…" is an export here plus a link to the next tier's Archive
+ * carrying the batch (utils/archivePromotion.js). Arriving on that link selects exactly that
+ * batch and opens the restore dialog, which starts with a dry run: per item, a new set or a
+ * new version of the live one, its counts, and whether it arrives active. After a restore each
+ * set is read back and its counts are shown beside the snapshot's, and `onRestored` refreshes
+ * the console's own list of sets so Shared library shows them without a fresh sign-in. On prod
+ * the confirm names PROD and asks for the word typed: it is the write every customer sees.
  */
 const archiveRoute = (suffix) => `${window.API_BASE}admin/archive/${suffix}`;
+const importRoute = () => `${window.API_BASE}admin/import-from-archive`;
 const readBody = (response) => response.json().catch(() => ({}));
 const libraryLabel = (scope) => (scope === 'public' ? 'Public library' : 'Engage library');
 /** A status the archive service itself returns when it is not there to answer. */
 const isOutage = (status) => [0, 502, 503, 504].includes(Number(status));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+/** A restored set's own address in the console: Shared library with that set open (AdminPage `?set=`). */
+const setHref = (id) => `/admin?section=questionsets&set=${encodeURIComponent(id)}&setScope=platform`;
 
 const formatFileSize = (bytes) => {
   if (!bytes) return '0 Bytes';
@@ -89,8 +112,11 @@ const DROP_LABELS = {
   gameType: (value) => `Engagement type: ${gameTypeLabel(value)}`,
 };
 
-const ArchivePanel = ({ environment }) => {
+const ArchivePanel = ({ environment, onRestored }) => {
   const tierName = environment && environment.id && environment.id !== 'unknown' ? environment.id : 'this environment';
+  const tier = TIERS.includes(environment && environment.id) ? environment.id : '';
+  const isProd = tier === 'prod';
+  const promoteTo = nextTier(tier);
   const [items, setItems] = useState([]);
   // 'loading' | 'ready' | 'down' — and 'down' carries why, so the outage screen can say so.
   const [loadState, setLoadState] = useState('loading');
@@ -108,9 +134,23 @@ const ArchivePanel = ({ environment }) => {
   const [localPending, setLocalPending] = useState(0);
   const [pickedSets, setPickedSets] = useState(() => new Set());
   const [pickedPrompts, setPickedPrompts] = useState(() => new Set());
+  const [pickSearch, setPickSearch] = useState('');
+  const [pickSort, setPickSort] = useState('name');
+  // The restore dialog's dry run: { state: 'loading' | 'ready' | 'error', plan, failed, error }.
+  const [plan, setPlan] = useState(null);
+  const planRequest = useRef(0);
+  const [typed, setTyped] = useState('');
+  // What the last export or restore handed on: the archive ids, and where they can go next.
+  const [exportResult, setExportResult] = useState(null);
+  const [restoreResult, setRestoreResult] = useState(null);
+  const [copied, setCopied] = useState(false);
+  // Arrived on a promotion link: read once, consumed once the list is in.
+  const [incoming] = useState(() => (typeof window !== 'undefined' ? readPromotion(window.location.search) : null));
+  const incomingDone = useRef(false);
+  const [promoBanner, setPromoBanner] = useState(null);
 
   const {
-    state: { search, tier, type, gameType },
+    state: { search, tier: tierFilter, type, gameType },
     set,
     shown,
     drops,
@@ -177,6 +217,40 @@ const ArchivePanel = ({ environment }) => {
   // Only Engage's prompts: nothing writes public prompts, and org prompts are never archived.
   const exportablePrompts = useMemo(() => localPrompts.filter((p) => (p.scope || 'platform') === 'platform'), [localPrompts]);
 
+  /*
+    THE EXPORT PICKER'S ROWS (improvement 5): searchable by name and id, sortable, and each
+    one says whether and when it was last backed up FROM THIS TIER — matched on the snapshot's
+    `source:<scope>/<id>` tag in the archive list this panel already holds.
+  */
+  const lastBacked = useMemo(() => lastBackups(items, tier), [items, tier]);
+  const setRows = useMemo(() => exportableSets.map((qs) => ({
+    key: selectionKey(qs.scope, qs.id),
+    id: qs.id,
+    name: qs.name || qs.id,
+    type: qs.engagementType ? gameTypeLabel(qs.engagementType) : '',
+    last: lastBacked.get(`${qs.scope || 'platform'}/${qs.id}`) || '',
+    active: qs.active !== false,
+    topic: qs.topic ? setTopicLabel(qs.topic) : '',
+    scope: qs.scope,
+    totalQuestions: qs.totalQuestions,
+  })), [exportableSets, lastBacked]);
+  const promptRows = useMemo(() => exportablePrompts.map((prompt) => {
+    const id = prompt.promptId || prompt.id;
+    return {
+      key: id,
+      id,
+      name: prompt.name || id,
+      type: prompt.gameType ? gameTypeLabel(prompt.gameType) : '',
+      last: lastBacked.get(`platform/${id}`) || '',
+      status: prompt.status || '',
+      isDefault: Boolean(prompt.isDefault),
+    };
+  }), [exportablePrompts, lastBacked]);
+  const shownSetRows = useMemo(() => pickerRows(setRows, { search: pickSearch, sort: pickSort }), [setRows, pickSearch, pickSort]);
+  const shownPromptRows = useMemo(() => pickerRows(promptRows, { search: pickSearch, sort: pickSort }), [promptRows, pickSearch, pickSort]);
+  const now = Date.now();
+  const lastLabel = (row) => (row.last ? `Last backed up ${relativeTime(row.last, now)}` : 'Never backed up here');
+
   const toggleIn = (setter) => (key) => setter((current) => {
     const next = new Set(current);
     if (next.has(key)) next.delete(key); else next.add(key);
@@ -185,6 +259,8 @@ const ArchivePanel = ({ environment }) => {
   const toggleSelected = toggleIn(setSelected);
   const togglePickedSet = toggleIn(setPickedSets);
   const togglePickedPrompt = toggleIn(setPickedPrompts);
+  /** "Select all" means all SHOWN: a search narrows what it takes, and keeps earlier picks. */
+  const pickAllShown = (setter, rowsShown) => setter((current) => new Set([...current, ...rowsShown.map((r) => r.key)]));
 
   const shownIds = rows.map(({ item }) => item.ArchiveId);
   const allShownSelected = shownIds.length > 0 && shownIds.every((id) => selected.has(id));
@@ -198,10 +274,64 @@ const ArchivePanel = ({ environment }) => {
   const openExport = () => {
     setPickedSets(new Set());
     setPickedPrompts(new Set());
+    setPickSearch('');
     setDialog({ kind: 'export' });
     loadLocalContent();
   };
-  const closeDialog = () => { if (!busy) setDialog(null); };
+  // Closing drops any preview still on its way: it answers a dialog that is no longer open.
+  const closeDialog = () => { if (!busy) { planRequest.current += 1; setDialog(null); } };
+
+  /** Open the restore dialog for these ids, and ask the tier what restoring them would do. */
+  const openImport = async (ids) => {
+    const selectedItems = [...ids];
+    if (selectedItems.length === 0) return;
+    setTyped('');
+    setError(null);
+    setDialog({ kind: 'import' });
+    setPlan({ state: 'loading' });
+    planRequest.current += 1;
+    const asked = planRequest.current;
+    try {
+      const response = await authFetch(importRoute(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedItems, dryRun: true }),
+      });
+      const data = await readBody(response);
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      if (asked === planRequest.current) setPlan({ state: 'ready', plan: data.plan || [], failed: data.failed || [] });
+    } catch (err) {
+      console.error('Restore preview failed:', err);
+      if (asked === planRequest.current) setPlan({ state: 'error', error: err.message });
+    }
+  };
+
+  /*
+    A PROMOTION LINK, CONSUMED ONCE. Select exactly the ids that are in the archive, say how
+    many came and from where, strip the link from the address (so a reload or Back does not
+    reopen the dialog) and go straight to the preview.
+  */
+  useEffect(() => {
+    if (!incoming || incomingDone.current || loadState !== 'ready') return;
+    incomingDone.current = true;
+    const known = new Set(items.map((item) => item.ArchiveId));
+    const found = incoming.ids.filter((id) => known.has(id));
+    setSelected(new Set(found));
+    setPromoBanner({ count: found.length, asked: incoming.ids.length, from: incoming.from });
+    try {
+      window.history.replaceState(window.history.state, '', withoutPromotion(window.location.href));
+    } catch (_) { /* an address that cannot be rewritten only means a reload asks again */ }
+    if (found.length > 0) openImport(found);
+  }, [incoming, loadState, items]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const copyIds = async (ids) => {
+    try {
+      await navigator.clipboard.writeText(ids.join(','));
+      setCopied(true);
+    } catch (err) {
+      setError('Could not copy to the clipboard. The ids are shown under the button.');
+    }
+  };
 
   const handleDownload = async (item) => {
     try {
@@ -235,15 +365,20 @@ const ArchivePanel = ({ environment }) => {
     }
   };
 
+  // On prod the word is typed before the button wakes. Test and dev confirm with one press.
+  const typedOk = !isProd || typed.trim().toLowerCase() === 'prod';
+  const planSettled = Boolean(plan) && plan.state !== 'loading';
+
   const confirmImport = async () => {
     const selectedItems = [...selected];
-    if (selectedItems.length === 0 || busy) return;
+    if (selectedItems.length === 0 || busy || !typedOk) return;
     setBusy('import');
     setError(null);
     setNotice('');
     setReport([]);
+    setRestoreResult(null);
     try {
-      const response = await authFetch(`${window.API_BASE}admin/import-from-archive`, {
+      const response = await authFetch(importRoute(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedItems }),
@@ -251,8 +386,14 @@ const ArchivePanel = ({ environment }) => {
       const result = await readBody(response);
       if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
       setReport(describeRestore(result));
+      const restoredIds = ((result.results && result.results.successful) || []).map((r) => r.archiveId).filter(Boolean);
+      setRestoreResult({ ids: restoredIds, checks: restoreChecks(result) });
+      setExportResult(null);
+      setPromoBanner(null);
       setSelected(new Set());
       setDialog(null);
+      // The console's own list of sets (Shared library) was read before this restore.
+      if (onRestored && restoredIds.length > 0) onRestored();
     } catch (err) {
       console.error('Import failed:', err);
       setError(`Import failed: ${err.message}`);
@@ -261,15 +402,18 @@ const ArchivePanel = ({ environment }) => {
     }
   };
 
-  const exportPicked = async (exportType) => {
+  const exportPicked = async (exportType, { promote = false } = {}) => {
     const selectedItems = exportType === 'questionsets'
       ? exportSelection(pickedSets)
       : [...pickedPrompts].map((id) => ({ scope: 'platform', id }));
     if (selectedItems.length === 0 || busy) return;
-    setBusy('export');
+    setBusy(promote ? 'promote' : 'export');
     setError(null);
     setNotice('');
     setReport([]);
+    setExportResult(null);
+    setRestoreResult(null);
+    setCopied(false);
     try {
       const response = await authFetch(`${window.API_BASE}admin/export-to-archive`, {
         method: 'POST',
@@ -279,6 +423,8 @@ const ArchivePanel = ({ environment }) => {
       const result = await readBody(response);
       if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
       setReport(describeExport(result));
+      const ids = ((result.results && result.results.successful) || []).map((r) => r.archiveId).filter(Boolean);
+      setExportResult(ids.length ? { ids, promoted: promote } : null);
       setDialog(null);
       loadArchiveItems();
     } catch (err) {
@@ -293,21 +439,65 @@ const ArchivePanel = ({ environment }) => {
     + (shown.length !== items.length ? ` · ${shown.length} shown` : '')
     + (selected.size > 0 ? ` · ${selected.size} selected` : '');
   const nothingExists = loadState === 'ready' && items.length === 0;
+  const titleOf = (archiveId) => {
+    const found = items.find((item) => item.ArchiveId === archiveId);
+    return found ? found.Title : archiveId;
+  };
+
+  /** One group of the export picker: its head, its actions, and its rows. */
+  const pickGroup = ({ title, all, shownRows, picked, setPicked, toggle, exportType, noun, renderMeta }) => (
+    <section className="arch-group">
+      <div className="arch-group-head">
+        <h3>{title} ({shownRows.length === all.length ? all.length : `${shownRows.length} of ${all.length}`})</h3>
+        <div className="arch-group-acts">
+          <button type="button" className="arch-btn arch-btn--sm" onClick={() => pickAllShown(setPicked, shownRows)} disabled={shownRows.length === 0}>Select all</button>
+          <button type="button" className="arch-btn arch-btn--sm" onClick={() => setPicked(new Set())}>Clear</button>
+          <button type="button" className={`arch-btn arch-btn--sm${promoteTo ? '' : ' arch-btn--primary'}`} onClick={() => exportPicked(exportType)} disabled={picked.size === 0 || Boolean(busy)}>
+            {busy === 'export' ? 'Backing up…' : `Export ${plural(picked.size, noun)}`}
+          </button>
+          {promoteTo && (
+            <button type="button" className="arch-btn arch-btn--sm arch-btn--primary" onClick={() => exportPicked(exportType, { promote: true })} disabled={picked.size === 0 || Boolean(busy)}>
+              {busy === 'promote' ? 'Exporting…' : `Promote to ${promoteTo}…`}
+            </button>
+          )}
+        </div>
+      </div>
+      <ul className="arch-picklist">
+        {shownRows.map((row) => (
+          <li key={row.key} data-testid={`archive-pick-${row.id}`}>
+            <label>
+              <input type="checkbox" aria-label={`Select ${row.name}`} checked={picked.has(row.key)} onChange={() => toggle(row.key)} />
+              <span className="arch-pick-main">
+                <span className="arch-nm" title={row.name}>{row.name}</span>
+                <span className="arch-sub" title={row.id}>{[row.id, row.topic, row.type].filter(Boolean).join(' · ')}</span>
+              </span>
+              <span className="arch-pick-meta">
+                {renderMeta(row)}
+                <span className={`arch-dim${row.last ? '' : ' arch-never'}`} data-testid="archive-last">{lastLabel(row)}</span>
+              </span>
+            </label>
+          </li>
+        ))}
+        {all.length === 0 && <li className="arch-dim arch-pick-empty">No {noun}s here to back up.</li>}
+        {all.length > 0 && shownRows.length === 0 && (
+          <li className="arch-dim arch-pick-empty">No {noun} matches “{pickSearch}”.</li>
+        )}
+      </ul>
+    </section>
+  );
 
   return (
     <section className="arch">
+      {/* No heading of its own: the console's work head already says "Archive" and what it is. */}
       <div className="arch-head">
-        <div className="arch-head-grow">
-          <h2 className="arch-title">Archive</h2>
-          <p className="arch-lede">One shared store, all environments.</p>
-        </div>
-        <button type="button" className="arch-btn" onClick={openExport} disabled={busy === 'export'}>
+        <div className="arch-head-grow" />
+        <button type="button" className="arch-btn" onClick={openExport} disabled={busy === 'export' || busy === 'promote'}>
           <Icon name="UploadSimple" weight="bold" size={14} color="currentColor" /> Export from {tierName}…
         </button>
         <button
           type="button"
           className="arch-btn arch-btn--primary"
-          onClick={() => setDialog({ kind: 'import' })}
+          onClick={() => openImport(selected)}
           disabled={selected.size === 0 || busy === 'import'}
         >
           <Icon name="DownloadSimple" weight="bold" size={14} color="currentColor" /> Import {selected.size} selected
@@ -316,10 +506,103 @@ const ArchivePanel = ({ environment }) => {
 
       <StatusMessage message={error} tone="error" className="arch-alert arch-alert--error" />
       <StatusMessage message={notice} tone="success" className="arch-alert arch-alert--success" />
+
+      {promoBanner && (
+        <div className="arch-promo" role="status" data-testid="archive-promotion-banner">
+          <Icon name="ArrowRight" weight="bold" size={20} color="var(--secondary)" />
+          <div className="arch-grow">
+            <strong>
+              {plural(promoBanner.count, 'item')} promoted from {promoBanner.from || 'another environment'} — review and restore
+            </strong>
+            {promoBanner.count < promoBanner.asked && (
+              <span className="arch-promo-sub">
+                {promoBanner.asked - promoBanner.count} of the {promoBanner.asked} archive ids in the link {promoBanner.asked - promoBanner.count === 1 ? 'is' : 'are'} not in the archive.
+              </span>
+            )}
+          </div>
+          {promoBanner.count > 0 && !dialog && (
+            <button type="button" className="arch-btn arch-btn--primary" onClick={() => openImport(selected)} disabled={selected.size === 0}>
+              Review and restore
+            </button>
+          )}
+        </div>
+      )}
+
       {report.length > 0 && (
         <ul className="arch-report" data-testid="archive-report">
           {report.map((line, index) => <li key={`${index}-${line}`}>{line}</li>)}
         </ul>
+      )}
+
+      {exportResult && (
+        <section className={`arch-next${exportResult.promoted ? ' arch-next--promote' : ''}`} data-testid="archive-export-result">
+          {exportResult.promoted && promoteTo && (
+            <>
+              <h3>{plural(exportResult.ids.length, 'item')} ready for {promoteTo}</h3>
+              <p>
+                Open {promoteTo}&rsquo;s Archive to review and restore them. You sign in there, and nothing
+                changes on {promoteTo} until you confirm.
+              </p>
+            </>
+          )}
+          <div className="arch-acts">
+            {exportResult.promoted && promoteTo && (
+              <a className="arch-btn arch-btn--primary arch-btn--big" href={promoteLink(promoteTo, exportResult.ids, tier)} target="_blank" rel="noopener noreferrer">
+                Open {promoteTo}&rsquo;s Archive <Icon name="ArrowSquareOut" weight="bold" size={14} color="currentColor" />
+              </a>
+            )}
+            <button type="button" className="arch-btn" onClick={() => copyIds(exportResult.ids)}>{copied ? 'Copied' : 'Copy archive ids'}</button>
+            {!exportResult.promoted && promoteTo && (
+              <a className="arch-btn arch-btn--link" href={promoteLink(promoteTo, exportResult.ids, tier)} target="_blank" rel="noopener noreferrer">
+                Promote these to {promoteTo}
+              </a>
+            )}
+          </div>
+          <code className="arch-mono arch-ids" title={exportResult.ids.join(',')}>{exportResult.ids.join(',')}</code>
+        </section>
+      )}
+
+      {restoreResult && (restoreResult.checks.length > 0 || (promoteTo && restoreResult.ids.length > 0)) && (
+        <section className="arch-next" data-testid="archive-restore-check">
+          {restoreResult.checks.length > 0 && (
+            <>
+              <h3>Checked after the restore</h3>
+              <table className="arch-tbl arch-checktbl">
+                <thead>
+                  <tr>
+                    <th className="arch-col-cset">Set</th>
+                    <th className="arch-col-cnum">Questions</th>
+                    <th className="arch-col-cnum">Categories</th>
+                    <th className="arch-col-cstate">Against the backup</th>
+                    <th className="arch-col-copen" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {restoreResult.checks.map(({ archiveId, id, name, check }) => (
+                    <tr key={archiveId || id} data-testid={`archive-check-${id}`}>
+                      <td><span className="arch-nm" title={name}>{name}</span></td>
+                      <td className="arch-num">{checkCount(check.questions)}</td>
+                      <td className="arch-num">{checkCount(check.categories)}</td>
+                      <td>
+                        {check.matches
+                          ? <span className="arch-ok">Matches</span>
+                          : <span className="arch-bad" title={check.error || ''}>{check.error ? 'Could not check' : 'Does not match'}</span>}
+                      </td>
+                      <td><div className="arch-rowact"><a className="arch-btn arch-btn--sm" href={setHref(id)}>Open the set</a></div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {promoteTo && restoreResult.ids.length > 0 && (
+            <div className="arch-acts">
+              <a className="arch-btn arch-btn--primary" href={promoteLink(promoteTo, restoreResult.ids, tier)} target="_blank" rel="noopener noreferrer">
+                Promote these to {promoteTo} <Icon name="ArrowSquareOut" weight="bold" size={14} color="currentColor" />
+              </a>
+            </div>
+          )}
+        </section>
       )}
 
       {loadState === 'loading' && <p className="arch-loading">Loading archive items…</p>}
@@ -370,7 +653,7 @@ const ArchivePanel = ({ environment }) => {
             selects={[
               {
                 key: 'tier',
-                value: tier,
+                value: tierFilter,
                 onChange: (value) => set({ tier: value }),
                 ariaLabel: 'Environment',
                 options: [
@@ -479,7 +762,7 @@ const ArchivePanel = ({ environment }) => {
                         </span>
                       </td>
                       <td className="arch-num">{formatFileSize(item.FileSize)}</td>
-                      <td className="arch-when">{formatWhen(item.CreatedAt)}</td>
+                      <td className="arch-when" title={item.CreatedAt || ''} data-testid="archive-item-when">{formatExported(item.CreatedAt)}</td>
                       <td>
                         <div className="arch-rowact">
                           <button type="button" className="arch-btn arch-btn--sm" onClick={() => handleDownload(item)} title="Download this backup as a file">
@@ -512,24 +795,93 @@ const ArchivePanel = ({ environment }) => {
       {dialog && dialog.kind === 'import' && (
         <Modal
           overlayClassName="arch arch-scrim"
-          contentClassName="arch-modal"
+          contentClassName={`arch-modal arch-modal--wide${isProd ? ' arch-modal--prod' : ''}`}
           labelledBy="arch-import-title"
           onClose={closeDialog}
           closeOnBackdrop={() => !busy}
           closeOnEscape={() => !busy}
         >
-          <DialogHead titleId="arch-import-title" title={<>Restore {plural(selected.size, 'backup')} into {tierName}?</>} titlesClassName="arch-grow" icon={<Icon name="DownloadSimple" weight="fill" size={20} color="var(--primary)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
+          <DialogHead
+            titleId="arch-import-title"
+            title={isProd
+              ? <>Restore {plural(selected.size, 'backup')} into PROD?</>
+              : <>Restore {plural(selected.size, 'backup')} into {tierName}?</>}
+            titlesClassName="arch-grow"
+            icon={<Icon name={isProd ? 'Warning' : 'DownloadSimple'} weight="fill" size={20} color={isProd ? 'var(--danger-text)' : 'var(--primary)'} />}
+            onClose={closeDialog}
+            closeDisabled={Boolean(busy)}
+            closeClassName="arch-x"
+          />
           <div className="arch-modal-body">
+            {isProd && (
+              <p className="arch-prodwarn" data-testid="archive-prod-warning">
+                <strong>This writes to PROD.</strong> Every customer organisation reads Engage&rsquo;s
+                library here: a set that arrives active is live for all of them at once.
+              </p>
+            )}
+
+            {plan && plan.state === 'loading' && <p className="arch-loading">Checking what each backup would do here…</p>}
+            {plan && plan.state === 'error' && (
+              <p className="arch-fine" role="alert">The preview could not be made ({plan.error}). The restore can still go ahead.</p>
+            )}
+            {plan && plan.state === 'ready' && (
+              <ul className="arch-plan" data-testid="archive-plan">
+                {plan.plan.map((entry) => {
+                  const shownEntry = describePlanEntry(entry);
+                  return (
+                    <li key={entry.archiveId} data-testid={`archive-plan-${entry.archiveId}`}>
+                      <span className="arch-pick-main">
+                        <span className="arch-nm" title={entry.name || titleOf(entry.archiveId)}>{entry.name || titleOf(entry.archiveId)}</span>
+                        <span className="arch-sub">{shownEntry.counts}</span>
+                      </span>
+                      <span className="arch-pick-meta">
+                        <span className={`arch-chip${entry.mode === 'new-version' ? ' arch-chip--version' : ''}`}>{shownEntry.verdict}</span>
+                        <span className={`arch-chip${shownEntry.live ? ' arch-chip--live' : ' arch-chip--off'}`}>{shownEntry.arrival}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+                {plan.failed.map((entry) => (
+                  <li key={entry.archiveId} className="arch-plan-no" data-testid={`archive-plan-${entry.archiveId}`}>
+                    <span className="arch-pick-main">
+                      <span className="arch-nm" title={titleOf(entry.archiveId)}>{titleOf(entry.archiveId)}</span>
+                      <span className="arch-sub arch-bad" title={entry.error}>{entry.refused ? 'Will not be restored' : 'Could not be read'}: {entry.error}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <p>
               A set that already exists gets a new version and switches to it; the version it replaces
               stays in its history.
             </p>
-            <p>An active Engage set is live for every organisation the moment it is restored.</p>
+            {!isProd && <p>An active Engage set is live for every organisation the moment it is restored.</p>}
+
+            {isProd && (
+              <label className="arch-typed">
+                <span>Type <strong>prod</strong> to confirm</span>
+                <input
+                  type="text"
+                  className="arch-input arch-input--plain"
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-label="Type prod to confirm"
+                />
+              </label>
+            )}
             <StatusMessage message={error} tone="error" className="arch-alert arch-alert--error" />
           </div>
           <DialogFoot cancel={<button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Cancel</button>}>
-            <button type="button" className="arch-btn arch-btn--primary" onClick={confirmImport} disabled={Boolean(busy)}>
-              {busy === 'import' ? 'Restoring…' : `Restore ${selected.size}`}
+            <button
+              type="button"
+              className={`arch-btn ${isProd ? 'arch-btn--dangersolid' : 'arch-btn--primary'}`}
+              onClick={confirmImport}
+              disabled={Boolean(busy) || !planSettled || !typedOk}
+            >
+              {busy === 'import' ? 'Restoring…' : (isProd ? `Restore ${selected.size} into PROD` : `Restore ${selected.size}`)}
             </button>
           </DialogFoot>
         </Modal>
@@ -569,69 +921,62 @@ const ArchivePanel = ({ environment }) => {
           closeOnBackdrop={() => !busy}
           closeOnEscape={() => !busy}
         >
-          <DialogHead titleId="arch-export-title" title={<>Back up from {tierName}</>} titlesClassName="arch-grow" sub="Engage and public content only. Organisation content is encrypted per organisation and is never archived." subClassName="arch-dim" icon={<Icon name="UploadSimple" weight="fill" size={20} color="var(--primary)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
+          <DialogHead titleId="arch-export-title" title={<>Back up from {tierName}</>} titlesClassName="arch-grow" sub={`Engage and public content only. Organisation content is encrypted per organisation and is never archived.${promoteTo ? ` Promote to ${promoteTo}… backs up and gives you a link that opens ${promoteTo}'s Archive with them selected.` : ''}`} subClassName="arch-dim" icon={<Icon name="UploadSimple" weight="fill" size={20} color="var(--primary)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
           <div className="arch-modal-body">
             <StatusMessage message={error} tone="error" className="arch-alert arch-alert--error" />
             {localPending > 0 ? (
               <p className="arch-loading">Loading local content…</p>
             ) : (
               <>
-                <section className="arch-group">
-                  <div className="arch-group-head">
-                    <h3>Question sets ({exportableSets.length})</h3>
-                    <div className="arch-group-acts">
-                      <button type="button" className="arch-btn arch-btn--sm" onClick={() => setPickedSets(new Set(exportableSets.map((qs) => selectionKey(qs.scope, qs.id))))}>Select all</button>
-                      <button type="button" className="arch-btn arch-btn--sm" onClick={() => setPickedSets(new Set())}>Clear</button>
-                      <button type="button" className="arch-btn arch-btn--sm arch-btn--primary" onClick={() => exportPicked('questionsets')} disabled={pickedSets.size === 0 || Boolean(busy)}>
-                        {busy === 'export' ? 'Backing up…' : `Export ${plural(pickedSets.size, 'set')}`}
-                      </button>
-                    </div>
+                <div className="arch-filters arch-pickbar">
+                  <div className="arch-search">
+                    <Icon name="MagnifyingGlass" weight="bold" size={14} color="var(--muted)" />
+                    <input
+                      type="search"
+                      className="arch-input"
+                      value={pickSearch}
+                      onChange={(e) => setPickSearch(e.target.value)}
+                      placeholder="Search name or id…"
+                      aria-label="Search name or id"
+                    />
                   </div>
-                  <ul className="arch-picklist">
-                    {exportableSets.map((qs) => {
-                      const key = selectionKey(qs.scope, qs.id);
-                      return (
-                        <li key={key}>
-                          <label>
-                            <input type="checkbox" aria-label={`Select ${qs.name}`} checked={pickedSets.has(key)} onChange={() => togglePickedSet(key)} />
-                            <span className="arch-nm">{qs.name}</span>
-                            <span className="arch-chip arch-chip--off">{libraryLabel(qs.scope)}</span>
-                            {qs.totalQuestions != null && <span className="arch-dim">{plural(qs.totalQuestions, 'question')}</span>}
-                          </label>
-                        </li>
-                      );
-                    })}
-                    {exportableSets.length === 0 && <li className="arch-dim">No sets here to back up.</li>}
-                  </ul>
-                </section>
-                <section className="arch-group">
-                  <div className="arch-group-head">
-                    <h3>Prompts ({exportablePrompts.length})</h3>
-                    <div className="arch-group-acts">
-                      <button type="button" className="arch-btn arch-btn--sm" onClick={() => setPickedPrompts(new Set(exportablePrompts.map((p) => p.promptId || p.id)))}>Select all</button>
-                      <button type="button" className="arch-btn arch-btn--sm" onClick={() => setPickedPrompts(new Set())}>Clear</button>
-                      <button type="button" className="arch-btn arch-btn--sm arch-btn--primary" onClick={() => exportPicked('prompts')} disabled={pickedPrompts.size === 0 || Boolean(busy)}>
-                        {busy === 'export' ? 'Backing up…' : `Export ${plural(pickedPrompts.size, 'prompt')}`}
-                      </button>
-                    </div>
-                  </div>
-                  <ul className="arch-picklist">
-                    {exportablePrompts.map((prompt) => {
-                      const id = prompt.promptId || prompt.id;
-                      return (
-                        <li key={id}>
-                          <label>
-                            <input type="checkbox" aria-label={`Select ${prompt.name}`} checked={pickedPrompts.has(id)} onChange={() => togglePickedPrompt(id)} />
-                            <span className="arch-nm">{prompt.name}</span>
-                            {prompt.gameType && <span className="arch-chip arch-chip--type">{gameTypeLabel(prompt.gameType)}</span>}
-                            {prompt.isDefault && <span className="arch-chip">Default</span>}
-                          </label>
-                        </li>
-                      );
-                    })}
-                    {exportablePrompts.length === 0 && <li className="arch-dim">No prompts here to back up.</li>}
-                  </ul>
-                </section>
+                  <select className="arch-input arch-select" value={pickSort} onChange={(e) => setPickSort(e.target.value)} aria-label="Sort by">
+                    {PICKER_SORTS.map((option) => <option key={option.value} value={option.value}>Sort: {option.label}</option>)}
+                  </select>
+                </div>
+                {pickGroup({
+                  title: 'Question sets',
+                  all: setRows,
+                  shownRows: shownSetRows,
+                  picked: pickedSets,
+                  setPicked: setPickedSets,
+                  toggle: togglePickedSet,
+                  exportType: 'questionsets',
+                  noun: 'set',
+                  renderMeta: (row) => (
+                    <>
+                      <span className={`arch-chip${row.active ? ' arch-chip--live' : ' arch-chip--off'}`}>{row.active ? 'Active' : 'Inactive'}</span>
+                      <span className="arch-chip arch-chip--off">{libraryLabel(row.scope)}</span>
+                      {row.totalQuestions != null && <span className="arch-dim">{plural(row.totalQuestions, 'question')}</span>}
+                    </>
+                  ),
+                })}
+                {pickGroup({
+                  title: 'Prompts',
+                  all: promptRows,
+                  shownRows: shownPromptRows,
+                  picked: pickedPrompts,
+                  setPicked: setPickedPrompts,
+                  toggle: togglePickedPrompt,
+                  exportType: 'prompts',
+                  noun: 'prompt',
+                  renderMeta: (row) => (
+                    <>
+                      {row.status && <span className={`arch-chip${row.status === 'active' ? ' arch-chip--live' : ' arch-chip--off'}`}>{row.status === 'active' ? 'Active' : row.status}</span>}
+                      {row.isDefault && <span className="arch-chip">Default</span>}
+                    </>
+                  ),
+                })}
               </>
             )}
           </div>

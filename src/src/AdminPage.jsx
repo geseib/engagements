@@ -55,6 +55,7 @@ import {
   PLATFORM_GROUP, PLATFORM_MODE, ALL_SECTION_IDS, promptsReadOnlyFor, EVENTS_SUBTITLE,
 } from './config/consoleSections';
 import { getActiveOrgId, setActiveOrgId } from './auth/authFetch';
+import { readPromotion } from './utils/archivePromotion';
 import { adminApiUrl } from './utils/adminApi';
 import { describeEnvironment } from './utils/adminEnvironment';
 import {
@@ -410,7 +411,19 @@ function AdminPage() {
      for the list; and whether the new-event dialog is open. */
   const [eventPlace, setEventPlace] = useState(null);
   const [creatingEvent, setCreatingEvent] = useState(false);
-  const [activeOrgId, setActiveOrgIdState] = useState(() => getActiveOrgId());
+  /*
+    A PROMOTION LINK OPENS THE CONSOLE AS ENGAGE (utils/archivePromotion.js). The Archive
+    exists only in platform mode, and a promotion link is followed by staff from another tier,
+    so `?promote=` chooses the mode BEFORE the first request goes out. Decided here, in the
+    initialiser, because every mount fetch reads the stored mode at call time: switching after
+    them would leave a personal space's lists on screen under Engage's nav, the very thing
+    handleSwitchOrg reloads to avoid. Staff only; anybody else keeps their own space.
+  */
+  const [activeOrgId, setActiveOrgIdState] = useState(() => {
+    const staff = (currentUser?.groups || []).includes(PLATFORM_GROUP);
+    if (staff && typeof window !== 'undefined' && readPromotion(window.location.search)) setActiveOrgId(PLATFORM_MODE);
+    return getActiveOrgId();
+  });
   /*
     AI DRAFTS (docs/design/ai-generation-review). `drafts` are this person's
     drafts in the library the console is standing in — for the sets list's
@@ -2330,7 +2343,7 @@ function AdminPage() {
           {/* No .tab-content wrapper: that class carries a 500px min-height and
               a fade-in written for the paper tabs, and the archive owns its own
               frame now (ArchivePanel.css). */}
-          {resolvedTab === 'archive' && <ArchivePanel environment={environment} />}
+          {resolvedTab === 'archive' && <ArchivePanel environment={environment} onRestored={fetchQuestionSets} />}
 
           {/* THE REPORTS LIST — docs/design/reports-list. A report used to be
               findable only through its session, which now expires. */}

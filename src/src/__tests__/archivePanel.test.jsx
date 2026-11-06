@@ -174,32 +174,82 @@ test('ticking rows counts them, select-all takes every shown row, and the head b
 });
 
 /* ------------------------------------------------------------- importing */
+const TEST = { id: 'test', label: 'TEST', detail: 'API x' };
+const DEV = { id: 'dev', label: 'DEV', detail: 'API x' };
+const bodyOf = ([, init = {}]) => JSON.parse(init.body || '{}');
+const dryRuns = () => callsTo('POST', /admin\/import-from-archive$/).filter((c) => bodyOf(c).dryRun === true);
+const restores = () => callsTo('POST', /admin\/import-from-archive$/).filter((c) => bodyOf(c).dryRun !== true);
+const PLAN_ARC2 = {
+  dryRun: true,
+  plan: [{
+    archiveId: 'arc-2', kind: 'set', id: 'teamretro', name: 'Team Retro', mode: 'new-version',
+    currentVersion: 3, currentlyActive: true, active: true, questionCount: 60, categoryCount: 6,
+  }],
+  failed: [],
+};
+const RESTORED_ARC2 = {
+  results: { successful: [{
+    archiveId: 'arc-2', kind: 'set', id: 'teamretro', name: 'Team Retro', mode: 'new-version', version: 4, active: true,
+    check: { version: 4, questions: { expected: 60, found: 60 }, categories: { expected: 6, found: 6 }, matches: true },
+  }], failed: [] },
+  becameActive: [{ id: 'teamretro', name: 'Team Retro' }],
+  media: { copied: 0, kept: 0, missing: [] },
+};
+/** The import route: a plan for a dry run, the restore result otherwise. */
+const IMPORT = (planBody = PLAN_ARC2, restoreBody = RESTORED_ARC2) => ['POST', /admin\/import-from-archive$/, (_url, init) => (
+  JSON.parse(init.body).dryRun ? reply(planBody) : reply(restoreBody)
+)];
+
 test('an import is confirmed in a dialog that names the environment and the consequence, then reports what went live', async () => {
-  route([
-    LIST,
-    ['POST', /admin\/import-from-archive$/, () => reply({
-      results: { successful: [{ archiveId: 'arc-2', kind: 'set', id: 'teamretro', name: 'Team Retro', mode: 'created', version: 1, active: true }], failed: [] },
-      becameActive: [{ id: 'teamretro', name: 'Team Retro' }],
-      media: { copied: 0, kept: 0, missing: [] },
-    })],
-  ]);
-  render(<ArchivePanel environment={PROD} />);
+  route([LIST, IMPORT(PLAN_ARC2, { ...RESTORED_ARC2, results: { successful: [{ archiveId: 'arc-2', kind: 'set', id: 'teamretro', name: 'Team Retro', mode: 'created', version: 1, active: true }], failed: [] } })]);
+  render(<ArchivePanel environment={TEST} />);
   fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
-  expect(screen.getByRole('heading', { name: /importing 1 item into prod/i })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /importing 1 item into test/i })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
-  expect(within(dialog()).getByRole('heading', { name: /restore 1 backup into prod\?/i })).toBeInTheDocument();
+  expect(within(dialog()).getByRole('heading', { name: /restore 1 backup into test\?/i })).toBeInTheDocument();
   expect(dialog()).toHaveTextContent(/new version and switches to it/i);
   expect(dialog()).toHaveTextContent(/live for every organisation/i);
-  fireEvent.click(within(dialog()).getByRole('button', { name: /^restore 1$/i }));
-  await waitFor(() => expect(callsTo('POST', /admin\/import-from-archive$/)).toHaveLength(1));
-  expect(JSON.parse(callsTo('POST', /admin\/import-from-archive$/)[0][1].body)).toEqual({ selectedItems: ['arc-2'] });
+  const restore = within(dialog()).getByRole('button', { name: /^restore 1$/i });
+  await waitFor(() => expect(restore).toBeEnabled());
+  fireEvent.click(restore);
+  await waitFor(() => expect(restores()).toHaveLength(1));
+  expect(bodyOf(restores()[0])).toEqual({ selectedItems: ['arc-2'] });
   expect(await screen.findByText('Now live for every organisation: Team Retro.')).toBeInTheDocument();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
-test('a declined confirmation sends nothing, and every exit of the dialog is the same exit', async () => {
-  route([LIST]);
-  render(<ArchivePanel environment={PROD} />);
+test('the confirm opens on a preview: per item, new version of the live vN, its counts, and active on arrival', async () => {
+  route([LIST, IMPORT({
+    dryRun: true,
+    plan: [
+      PLAN_ARC2.plan[0],
+      { archiveId: 'arc-1', kind: 'set', id: 'brandnew', name: 'Brand New', mode: 'created', currentVersion: null, currentlyActive: null, active: false, questionCount: 1, categoryCount: 1 },
+    ],
+    failed: [{ archiveId: 'arc-0', refused: true, error: 'Organisation content is not archived.' }],
+  })]);
+  render(<ArchivePanel environment={TEST} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('checkbox', { name: /select all shown/i }));
+  fireEvent.click(screen.getByRole('button', { name: /import 3 selected/i }));
+  expect(within(dialog()).getByText(/checking what each backup would do/i)).toBeInTheDocument();
+  expect(within(dialog()).getByRole('button', { name: /^restore 3$/i })).toBeDisabled();
+  const live = await within(dialog()).findByTestId('archive-plan-arc-2');
+  expect(live).toHaveTextContent('New version of v3 (currently live)');
+  expect(live).toHaveTextContent('60 questions · 6 categories');
+  expect(live).toHaveTextContent('Active on arrival');
+  const fresh = within(dialog()).getByTestId('archive-plan-arc-1');
+  expect(fresh).toHaveTextContent('New set');
+  expect(fresh).toHaveTextContent('1 question · 1 category');
+  expect(fresh).toHaveTextContent('Inactive on arrival');
+  expect(within(dialog()).getByTestId('archive-plan-arc-0')).toHaveTextContent(/will not be restored: organisation content/i);
+  expect(dryRuns()).toHaveLength(1);
+  expect(bodyOf(dryRuns()[0])).toEqual({ selectedItems: ['arc-2', 'arc-1', 'arc-0'], dryRun: true });
+  expect(restores()).toHaveLength(0);
+});
+
+test('a declined confirmation restores nothing, and every exit of the dialog is the same exit', async () => {
+  route([LIST, IMPORT()]);
+  render(<ArchivePanel environment={TEST} />);
   fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
   fireEvent.click(within(dialog()).getByRole('button', { name: /^cancel$/i }));
@@ -207,26 +257,156 @@ test('a declined confirmation sends nothing, and every exit of the dialog is the
   fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
   fireEvent.click(within(dialog()).getByRole('button', { name: /^close$/i }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(callsTo('POST', /admin\/import-from-archive$/)).toHaveLength(0);
+  await waitFor(() => expect(dryRuns()).toHaveLength(2));
+  expect(restores()).toHaveLength(0);
 });
 
 test('a restore in flight cannot be sent twice', async () => {
-  route([LIST, ['POST', /admin\/import-from-archive$/, () => new Promise(() => {})]]);
+  route([LIST, ['POST', /admin\/import-from-archive$/, (_url, init) => (JSON.parse(init.body).dryRun ? reply(PLAN_ARC2) : new Promise(() => {}))]]);
+  render(<ArchivePanel environment={TEST} />);
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
+  const restore = within(dialog()).getByRole('button', { name: /^restore 1$/i });
+  await waitFor(() => expect(restore).toBeEnabled());
+  fireEvent.click(restore);
+  await waitFor(() => expect(within(dialog()).getByRole('button', { name: /restoring/i })).toBeDisabled());
+  fireEvent.click(within(dialog()).getByRole('button', { name: /restoring/i }));
+  expect(restores()).toHaveLength(1);
+});
+
+test('a preview that fails does not block the restore, and says so', async () => {
+  const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+  route([LIST, ['POST', /admin\/import-from-archive$/, (_url, init) => (JSON.parse(init.body).dryRun ? reply({ error: 'boom' }, 500) : reply(RESTORED_ARC2))]]);
+  render(<ArchivePanel environment={TEST} />);
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
+  expect(await within(dialog()).findByText(/the preview could not be made \(boom\)/i)).toBeInTheDocument();
+  expect(within(dialog()).getByRole('button', { name: /^restore 1$/i })).toBeEnabled();
+  logged.mockRestore();
+});
+
+/* ------------------------------------------------- prod asks for the word */
+test('on prod the confirm names PROD, looks different, and the button waits for "prod" to be typed', async () => {
+  route([LIST, IMPORT()]);
   render(<ArchivePanel environment={PROD} />);
   fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
-  fireEvent.click(within(dialog()).getByRole('button', { name: /^restore 1$/i }));
-  await waitFor(() => expect(within(dialog()).getByRole('button', { name: /restoring/i })).toBeDisabled());
-  fireEvent.click(within(dialog()).getByRole('button', { name: /restoring/i }));
-  expect(callsTo('POST', /admin\/import-from-archive$/)).toHaveLength(1);
+  expect(within(dialog()).getByRole('heading', { name: /Restore 1 backup into PROD\?/ })).toBeInTheDocument();
+  expect(within(dialog()).getByTestId('archive-prod-warning')).toHaveTextContent(/This writes to PROD./);
+  expect(dialog().className).toMatch(/arch-modal--prod/);
+  await within(dialog()).findByTestId('archive-plan-arc-2');
+  const restore = within(dialog()).getByRole('button', { name: 'Restore 1 into PROD' });
+  expect(restore).toBeDisabled();
+  expect(restore.className).toMatch(/arch-btn--dangersolid/);
+  const word = within(dialog()).getByLabelText('Type prod to confirm');
+  fireEvent.change(word, { target: { value: 'test' } });
+  expect(restore).toBeDisabled();
+  fireEvent.click(restore);
+  expect(restores()).toHaveLength(0);
+  fireEvent.change(word, { target: { value: ' PROD ' } });
+  expect(restore).toBeEnabled();
+  fireEvent.click(restore);
+  await waitFor(() => expect(restores()).toHaveLength(1));
+});
+
+test('test and dev confirm with one press: no typed word, no prod treatment', async () => {
+  for (const env of [TEST, DEV]) {
+    route([LIST, IMPORT()]);
+    const { unmount } = render(<ArchivePanel environment={env} />);
+    // eslint-disable-next-line no-await-in-loop
+    fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
+    expect(within(dialog()).queryByLabelText('Type prod to confirm')).not.toBeInTheDocument();
+    expect(dialog().className).not.toMatch(/arch-modal--prod/);
+    // eslint-disable-next-line no-await-in-loop
+    await waitFor(() => expect(within(dialog()).getByRole('button', { name: /^restore 1$/i })).toBeEnabled());
+    unmount();
+  }
+});
+
+/* ------------------------------------------ after the restore: check, refresh, promote */
+test('after a restore each set is read back beside the snapshot, opens from the report, and the console refreshes its sets', async () => {
+  const onRestored = jest.fn();
+  route([LIST, IMPORT(PLAN_ARC2, {
+    ...RESTORED_ARC2,
+    results: { successful: [
+      RESTORED_ARC2.results.successful[0],
+      { archiveId: 'arc-1', kind: 'set', id: 'shortset', name: 'Short Set', mode: 'created', version: 1, active: false,
+        check: { version: 1, questions: { expected: 60, found: 58 }, categories: { expected: 6, found: 6 }, matches: false } },
+    ], failed: [] },
+  })]);
+  render(<ArchivePanel environment={TEST} onRestored={onRestored} />);
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
+  const restore = within(dialog()).getByRole('button', { name: /^restore 1$/i });
+  await waitFor(() => expect(restore).toBeEnabled());
+  fireEvent.click(restore);
+  const good = await screen.findByTestId('archive-check-teamretro');
+  expect(good).toHaveTextContent('60 of 60');
+  expect(good).toHaveTextContent('6 of 6');
+  expect(good).toHaveTextContent('Matches');
+  expect(within(good).getByRole('link', { name: /open the set/i })).toHaveAttribute('href', '/admin?section=questionsets&set=teamretro&setScope=platform');
+  const short = screen.getByTestId('archive-check-shortset');
+  expect(short).toHaveTextContent('58 of 60');
+  expect(short).toHaveTextContent('Does not match');
+  expect(onRestored).toHaveBeenCalledTimes(1);
+  // On test, the restored batch can go on to prod with the same archive ids.
+  expect(screen.getByRole('link', { name: /promote these to prod/i }))
+    .toHaveAttribute('href', 'https://engage.seibtribe.us/admin?section=archive&promote=arc-2,arc-1&from=test');
+});
+
+test('prod offers no further promotion', async () => {
+  route([LIST, IMPORT()]);
+  render(<ArchivePanel environment={PROD} />);
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
+  await within(dialog()).findByTestId('archive-plan-arc-2');
+  fireEvent.change(within(dialog()).getByLabelText('Type prod to confirm'), { target: { value: 'prod' } });
+  fireEvent.click(within(dialog()).getByRole('button', { name: 'Restore 1 into PROD' }));
+  expect(await screen.findByTestId('archive-check-teamretro')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /promote these/i })).not.toBeInTheDocument();
+});
+
+/* ------------------------------------------------- arriving on a promotion link */
+describe('arriving on a promotion link', () => {
+  afterEach(() => window.history.replaceState({}, '', '/'));
+
+  test('selects exactly the batch, says where it came from, goes straight to the preview, and drops the link', async () => {
+    window.history.replaceState({}, '', '/admin?section=archive&promote=arc-2,arc-1,arc-gone&from=dev');
+    route([LIST, IMPORT()]);
+    render(<ArchivePanel environment={TEST} />);
+    const banner = await screen.findByTestId('archive-promotion-banner');
+    expect(banner).toHaveTextContent('2 items promoted from dev — review and restore');
+    expect(banner).toHaveTextContent('1 of the 3 archive ids in the link is not in the archive.');
+    expect(within(dialog()).getByRole('heading', { name: /restore 2 backups into test\?/i })).toBeInTheDocument();
+    await waitFor(() => expect(dryRuns()).toHaveLength(1));
+    expect(bodyOf(dryRuns()[0])).toEqual({ selectedItems: ['arc-2', 'arc-1'], dryRun: true });
+    expect(within(row('arc-2')).getByRole('checkbox')).toBeChecked();
+    expect(within(row('arc-1')).getByRole('checkbox')).toBeChecked();
+    expect(within(row('arc-0')).getByRole('checkbox')).not.toBeChecked();
+    expect(window.location.search).toBe('?section=archive');
+    await within(dialog()).findByTestId('archive-plan-arc-2');
+  });
+
+  test('closing the preview leaves the banner, which reopens it', async () => {
+    window.history.replaceState({}, '', '/admin?section=archive&promote=arc-2&from=dev');
+    route([LIST, IMPORT()]);
+    render(<ArchivePanel environment={TEST} />);
+    await screen.findByTestId('archive-promotion-banner');
+    fireEvent.click(within(dialog()).getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /review and restore/i }));
+    expect(within(dialog()).getByRole('heading', { name: /restore 1 backup into test\?/i })).toBeInTheDocument();
+    await within(dialog()).findByTestId('archive-plan-arc-2');
+  });
 });
 
 test('an unknown environment is named as this environment, never guessed', async () => {
-  route([LIST]);
+  route([LIST, IMPORT()]);
   render(<ArchivePanel environment={{ id: 'unknown', label: 'UNKNOWN', detail: '' }} />);
   fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
   expect(within(dialog()).getByRole('heading', { name: /into this environment\?/i })).toBeInTheDocument();
+  await within(dialog()).findByTestId('archive-plan-arc-2');
 });
 
 /* ------------------------------------------------------------- exporting */
@@ -306,4 +486,136 @@ test('download asks the tier for the link and opens it', async () => {
   fireEvent.click(within(target).getByRole('button', { name: /^download$/i }));
   await waitFor(() => expect(open).toHaveBeenCalledWith('https://signed.invalid/arc-2', '_blank'));
   open.mockRestore();
+});
+
+/* ------------------------------------------------ the list says the time */
+test('the Exported column carries the time as well as the day, so two batches from one day differ', async () => {
+  route([LIST]);
+  render(<ArchivePanel environment={PROD} />);
+  const when = within(await screen.findByTestId('archive-item-arc-2')).getByTestId('archive-item-when');
+  expect(when.textContent).toMatch(/^Sep 1[45], 2026, \d{2}:\d{2}$/);
+  expect(when).toHaveAttribute('title', '2026-09-15T12:00:00.000Z');
+});
+
+test('the panel has no heading of its own: the console head already says Archive', async () => {
+  route([LIST]);
+  render(<ArchivePanel environment={PROD} />);
+  await screen.findByTestId('archive-item-arc-2');
+  expect(screen.queryByRole('heading', { name: /^archive$/i })).not.toBeInTheDocument();
+  expect(screen.queryByText('One shared store, all environments.')).not.toBeInTheDocument();
+});
+
+/* ------------------------------------------ the export picker: search, sort, state */
+const FIVE_MIN_AGO = () => new Date(Date.now() - 5 * 60000).toISOString();
+const PICKER_SETS = [
+  { id: 'musicpopcultureencore', scope: 'platform', name: 'Music & Pop Culture: Encore!', engagementType: 'trivia', active: true, topic: 'music' },
+  { id: 'techworld', scope: 'platform', name: 'lessons from the Tech World', engagementType: 'call-and-answer', active: false },
+  { id: 'historicleaders', scope: 'platform', name: 'Historic World Leaders', engagementType: 'trivia', active: true },
+];
+const pickerRoutes = (extraItems = []) => [
+  ['GET', /admin\/archive\/items(\?|$)/, () => reply({ items: [EARLIER, LEGACY, LATEST, ...extraItems] })],
+  ['GET', /admin\/question-sets$/, () => reply({ questionSets: PICKER_SETS })],
+  ['GET', /admin\/ai-prompts$/, () => reply({ prompts: [] })],
+];
+const pickOrder = () => within(dialog()).getAllByTestId(/^archive-pick-/).map((el) => el.getAttribute('data-testid').slice('archive-pick-'.length));
+const devBackupOf = (id, createdAt) => ({
+  ArchiveId: `arc-${id}`, Title: id, ContentType: 'questionset', Category: 'trivia', FileSize: 10, CreatedAt: createdAt,
+  Tags: ['dev', 'schema:engage.set/1', 'scope:platform', `source:platform/${id}`, `exportedAt:${createdAt}`],
+});
+
+test('the export picker sorts by the name shown, ignoring case, and each row says its id, state and topic', async () => {
+  route(pickerRoutes());
+  render(<ArchivePanel environment={DEV} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('button', { name: /export from dev…/i }));
+  await within(dialog()).findByLabelText('Select Historic World Leaders');
+  expect(pickOrder()).toEqual(['historicleaders', 'techworld', 'musicpopcultureencore']);
+  const music = within(dialog()).getByTestId('archive-pick-musicpopcultureencore');
+  expect(music).toHaveTextContent('musicpopcultureencore');
+  expect(music).toHaveTextContent('Music');
+  expect(music).toHaveTextContent('Active');
+  expect(within(dialog()).getByTestId('archive-pick-techworld')).toHaveTextContent('Inactive');
+});
+
+test('search matches name or id, and Select all takes only what is shown', async () => {
+  route(pickerRoutes());
+  render(<ArchivePanel environment={DEV} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('button', { name: /export from dev…/i }));
+  await within(dialog()).findByLabelText('Select Historic World Leaders');
+  const box = within(dialog()).getByLabelText('Search name or id');
+  fireEvent.change(box, { target: { value: 'WORLD' } });
+  expect(pickOrder()).toEqual(['historicleaders', 'techworld']);
+  expect(within(dialog()).getByRole('heading', { name: 'Question sets (2 of 3)' })).toBeInTheDocument();
+  fireEvent.change(box, { target: { value: 'popcultureenc' } });
+  expect(pickOrder()).toEqual(['musicpopcultureencore']);
+  fireEvent.click(within(dialog()).getAllByRole('button', { name: /^select all$/i })[0]);
+  expect(within(dialog()).getByRole('button', { name: /^export 1 set$/i })).toBeEnabled();
+  fireEvent.change(box, { target: { value: 'nothing like it' } });
+  expect(within(dialog()).getByText('No set matches “nothing like it”.')).toBeInTheDocument();
+});
+
+test('each row says when it was last backed up from THIS tier, and the picker sorts by it', async () => {
+  route(pickerRoutes([devBackupOf('techworld', FIVE_MIN_AGO()), { ...devBackupOf('historicleaders', FIVE_MIN_AGO()), Tags: ['test', 'schema:engage.set/1', 'scope:platform', 'source:platform/historicleaders'] }]));
+  render(<ArchivePanel environment={DEV} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('button', { name: /export from dev…/i }));
+  await within(dialog()).findByLabelText('Select Historic World Leaders');
+  expect(within(within(dialog()).getByTestId('archive-pick-techworld')).getByTestId('archive-last')).toHaveTextContent('Last backed up 5 min ago');
+  // test's backup of it is not a backup from dev.
+  expect(within(within(dialog()).getByTestId('archive-pick-historicleaders')).getByTestId('archive-last')).toHaveTextContent('Never backed up here');
+  fireEvent.change(within(dialog()).getByLabelText('Sort by'), { target: { value: 'last' } });
+  expect(pickOrder()[0]).toBe('techworld');
+  fireEvent.change(within(dialog()).getByLabelText('Sort by'), { target: { value: 'type' } });
+  expect(pickOrder()).toEqual(['techworld', 'historicleaders', 'musicpopcultureencore']);
+});
+
+/* ------------------------------------------------------- promote to test / prod */
+test('Promote to test… exports and hands on a link to test\'s Archive with the batch, plus the ids to copy', async () => {
+  const writeText = jest.fn(() => Promise.resolve());
+  Object.assign(navigator, { clipboard: { writeText } });
+  route([
+    ...pickerRoutes(),
+    ['POST', /admin\/export-to-archive$/, () => reply({ results: { successful: [
+      { id: 'historicleaders', name: 'Historic World Leaders', archiveId: 'new-1', media: { copied: 0, missing: [] } },
+      { id: 'techworld', name: 'lessons from the Tech World', archiveId: 'new-2', media: { copied: 0, missing: [] } },
+    ], failed: [] } })],
+  ]);
+  render(<ArchivePanel environment={DEV} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('button', { name: /export from dev…/i }));
+  fireEvent.click(await within(dialog()).findByLabelText('Select Historic World Leaders'));
+  fireEvent.click(within(dialog()).getByLabelText('Select lessons from the Tech World'));
+  fireEvent.click(within(dialog()).getAllByRole('button', { name: /promote to test…/i })[0]);
+  const result = await screen.findByTestId('archive-export-result');
+  expect(result).toHaveTextContent('2 items ready for test');
+  expect(within(result).getByRole('link', { name: /open test’s archive/i }))
+    .toHaveAttribute('href', 'https://engage.test.seibtribe.us/admin?section=archive&promote=new-1,new-2&from=dev');
+  fireEvent.click(within(result).getByRole('button', { name: /copy archive ids/i }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('new-1,new-2'));
+  expect(await within(result).findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+});
+
+test('a plain export also offers the ids and a way on; prod has no Promote button', async () => {
+  route([
+    ...pickerRoutes(),
+    ['POST', /admin\/export-to-archive$/, () => reply({ results: { successful: [{ id: 'techworld', name: 'T', archiveId: 'new-9', media: { copied: 0, missing: [] } }], failed: [] } })],
+  ]);
+  const { unmount } = render(<ArchivePanel environment={TEST} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('button', { name: /export from test…/i }));
+  fireEvent.click(await within(dialog()).findByLabelText('Select lessons from the Tech World'));
+  fireEvent.click(within(dialog()).getByRole('button', { name: /^export 1 set$/i }));
+  const result = await screen.findByTestId('archive-export-result');
+  expect(within(result).getByRole('button', { name: /copy archive ids/i })).toBeInTheDocument();
+  expect(within(result).getByRole('link', { name: /promote these to prod/i }))
+    .toHaveAttribute('href', 'https://engage.seibtribe.us/admin?section=archive&promote=new-9&from=test');
+  unmount();
+
+  route(pickerRoutes());
+  render(<ArchivePanel environment={PROD} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('button', { name: /export from prod…/i }));
+  await within(dialog()).findByLabelText('Select lessons from the Tech World');
+  expect(within(dialog()).queryByRole('button', { name: /promote to/i })).not.toBeInTheDocument();
 });

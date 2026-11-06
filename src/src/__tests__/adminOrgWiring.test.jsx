@@ -150,4 +150,30 @@ describe('platform mode', () => {
     expect(await screen.findByRole('button', { name: /Question sets/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Organisations/ })).toBeNull();
   });
+
+  /*
+    A PROMOTION LINK (utils/archivePromotion.js) lands staff in Engage → Archive from their own
+    space, and the mode is chosen before the first request: the very first call already carries
+    it, so no list on the page was read for the personal space.
+    rejects: the review's "every visit starts in the wrong place" on the one link meant to fix it.
+  */
+  it('is entered by a promotion link, before anything is fetched, and lands on the Archive', async () => {
+    mockActiveOrg = 'org_home';
+    window.history.pushState({}, '', '/admin?section=archive&promote=arc-1,arc-2&from=dev');
+    serve([PERSONAL]);
+    render(<AdminPage />);
+    expect(mockActiveOrg).toBe(PLATFORM_MODE);
+    expect(await screen.findByRole('button', { name: /Organisations/ })).toBeInTheDocument();
+    await waitFor(() => expect(global.fetch.mock.calls.some(([url]) => String(url).includes('admin/archive/items'))).toBe(true));
+  });
+
+  it('a promotion link does not put a host into the platform console', async () => {
+    mockActiveOrg = 'org_home';
+    mockGroups = ['hosts'];
+    window.history.pushState({}, '', '/admin?section=archive&promote=arc-1&from=dev');
+    serve([PERSONAL]);
+    render(<AdminPage />);
+    expect(await screen.findByRole('button', { name: /Question sets/ })).toBeInTheDocument();
+    expect(mockActiveOrg).toBe('org_home');
+  });
 });

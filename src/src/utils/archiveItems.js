@@ -112,3 +112,121 @@ export function describeRestore(response) {
   if (!restored.length && !failed.length) lines.push('The import reported nothing restored and no error.');
   return lines;
 }
+
+/* ── THE EXPORTED COLUMN, AND "LAST BACKED UP" ────────────────────────────────────────────
+   docs/design/archive-promotion/REVIEW.md: four snapshots taken today read the same as four
+   taken this morning when the column shows the day only. The time tells batches apart. */
+
+/** "Nov 5, 2026, 14:32" — the day and the 24-hour time; an em dash when there is no date. */
+export function formatExported(value) {
+  if (!value) return '—';
+  const when = new Date(value);
+  if (Number.isNaN(when.getTime())) return '—';
+  const day = when.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${day}, ${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}
+
+/**
+ * When each source on `tier` was last backed up: a Map of `<scope>/<id>` (the snapshot's
+ * `source:` tag) to the newest CreatedAt. Only snapshots taken ON this tier count: dev's
+ * backup of `teamretro` says nothing about when test's copy was last saved.
+ */
+export function lastBackups(items, tier) {
+  const latest = new Map();
+  for (const item of items || []) {
+    const source = archiveSource(item);
+    if (!source || archiveTier(item) !== tier) continue;
+    const at = Date.parse(item.CreatedAt);
+    if (!Number.isFinite(at)) continue;
+    if (!latest.has(source) || Date.parse(latest.get(source)) < at) latest.set(source, item.CreatedAt);
+  }
+  return latest;
+}
+
+/** "just now", "12 min ago", "3 h ago", "4 days ago", then the date. */
+export function relativeTime(value, now = Date.now()) {
+  const at = Date.parse(value);
+  if (!Number.isFinite(at)) return '';
+  const minutes = Math.max(0, Math.round((now - at) / 60000));
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${plural(days, 'day')} ago`;
+  return new Date(at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+export const PICKER_SORTS = [
+  { value: 'name', label: 'Name' },
+  { value: 'last', label: 'Last backed up' },
+  { value: 'type', label: 'Type' },
+];
+
+/**
+ * The export picker's rows: searched (name or id, case-insensitive) and sorted. Each row is
+ * `{key, name, id, type, last}`; `last` is an ISO time or ''. Name sorts the name as SHOWN,
+ * alphabetically and ignoring case. Last backed up puts the newest first and never-backed-up
+ * last. Type groups by the type label, then by name. Ties fall back to name, then id.
+ */
+export function pickerRows(rows, { search = '', sort = 'name' } = {}) {
+  const needle = String(search || '').trim().toLowerCase();
+  const shown = needle
+    ? rows.filter((row) => String(row.name || '').toLowerCase().includes(needle) || String(row.id || '').toLowerCase().includes(needle))
+    : [...rows];
+  const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'en', { sensitivity: 'base' })
+    || String(a.id).localeCompare(String(b.id));
+  const time = (row) => (row.last ? Date.parse(row.last) || 0 : 0);
+  const compare = {
+    name: byName,
+    last: (a, b) => (time(b) - time(a)) || byName(a, b),
+    type: (a, b) => String(a.type || '').localeCompare(String(b.type || ''), 'en', { sensitivity: 'base' }) || byName(a, b),
+  }[sort] || byName;
+  return shown.sort(compare);
+}
+
+/* ── THE PREVIEW BEFORE A RESTORE, AND THE CHECK AFTER ────────────────────────────────────
+   The import route's `dryRun` plan (lambda-functions/admin/import-from-archive.js) and the
+   `check` each restored set carries. */
+
+function verdictOf(entry) {
+  const isPrompt = entry.kind === 'prompt';
+  if (entry.mode !== 'new-version') {
+    if (isPrompt) return entry.legacy ? 'New draft prompt' : 'New prompt';
+    return 'New set';
+  }
+  const of = entry.currentVersion ? `v${entry.currentVersion}` : 'the existing one';
+  if (isPrompt) return `New version of ${of}`;
+  const state = { true: 'currently live', false: 'currently inactive' }[String(entry.currentlyActive)];
+  return `New version of ${of}${state ? ` (${state})` : ''}`;
+}
+
+/** One preview row: what happens to this item, how big it is, and how it arrives. */
+export function describePlanEntry(entry) {
+  let counts = 'Prompt';
+  if (entry.kind === 'set') {
+    counts = [
+      entry.questionCount != null ? plural(entry.questionCount, 'question') : '',
+      entry.categoryCount != null ? `${entry.categoryCount} ${entry.categoryCount === 1 ? 'category' : 'categories'}` : '',
+    ].filter(Boolean).join(' · ') || '—';
+  }
+  let arrival;
+  if (entry.kind === 'set') arrival = entry.active ? 'Active on arrival' : 'Inactive on arrival';
+  else arrival = entry.status === 'active' ? 'Active on arrival' : `Arrives as ${entry.status || 'draft'}`;
+  return { verdict: verdictOf(entry), counts, arrival, live: entry.kind === 'set' && entry.active === true };
+}
+
+/** The restored sets with their read-back, for the check table. */
+export function restoreChecks(response) {
+  const restored = (response && response.results && response.results.successful) || [];
+  return restored
+    .filter((entry) => entry.kind === 'set' && entry.check)
+    .map((entry) => ({ archiveId: entry.archiveId, id: entry.id, name: entry.name || entry.id, check: entry.check }));
+}
+
+/** "60 of 60" against the snapshot, or the bare count when the snapshot recorded none. */
+export function checkCount(pair) {
+  if (!pair) return '—';
+  return pair.expected == null ? String(pair.found) : `${pair.found} of ${pair.expected}`;
+}
