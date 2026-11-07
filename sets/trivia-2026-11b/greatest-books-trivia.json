@@ -1,0 +1,1062 @@
+{
+  "title": "Greatest Books: Page Turners",
+  "description": "60 questions on the books the world keeps reading: famous first lines, who wrote what, unforgettable characters, where the stories happen, classics from Japan to Nigeria to Colombia, and how the books first reached print.",
+  "categories": [
+    "Famous First Lines",
+    "Who Wrote It?",
+    "Unforgettable Characters",
+    "Where in the World?",
+    "Classics Around the Globe",
+    "Behind the Books"
+  ],
+  "questions": [
+    {
+      "id": "books-01",
+      "category": "Famous First Lines",
+      "difficulty": "easy",
+      "question": "Which novel opens with the words \"Call me Ishmael\"?",
+      "options": [
+        "Treasure Island",
+        "Robinson Crusoe",
+        "Moby-Dick",
+        "The Old Man and the Sea"
+      ],
+      "correctIndex": 2,
+      "explanation": "Herman Melville's narrator introduces himself with three words before setting out on the whaler Pequod (1851).",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Moby-Dick"
+      ]
+    },
+    {
+      "id": "books-02",
+      "category": "Famous First Lines",
+      "difficulty": "easy",
+      "question": "Which novel begins \"It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife\"?",
+      "options": [
+        "Jane Eyre",
+        "Middlemarch",
+        "Emma",
+        "Pride and Prejudice"
+      ],
+      "correctIndex": 3,
+      "explanation": "Jane Austen's 1813 novel opens with this ironic line, which sets up the Bennet family's marriage plans.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Pride_and_Prejudice"
+      ]
+    },
+    {
+      "id": "books-03",
+      "category": "Famous First Lines",
+      "difficulty": "easy",
+      "question": "Which Charles Dickens novel opens \"It was the best of times, it was the worst of times\"?",
+      "options": [
+        "Oliver Twist",
+        "Great Expectations",
+        "A Tale of Two Cities",
+        "Bleak House"
+      ],
+      "correctIndex": 2,
+      "explanation": "A Tale of Two Cities (1859), set in London and Paris around the French Revolution, opens with this famous run of contrasts.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/A_Tale_of_Two_Cities"
+      ]
+    },
+    {
+      "id": "books-04",
+      "category": "Famous First Lines",
+      "difficulty": "medium",
+      "question": "Which novel begins \"Happy families are all alike; every unhappy family is unhappy in its own way\"?",
+      "options": [
+        "Anna Karenina",
+        "Crime and Punishment",
+        "War and Peace",
+        "The Brothers Karamazov"
+      ],
+      "correctIndex": 0,
+      "explanation": "Leo Tolstoy's Anna Karenina (1878) opens with this line, often quoted as the \"Anna Karenina principle.\"",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Anna_Karenina"
+      ]
+    },
+    {
+      "id": "books-05",
+      "category": "Famous First Lines",
+      "difficulty": "medium",
+      "question": "Which novel opens with Colonel Aureliano Buendía, facing a firing squad, remembering the afternoon his father took him to discover ice?",
+      "options": [
+        "The House of the Spirits",
+        "Love in the Time of Cholera",
+        "Pedro Páramo",
+        "One Hundred Years of Solitude"
+      ],
+      "correctIndex": 3,
+      "explanation": "Gabriel García Márquez's 1967 masterpiece opens with this line, which moves across decades in a single sentence.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/One_Hundred_Years_of_Solitude"
+      ]
+    },
+    {
+      "id": "books-06",
+      "category": "Famous First Lines",
+      "difficulty": "medium",
+      "question": "Which novel begins \"It was a bright cold day in April, and the clocks were striking thirteen\"?",
+      "options": [
+        "Brave New World",
+        "Nineteen Eighty-Four",
+        "Animal Farm",
+        "Fahrenheit 451"
+      ],
+      "correctIndex": 1,
+      "explanation": "George Orwell's 1949 novel signals from its first sentence that something is wrong with Winston Smith's world.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Nineteen_Eighty-Four"
+      ]
+    },
+    {
+      "id": "books-07",
+      "category": "Famous First Lines",
+      "difficulty": "easy",
+      "question": "Which book opens \"In a hole in the ground there lived a hobbit\"?",
+      "options": [
+        "The Fellowship of the Ring",
+        "The Silmarillion",
+        "The Lion, the Witch and the Wardrobe",
+        "The Hobbit"
+      ],
+      "correctIndex": 3,
+      "explanation": "J. R. R. Tolkien said he scribbled the line on a blank page of an exam paper he was marking; The Hobbit followed in 1937.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Hobbit"
+      ]
+    },
+    {
+      "id": "books-08",
+      "category": "Famous First Lines",
+      "difficulty": "medium",
+      "question": "Which story begins \"All children, except one, grow up\"?",
+      "options": [
+        "Mary Poppins",
+        "Peter Pan",
+        "The Wind in the Willows",
+        "Alice's Adventures in Wonderland"
+      ],
+      "correctIndex": 1,
+      "explanation": "It is the first line of J. M. Barrie's novel Peter and Wendy (1911), the book version of his play Peter Pan.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Peter_and_Wendy"
+      ]
+    },
+    {
+      "id": "books-09",
+      "category": "Famous First Lines",
+      "difficulty": "hard",
+      "question": "Which novel opens with its narrator unsure whether his mother died \"today\" or \"yesterday\"?",
+      "options": [
+        "Nausea",
+        "The Trial",
+        "The Stranger",
+        "The Plague"
+      ],
+      "correctIndex": 2,
+      "explanation": "Albert Camus's The Stranger (L'Étranger, 1942) begins with Meursault's flat report of his mother's death.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Stranger_(Camus_novel)"
+      ]
+    },
+    {
+      "id": "books-10",
+      "category": "Famous First Lines",
+      "difficulty": "medium",
+      "question": "In which story does Gregor Samsa wake from uneasy dreams to find himself transformed into a gigantic insect?",
+      "options": [
+        "The Trial",
+        "Notes from Underground",
+        "The Metamorphosis",
+        "The Castle"
+      ],
+      "correctIndex": 2,
+      "explanation": "Franz Kafka's novella The Metamorphosis (1915) begins with the transformation and never explains it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Metamorphosis"
+      ]
+    },
+    {
+      "id": "books-11",
+      "category": "Who Wrote It?",
+      "difficulty": "easy",
+      "question": "Who wrote Don Quixote?",
+      "options": [
+        "Federico García Lorca",
+        "Jorge Luis Borges",
+        "Lope de Vega",
+        "Miguel de Cervantes"
+      ],
+      "correctIndex": 3,
+      "explanation": "Miguel de Cervantes published Don Quixote in two parts; it is often called the first modern novel.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Don_Quixote",
+        "https://en.wikipedia.org/wiki/Miguel_de_Cervantes"
+      ]
+    },
+    {
+      "id": "books-12",
+      "category": "Who Wrote It?",
+      "difficulty": "medium",
+      "question": "Who wrote Things Fall Apart (1958)?",
+      "options": [
+        "Ngũgĩ wa Thiong'o",
+        "Chinua Achebe",
+        "Ben Okri",
+        "Wole Soyinka"
+      ],
+      "correctIndex": 1,
+      "explanation": "The Nigerian writer Chinua Achebe wrote Things Fall Apart, one of the most widely read African novels.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Things_Fall_Apart",
+        "https://en.wikipedia.org/wiki/Chinua_Achebe"
+      ]
+    },
+    {
+      "id": "books-13",
+      "category": "Who Wrote It?",
+      "difficulty": "medium",
+      "question": "Who wrote Beloved, winner of the 1988 Pulitzer Prize for Fiction?",
+      "options": [
+        "Zora Neale Hurston",
+        "Maya Angelou",
+        "Alice Walker",
+        "Toni Morrison"
+      ],
+      "correctIndex": 3,
+      "explanation": "Toni Morrison wrote Beloved (1987) and later won the Nobel Prize in Literature in 1993.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Beloved_(novel)",
+        "https://en.wikipedia.org/wiki/Toni_Morrison"
+      ]
+    },
+    {
+      "id": "books-14",
+      "category": "Who Wrote It?",
+      "difficulty": "easy",
+      "question": "Who wrote Frankenstein; or, The Modern Prometheus?",
+      "options": [
+        "Mary Shelley",
+        "Bram Stoker",
+        "Percy Bysshe Shelley",
+        "Emily Brontë"
+      ],
+      "correctIndex": 0,
+      "explanation": "Mary Shelley was 20 when Frankenstein was published, anonymously, in 1818.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Frankenstein",
+        "https://en.wikipedia.org/wiki/Mary_Shelley"
+      ]
+    },
+    {
+      "id": "books-15",
+      "category": "Who Wrote It?",
+      "difficulty": "medium",
+      "question": "Which poet wrote The Divine Comedy, with its journey through Inferno, Purgatorio and Paradiso?",
+      "options": [
+        "Virgil",
+        "Petrarch",
+        "Dante Alighieri",
+        "Giovanni Boccaccio"
+      ],
+      "correctIndex": 2,
+      "explanation": "Dante wrote it in the early 14th century. Virgil appears in the poem as his guide, but did not write it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Divine_Comedy"
+      ]
+    },
+    {
+      "id": "books-16",
+      "category": "Who Wrote It?",
+      "difficulty": "medium",
+      "question": "Who wrote Madame Bovary?",
+      "options": [
+        "Émile Zola",
+        "Gustave Flaubert",
+        "Honoré de Balzac",
+        "Stendhal"
+      ],
+      "correctIndex": 1,
+      "explanation": "Flaubert was put on trial for obscenity after it was serialized in 1856, was acquitted, and saw the book become a classic.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Madame_Bovary",
+        "https://en.wikipedia.org/wiki/Gustave_Flaubert"
+      ]
+    },
+    {
+      "id": "books-17",
+      "category": "Who Wrote It?",
+      "difficulty": "medium",
+      "question": "Who wrote Mrs Dalloway (1925), which follows one day in a London hostess's life?",
+      "options": [
+        "E. M. Forster",
+        "Katherine Mansfield",
+        "Edith Wharton",
+        "Virginia Woolf"
+      ],
+      "correctIndex": 3,
+      "explanation": "Virginia Woolf's novel follows Clarissa Dalloway as she prepares for a party on a single June day.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Mrs_Dalloway"
+      ]
+    },
+    {
+      "id": "books-18",
+      "category": "Who Wrote It?",
+      "difficulty": "medium",
+      "question": "Who wrote Midnight's Children, winner of the 1981 Booker Prize?",
+      "options": [
+        "Salman Rushdie",
+        "V. S. Naipaul",
+        "Vikram Seth",
+        "Arundhati Roy"
+      ],
+      "correctIndex": 0,
+      "explanation": "Salman Rushdie's novel follows children born at the moment of India's independence; it later won the Booker of Bookers.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Midnight's_Children"
+      ]
+    },
+    {
+      "id": "books-19",
+      "category": "Who Wrote It?",
+      "difficulty": "hard",
+      "question": "Who wrote The Master and Margarita, in which the Devil visits Soviet Moscow?",
+      "options": [
+        "Boris Pasternak",
+        "Vladimir Nabokov",
+        "Aleksandr Solzhenitsyn",
+        "Mikhail Bulgakov"
+      ],
+      "correctIndex": 3,
+      "explanation": "Bulgakov worked on it until his death in 1940; it was first published, censored, in 1966–67.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Master_and_Margarita"
+      ]
+    },
+    {
+      "id": "books-20",
+      "category": "Who Wrote It?",
+      "difficulty": "easy",
+      "question": "Who wrote The Great Gatsby (1925)?",
+      "options": [
+        "William Faulkner",
+        "Ernest Hemingway",
+        "John Steinbeck",
+        "F. Scott Fitzgerald"
+      ],
+      "correctIndex": 3,
+      "explanation": "F. Scott Fitzgerald's Jazz Age novel follows the mysterious millionaire Jay Gatsby on Long Island.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Great_Gatsby"
+      ]
+    },
+    {
+      "id": "books-21",
+      "category": "Unforgettable Characters",
+      "difficulty": "easy",
+      "question": "In Harper Lee's To Kill a Mockingbird, what is the name of Scout's lawyer father?",
+      "options": [
+        "Boo Radley",
+        "Atticus Finch",
+        "Jem Finch",
+        "Tom Robinson"
+      ],
+      "correctIndex": 1,
+      "explanation": "Atticus Finch defends Tom Robinson in court; Jem is Scout's brother and Boo Radley the reclusive neighbor.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/To_Kill_a_Mockingbird",
+        "https://en.wikipedia.org/wiki/Atticus_Finch"
+      ]
+    },
+    {
+      "id": "books-22",
+      "category": "Unforgettable Characters",
+      "difficulty": "medium",
+      "question": "What is the name of Don Quixote's loyal squire?",
+      "options": [
+        "Sancho Panza",
+        "Rocinante",
+        "Dulcinea",
+        "Lazarillo"
+      ],
+      "correctIndex": 0,
+      "explanation": "Sancho Panza rides a donkey beside the knight. Rocinante is Don Quixote's horse and Dulcinea his imagined lady.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Sancho_Panza",
+        "https://en.wikipedia.org/wiki/Don_Quixote"
+      ]
+    },
+    {
+      "id": "books-23",
+      "category": "Unforgettable Characters",
+      "difficulty": "easy",
+      "question": "Which Jules Verne character commands the submarine Nautilus?",
+      "options": [
+        "Phileas Fogg",
+        "Captain Hook",
+        "Long John Silver",
+        "Captain Nemo"
+      ],
+      "correctIndex": 3,
+      "explanation": "Captain Nemo appears in Twenty Thousand Leagues Under the Seas (1870). Phileas Fogg is Verne's round-the-world traveler.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Captain_Nemo"
+      ]
+    },
+    {
+      "id": "books-24",
+      "category": "Unforgettable Characters",
+      "difficulty": "medium",
+      "question": "Who is the impoverished former student at the center of Dostoevsky's Crime and Punishment?",
+      "options": [
+        "Ivan Karamazov",
+        "Prince Myshkin",
+        "Rodion Raskolnikov",
+        "Pierre Bezukhov"
+      ],
+      "correctIndex": 2,
+      "explanation": "Raskolnikov drives the 1866 novel. Myshkin is from The Idiot, Ivan from The Brothers Karamazov, Pierre from War and Peace.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Crime_and_Punishment"
+      ]
+    },
+    {
+      "id": "books-25",
+      "category": "Unforgettable Characters",
+      "difficulty": "medium",
+      "question": "Who narrates The Great Gatsby?",
+      "options": [
+        "Nick Carraway",
+        "Holden Caulfield",
+        "Tom Buchanan",
+        "George Wilson"
+      ],
+      "correctIndex": 0,
+      "explanation": "Nick Carraway, Daisy Buchanan's cousin, rents the house next to Gatsby's and tells the story.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Great_Gatsby",
+        "https://en.wikipedia.org/wiki/Nick_Carraway"
+      ]
+    },
+    {
+      "id": "books-26",
+      "category": "Unforgettable Characters",
+      "difficulty": "easy",
+      "question": "Who is Sherlock Holmes's great criminal adversary, called \"the Napoleon of crime\"?",
+      "options": [
+        "Mycroft Holmes",
+        "Professor Moriarty",
+        "Inspector Lestrade",
+        "Irene Adler"
+      ],
+      "correctIndex": 1,
+      "explanation": "Arthur Conan Doyle introduced Professor James Moriarty in \"The Final Problem\" (1893).",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Professor_Moriarty"
+      ]
+    },
+    {
+      "id": "books-27",
+      "category": "Unforgettable Characters",
+      "difficulty": "easy",
+      "question": "In Little Women, which March sister is the aspiring writer?",
+      "options": [
+        "Jo",
+        "Amy",
+        "Beth",
+        "Meg"
+      ],
+      "correctIndex": 0,
+      "explanation": "Louisa May Alcott based Jo March, who writes stories and plays, partly on herself.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Little_Women",
+        "https://en.wikipedia.org/wiki/Jo_March"
+      ]
+    },
+    {
+      "id": "books-28",
+      "category": "Unforgettable Characters",
+      "difficulty": "medium",
+      "question": "In Wuthering Heights, which brooding foundling is taken in by the Earnshaw family?",
+      "options": [
+        "Edgar Linton",
+        "Hindley Earnshaw",
+        "Heathcliff",
+        "Mr. Rochester"
+      ],
+      "correctIndex": 2,
+      "explanation": "Mr. Earnshaw brings Heathcliff home from Liverpool in Emily Brontë's 1847 novel. Rochester belongs to her sister Charlotte's Jane Eyre.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Wuthering_Heights"
+      ]
+    },
+    {
+      "id": "books-29",
+      "category": "Unforgettable Characters",
+      "difficulty": "medium",
+      "question": "In Homer's Odyssey, who waits faithfully in Ithaca for Odysseus to come home?",
+      "options": [
+        "Circe",
+        "Calypso",
+        "Penelope",
+        "Helen"
+      ],
+      "correctIndex": 2,
+      "explanation": "Penelope holds off her suitors for years, famously unweaving each night the shroud she weaves by day.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Odyssey",
+        "https://en.wikipedia.org/wiki/Penelope"
+      ]
+    },
+    {
+      "id": "books-30",
+      "category": "Unforgettable Characters",
+      "difficulty": "medium",
+      "question": "In Victor Hugo's Les Misérables, which police inspector relentlessly pursues Jean Valjean?",
+      "options": [
+        "Marius",
+        "Javert",
+        "Bishop Myriel",
+        "Thénardier"
+      ],
+      "correctIndex": 1,
+      "explanation": "Inspector Javert hunts the former convict Valjean for years; Thénardier is the scheming innkeeper.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Les_Misérables",
+        "https://en.wikipedia.org/wiki/Javert"
+      ]
+    },
+    {
+      "id": "books-31",
+      "category": "Where in the World?",
+      "difficulty": "medium",
+      "question": "James Joyce's Ulysses follows Leopold Bloom through a single day in which city?",
+      "options": [
+        "Trieste",
+        "Dublin",
+        "London",
+        "Paris"
+      ],
+      "correctIndex": 1,
+      "explanation": "The novel takes place in Dublin on 16 June 1904, a date fans now celebrate as Bloomsday.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ulysses_(novel)",
+        "https://en.wikipedia.org/wiki/Bloomsday"
+      ]
+    },
+    {
+      "id": "books-32",
+      "category": "Where in the World?",
+      "difficulty": "hard",
+      "question": "What is the name of the fictional town founded by the Buendía family in One Hundred Years of Solitude?",
+      "options": [
+        "Macondo",
+        "Santa Teresa",
+        "Yoknapatawpha",
+        "Comala"
+      ],
+      "correctIndex": 0,
+      "explanation": "Macondo is García Márquez's town. Comala is from Juan Rulfo's Pedro Páramo and Yoknapatawpha is Faulkner's county.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Macondo"
+      ]
+    },
+    {
+      "id": "books-33",
+      "category": "Where in the World?",
+      "difficulty": "hard",
+      "question": "Thomas Hardy set Tess of the d'Urbervilles and his other major novels in which semi-fictional region of England?",
+      "options": [
+        "Mercia",
+        "Wessex",
+        "Barsetshire",
+        "Loamshire"
+      ],
+      "correctIndex": 1,
+      "explanation": "Hardy revived the old Anglo-Saxon kingdom name Wessex for his south-west England. Barsetshire is Anthony Trollope's county.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Thomas_Hardy's_Wessex"
+      ]
+    },
+    {
+      "id": "books-34",
+      "category": "Where in the World?",
+      "difficulty": "easy",
+      "question": "In Khaled Hosseini's The Kite Runner, Amir and Hassan grow up together in which country?",
+      "options": [
+        "Afghanistan",
+        "Iraq",
+        "Iran",
+        "Pakistan"
+      ],
+      "correctIndex": 0,
+      "explanation": "The boys fly kites together in 1970s Kabul; the adult Amir later returns to Afghanistan from California.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Kite_Runner"
+      ]
+    },
+    {
+      "id": "books-35",
+      "category": "Where in the World?",
+      "difficulty": "easy",
+      "question": "In John Steinbeck's The Grapes of Wrath, the Joad family leaves Oklahoma for which state?",
+      "options": [
+        "Oregon",
+        "Texas",
+        "California",
+        "Arizona"
+      ],
+      "correctIndex": 2,
+      "explanation": "Driven off their farm during the Dust Bowl, the Joads head west along Route 66 to look for work in California.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Grapes_of_Wrath"
+      ]
+    },
+    {
+      "id": "books-36",
+      "category": "Where in the World?",
+      "difficulty": "hard",
+      "question": "In Thomas Mann's The Magic Mountain, Hans Castorp stays at a sanatorium in which Swiss resort?",
+      "options": [
+        "St. Moritz",
+        "Zermatt",
+        "Interlaken",
+        "Davos"
+      ],
+      "correctIndex": 3,
+      "explanation": "Castorp goes to Davos to visit his cousin for three weeks and stays seven years.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Magic_Mountain"
+      ]
+    },
+    {
+      "id": "books-37",
+      "category": "Where in the World?",
+      "difficulty": "easy",
+      "question": "Victor Hugo's The Hunchback of Notre-Dame is set in which city?",
+      "options": [
+        "Chartres",
+        "Paris",
+        "Reims",
+        "Rouen"
+      ],
+      "correctIndex": 1,
+      "explanation": "The novel is set in 15th-century Paris around the cathedral, and helped spark efforts to preserve it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Hunchback_of_Notre-Dame"
+      ]
+    },
+    {
+      "id": "books-38",
+      "category": "Where in the World?",
+      "difficulty": "medium",
+      "question": "Orhan Pamuk's murder mystery My Name Is Red is set among miniature painters in which city?",
+      "options": [
+        "Cairo",
+        "Tehran",
+        "Baghdad",
+        "Istanbul"
+      ],
+      "correctIndex": 3,
+      "explanation": "The novel is set in Ottoman Istanbul in the late 16th century. Pamuk won the Nobel Prize in Literature in 2006.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/My_Name_Is_Red",
+        "https://www.nobelprize.org/prizes/literature/2006/summary/"
+      ]
+    },
+    {
+      "id": "books-39",
+      "category": "Where in the World?",
+      "difficulty": "easy",
+      "question": "In Bram Stoker's Dracula, Jonathan Harker travels to the Count's castle in which region?",
+      "options": [
+        "Silesia",
+        "Transylvania",
+        "Bavaria",
+        "Bohemia"
+      ],
+      "correctIndex": 1,
+      "explanation": "Harker, a young English solicitor, journeys to Transylvania to finalize the Count's purchase of a house in England.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Dracula"
+      ]
+    },
+    {
+      "id": "books-40",
+      "category": "Where in the World?",
+      "difficulty": "medium",
+      "question": "In which present-day country is Things Fall Apart set?",
+      "options": [
+        "Nigeria",
+        "Ghana",
+        "Senegal",
+        "Kenya"
+      ],
+      "correctIndex": 0,
+      "explanation": "The novel follows Okonkwo in the Igbo village of Umuofia in what is now south-eastern Nigeria.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Things_Fall_Apart"
+      ]
+    },
+    {
+      "id": "books-41",
+      "category": "Classics Around the Globe",
+      "difficulty": "medium",
+      "question": "The Tale of Genji, often called one of the world's first novels, was written about 1,000 years ago in which country?",
+      "options": [
+        "China",
+        "Japan",
+        "Korea",
+        "India"
+      ],
+      "correctIndex": 1,
+      "explanation": "Murasaki Shikibu, a lady-in-waiting at the Japanese imperial court, wrote it in the early 11th century.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Tale_of_Genji"
+      ]
+    },
+    {
+      "id": "books-42",
+      "category": "Classics Around the Globe",
+      "difficulty": "easy",
+      "question": "In One Thousand and One Nights, who tells stories each night to delay her execution?",
+      "options": [
+        "Scheherazade",
+        "Aladdin",
+        "Shahryar",
+        "Sinbad"
+      ],
+      "correctIndex": 0,
+      "explanation": "Scheherazade leaves each tale unfinished at dawn so that King Shahryar spares her for another night.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/One_Thousand_and_One_Nights",
+        "https://en.wikipedia.org/wiki/Scheherazade"
+      ]
+    },
+    {
+      "id": "books-43",
+      "category": "Classics Around the Globe",
+      "difficulty": "medium",
+      "question": "Which mischievous hero escorts the monk Tang Sanzang in the Chinese classic Journey to the West?",
+      "options": [
+        "Hua Mulan",
+        "Guan Yu",
+        "Sun Wukong, the Monkey King",
+        "The Jade Emperor"
+      ],
+      "correctIndex": 2,
+      "explanation": "Sun Wukong is the star of the 16th-century novel; Guan Yu belongs to Romance of the Three Kingdoms.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Journey_to_the_West",
+        "https://en.wikipedia.org/wiki/Sun_Wukong"
+      ]
+    },
+    {
+      "id": "books-44",
+      "category": "Classics Around the Globe",
+      "difficulty": "medium",
+      "question": "The Epic of Gilgamesh, among the oldest surviving works of literature, comes from which ancient civilization?",
+      "options": [
+        "Mesopotamia",
+        "Ancient Greece",
+        "The Indus Valley",
+        "Ancient Egypt"
+      ],
+      "correctIndex": 0,
+      "explanation": "It survives on clay tablets written in cuneiform, telling of a king of the Sumerian city of Uruk.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Epic_of_Gilgamesh"
+      ]
+    },
+    {
+      "id": "books-45",
+      "category": "Classics Around the Globe",
+      "difficulty": "medium",
+      "question": "Leo Tolstoy's War and Peace is set against which conflict?",
+      "options": [
+        "The Napoleonic Wars",
+        "World War I",
+        "The Russo-Turkish War",
+        "The Crimean War"
+      ],
+      "correctIndex": 0,
+      "explanation": "The novel spans 1805 to 1812 and beyond, including Napoleon's invasion of Russia.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/War_and_Peace"
+      ]
+    },
+    {
+      "id": "books-46",
+      "category": "Classics Around the Globe",
+      "difficulty": "medium",
+      "question": "In Antoine de Saint-Exupéry's The Little Prince, the narrator is a pilot stranded in which desert?",
+      "options": [
+        "The Gobi",
+        "The Atacama",
+        "The Sahara",
+        "The Kalahari"
+      ],
+      "correctIndex": 2,
+      "explanation": "Saint-Exupéry was a pilot himself and had crashed in the Sahara in 1935, years before the book appeared in 1943.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Little_Prince"
+      ]
+    },
+    {
+      "id": "books-47",
+      "category": "Classics Around the Globe",
+      "difficulty": "hard",
+      "question": "The Bhagavad Gita forms part of which Sanskrit epic?",
+      "options": [
+        "The Rigveda",
+        "The Ramayana",
+        "The Mahabharata",
+        "The Panchatantra"
+      ],
+      "correctIndex": 2,
+      "explanation": "The Gita is a dialogue between Prince Arjuna and Krishna on the eve of the Kurukshetra war in the Mahabharata.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Bhagavad_Gita",
+        "https://en.wikipedia.org/wiki/Mahabharata"
+      ]
+    },
+    {
+      "id": "books-48",
+      "category": "Classics Around the Globe",
+      "difficulty": "medium",
+      "question": "In Goethe's Faust, the restless scholar makes a pact with which devil?",
+      "options": [
+        "Belial",
+        "Mephistopheles",
+        "Asmodeus",
+        "Beelzebub"
+      ],
+      "correctIndex": 1,
+      "explanation": "Mephistopheles strikes the bargain for Faust's soul; Goethe published Part One in 1808.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Goethe%27s_Faust",
+        "https://en.wikipedia.org/wiki/Mephistopheles"
+      ]
+    },
+    {
+      "id": "books-49",
+      "category": "Classics Around the Globe",
+      "difficulty": "hard",
+      "question": "Rabindranath Tagore, the first non-European winner of the Nobel Prize in Literature (1913), wrote chiefly in which language?",
+      "options": [
+        "Tamil",
+        "Bengali",
+        "Urdu",
+        "Hindi"
+      ],
+      "correctIndex": 1,
+      "explanation": "Tagore wrote in Bengali and translated some of his poems, including Gitanjali, into English himself.",
+      "sources": [
+        "https://www.nobelprize.org/prizes/literature/1913/tagore/facts/",
+        "https://en.wikipedia.org/wiki/Rabindranath_Tagore"
+      ]
+    },
+    {
+      "id": "books-50",
+      "category": "Classics Around the Globe",
+      "difficulty": "hard",
+      "question": "Who became the first Arabic-language writer to win the Nobel Prize in Literature, in 1988?",
+      "options": [
+        "Mahmoud Darwish",
+        "Khalil Gibran",
+        "Taha Hussein",
+        "Naguib Mahfouz"
+      ],
+      "correctIndex": 3,
+      "explanation": "The Egyptian novelist Naguib Mahfouz is best known for his Cairo Trilogy.",
+      "sources": [
+        "https://www.nobelprize.org/prizes/literature/1988/summary/",
+        "https://en.wikipedia.org/wiki/Naguib_Mahfouz"
+      ]
+    },
+    {
+      "id": "books-51",
+      "category": "Behind the Books",
+      "difficulty": "medium",
+      "question": "Most of Charles Dickens's novels first reached readers in what form?",
+      "options": [
+        "As anonymous pamphlets",
+        "As stage plays",
+        "In serial installments",
+        "As expensive three-volume sets"
+      ],
+      "correctIndex": 2,
+      "explanation": "Dickens published most of his novels in weekly or monthly parts, building suspense from one installment to the next.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Charles_Dickens"
+      ]
+    },
+    {
+      "id": "books-52",
+      "category": "Behind the Books",
+      "difficulty": "medium",
+      "question": "Frankenstein began as an entry in a ghost-story challenge proposed by which poet in 1816?",
+      "options": [
+        "Lord Byron",
+        "Percy Bysshe Shelley",
+        "John Keats",
+        "William Wordsworth"
+      ],
+      "correctIndex": 0,
+      "explanation": "At the Villa Diodati near Geneva, Byron suggested that each guest write a ghost story; Mary Shelley's became Frankenstein.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Frankenstein",
+        "https://en.wikipedia.org/wiki/Villa_Diodati"
+      ]
+    },
+    {
+      "id": "books-53",
+      "category": "Behind the Books",
+      "difficulty": "medium",
+      "question": "The Victorian novelist \"George Eliot,\" author of Middlemarch, was really which writer?",
+      "options": [
+        "Elizabeth Gaskell",
+        "Christina Rossetti",
+        "Mary Ann Evans",
+        "Charlotte Brontë"
+      ],
+      "correctIndex": 2,
+      "explanation": "Mary Ann Evans chose a male pen name, partly so that her fiction would be judged on its own terms.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/George_Eliot"
+      ]
+    },
+    {
+      "id": "books-54",
+      "category": "Behind the Books",
+      "difficulty": "hard",
+      "question": "Under which pen name did Charlotte Brontë first publish Jane Eyre in 1847?",
+      "options": [
+        "Currer Bell",
+        "Acton Bell",
+        "Ellis Bell",
+        "George Sand"
+      ],
+      "correctIndex": 0,
+      "explanation": "The three sisters published as Currer (Charlotte), Ellis (Emily) and Acton (Anne) Bell.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Jane_Eyre",
+        "https://en.wikipedia.org/wiki/Charlotte_Brontë"
+      ]
+    },
+    {
+      "id": "books-55",
+      "category": "Behind the Books",
+      "difficulty": "hard",
+      "question": "Which Russian author's novel Doctor Zhivago was first published in Italy in 1957 after being refused at home?",
+      "options": [
+        "Mikhail Sholokhov",
+        "Boris Pasternak",
+        "Mikhail Bulgakov",
+        "Aleksandr Solzhenitsyn"
+      ],
+      "correctIndex": 1,
+      "explanation": "The Milan publisher Feltrinelli brought it out in Italian. Pasternak was awarded the Nobel Prize in 1958 but was forced to decline it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Doctor_Zhivago",
+        "https://www.nobelprize.org/prizes/literature/1958/summary/"
+      ]
+    },
+    {
+      "id": "books-56",
+      "category": "Behind the Books",
+      "difficulty": "hard",
+      "question": "Kafka's The Trial was published after his death because which friend ignored his request to burn his papers?",
+      "options": [
+        "Hermann Hesse",
+        "Rainer Maria Rilke",
+        "Thomas Mann",
+        "Max Brod"
+      ],
+      "correctIndex": 3,
+      "explanation": "Max Brod, Kafka's friend and literary executor, published The Trial in 1925 and later The Castle and Amerika.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Trial",
+        "https://en.wikipedia.org/wiki/Max_Brod"
+      ]
+    },
+    {
+      "id": "books-57",
+      "category": "Behind the Books",
+      "difficulty": "hard",
+      "question": "In which century was the first part of Don Quixote published?",
+      "options": [
+        "The 17th century",
+        "The 18th century",
+        "The 15th century",
+        "The 16th century"
+      ],
+      "correctIndex": 0,
+      "explanation": "Part One appeared in Madrid in 1605 and Part Two in 1615, the year before Cervantes died.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Don_Quixote"
+      ]
+    },
+    {
+      "id": "books-58",
+      "category": "Behind the Books",
+      "difficulty": "medium",
+      "question": "James Joyce's Ulysses was first published as a book in 1922 by the Shakespeare and Company bookshop in which city?",
+      "options": [
+        "New York",
+        "London",
+        "Dublin",
+        "Paris"
+      ],
+      "correctIndex": 3,
+      "explanation": "Sylvia Beach published it from her Paris bookshop on 2 February 1922, Joyce's 40th birthday.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ulysses_(novel)",
+        "https://en.wikipedia.org/wiki/Sylvia_Beach"
+      ]
+    },
+    {
+      "id": "books-59",
+      "category": "Behind the Books",
+      "difficulty": "medium",
+      "question": "J. R. R. Tolkien wrote The Hobbit while he was a professor at which university?",
+      "options": [
+        "Durham",
+        "Edinburgh",
+        "Oxford",
+        "Cambridge"
+      ],
+      "correctIndex": 2,
+      "explanation": "Tolkien was a professor of Anglo-Saxon at Oxford from 1925, and The Hobbit grew from stories he told his children.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/J._R._R._Tolkien",
+        "https://en.wikipedia.org/wiki/The_Hobbit"
+      ]
+    },
+    {
+      "id": "books-60",
+      "category": "Behind the Books",
+      "difficulty": "medium",
+      "question": "Where did Arthur Conan Doyle stage Sherlock Holmes's apparent death in \"The Final Problem\" (1893)?",
+      "options": [
+        "Niagara Falls",
+        "The White Cliffs of Dover",
+        "Victoria Falls",
+        "Reichenbach Falls"
+      ],
+      "correctIndex": 3,
+      "explanation": "Holmes and Moriarty go over the Swiss falls together. Public outcry helped bring Holmes back a decade later.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Final_Problem",
+        "https://en.wikipedia.org/wiki/Reichenbach_Falls"
+      ]
+    }
+  ],
+  "verificationDate": "2026-11-07",
+  "editorialNotes": "Widely acknowledged classics across eras and cultures (about a third from outside the English-language canon). Opening lines quoted in their standard English translations. Plot details limited to premises and famous, long-public turns. Difficulty is editorial. All explanations are original paraphrases."
+}
