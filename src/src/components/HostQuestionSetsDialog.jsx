@@ -197,7 +197,8 @@ export default function HostQuestionSetsDialog({
   }, []);
   /** The search and the filters. One bar over both lists, not one each. */
   const controls = useListControls(sets, SET_LIST_CONFIG, { labels: SET_FILTER_LABELS });
-  const { state: filters, set: setFilters, shown, drops, activeFilterCount, clearAll } = controls;
+  const { state: filters, shown, drops, activeFilterCount, clearAll } = controls;
+  const setFilters = controls.set;
   /** The id of the set whose quickstart flag is currently in flight, or null. */
   const [quickstartBusy, setQuickstartBusy] = useState(null);
   /*

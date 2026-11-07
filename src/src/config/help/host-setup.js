@@ -520,7 +520,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The bar above the lists is the same as in the console\'s Question sets: a search (name, description or tags), then filters by type, topic, status, owner (Yours, Team, Engage, Public) and when it was updated, and a sort. **Browse topics and tags** shows every topic and tag in use, with counts. Each list says how many of its sets match. Esc empties the search; **Clear the search** or **Clear all filters** brings everything back, and when nothing matches at all, each filter that is hiding sets is offered on its own with how many it would bring back.',
+          text: 'The bar above the lists matches the console\'s Question sets: search (name, description or tags), then type, topic, status, owner (Yours, Team, Engage, Public), when it was updated, and a sort. **Browse topics and tags** lists every topic and tag in use. Esc empties the search; **Clear all filters** brings everything back, and when nothing matches, each filter hiding sets is offered on its own with how many it would bring back.',
         },
         {
           t: 'list',
