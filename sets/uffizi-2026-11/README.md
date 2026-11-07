@@ -8,16 +8,21 @@ The 60 paintings are in 6 categories of 10:
 
 | Category | Painters |
 |---|---|
-| Gothic & Early Renaissance | Cimabue, Giotto, Duccio, Simone Martini, Ambrogio and Pietro Lorenzetti, Bernardo Daddi, Giottino, Gentile da Fabriano, Lorenzo Monaco |
+| Gothic & Early Renaissance | Cimabue, Giotto, Duccio, Simone Martini, Ambrogio Lorenzetti (2), Pietro Lorenzetti, Bernardo Daddi, Gentile da Fabriano, Lorenzo Monaco |
 | Early Renaissance Florence | Masolino and Masaccio, Fra Angelico, Uccello, Domenico Veneziano, Baldovinetti, Filippo Lippi (2), Piero della Francesca, Piero del Pollaiolo, Ghirlandaio |
-| Botticelli & His Circle | Botticelli (9), Filippino Lippi |
+| Florence, 1470–1500 | Botticelli (9), Filippino Lippi |
 | High Renaissance | Verrocchio and Leonardo, Leonardo (2), Perugino, Michelangelo, Raphael (2), Albertinelli, Andrea del Sarto, Piero di Cosimo |
 | Venice & the North | Hugo van der Goes, Mantegna, Giovanni Bellini, Giorgione, Dürer, Cranach, Holbein, Titian (3) |
-| Mannerism & Caravaggio | Pontormo, Rosso Fiorentino, Bronzino (2), Parmigianino, Caravaggio (3), Artemisia Gentileschi, Honthorst |
+| Mannerism & the Baroque | Annibale Carracci, Rosso Fiorentino, Bronzino (2), Parmigianino, Caravaggio (3), Artemisia Gentileschi, Correggio |
+
+**Category names never name a painter.** Players see the category during ASK, on the wall
+eyebrow (`QuestionCard.jsx`) and in the player bar (`PlayerPage.jsx`). A name like
+"Botticelli & His Circle" would be a one-search answer. The painters are listed only here.
 
 The mix is deliberate. About half are famous (Birth of Venus, Primavera, Doni Tondo,
-Venus of Urbino, Medusa) and half are less well known (Giottino's Pietà, Daddi's 1328
-triptych, Piero del Pollaiolo's Charity, Bellini's Sacred Allegory, Honthorst's Adoration).
+Venus of Urbino, Medusa) and half are less well known (Lorenzetti's St Nicholas panel,
+Daddi's 1328 triptych, Piero del Pollaiolo's Charity, Bellini's Sacred Allegory, Carracci's
+Man with a Monkey).
 
 **Content note for hosts:** the set includes classical nudes (Birth of Venus, Venus of
 Urbino, Adam and Eve, Bacchus) and three violent scenes from myth and scripture (Medusa,
@@ -59,8 +64,11 @@ leave out a category, or skip a round, if the room calls for it.
 
 The image URL is in the public question payload, and a player can open it in a new tab.
 Wikimedia Commons filenames name the painting ("Tiziano - Venere di Urbino - ..."), so
-every image was downloaded and renamed `uffizi-01.jpg` to `uffizi-60.jpg`. The numbers are
-shuffled with a fixed seed, so they do not follow question order.
+every image was downloaded and given a neutral name, `uffizi-NN.jpg`. The numbers are
+shuffled with a fixed seed, so they do not follow question order. v1 used `uffizi-01` to
+`uffizi-60`. In v2 the seven images that changed got fresh names (`uffizi-61` to
+`uffizi-67`), so that v1's URLs, and any cached copies, keep their old content. That
+leaves seven numbers between 01 and 60 unused by v2.
 
 Each image was:
 
@@ -68,7 +76,7 @@ Each image was:
    wide for landscape ones, or at full size when the original was smaller;
 2. turned upright, using its EXIF orientation;
 3. cropped where it was a gallery photograph with wall or plinth around the work, or a
-   scan with a black margin (6 images). Two stray marks were blanked: a faint watermark
+   scan with a black margin (5 images). Two stray marks were blanked: a faint watermark
    line in the margin of the Madonna of the Magnificat, and a printed page number in the
    corner of Ghirlandaio's tondo. Crops and blanks are recorded per image in the sidecar.
    Piero della Francesca's diptych is two Commons files, one per panel, set side by side as
@@ -86,11 +94,11 @@ The painters all died centuries ago. Commons treats a faithful photograph of a
 two-dimensional public-domain work as public domain itself (`PD-Art`). Each file's Commons
 licence label is recorded in the sidecar:
 
-- 54 files are labelled public domain.
+- 57 files are labelled public domain.
 - 3 are CC0.
-- 3 carry the photographer's CC BY-SA 4.0 licence on the photograph. Their credits are in
-  the sidecar (`photoCredit`) and under Credits below. They were kept because no
-  public-domain file of comparable quality exists for those works.
+- None needs attribution. v1 had three CC BY-SA photographs (Daddi, the Cestello
+  Annunciation and the Baptism of Christ). The game cannot show a credit, so v2 replaced
+  them with public-domain files.
 
 Commons also flags that Italian cultural-heritage law (the Codice dei beni culturali) can
 restrict commercial reproduction of images of works in Italian state museums. That rule is
@@ -99,11 +107,22 @@ Engage's own sessions.
 
 ## Install
 
-Dev only, using the app's own importer:
+Installed on dev: v1, then v2. See `INSTALLED.md`.
+
+**To update the installed set** (as v2 was), upload any new `images/uffizi-*.jpg`, then:
+
+```bash
+node scripts/replace-question-set.js engagedev uffiziarttitles \
+  --csv sets/uffizi-2026-11/uffizi-art-titles.csv --note "..."     # dry run; add --apply
+```
+
+This writes a new version and keeps the set's settings.
+
+**A first install** on an empty table, using the app's own importer:
 
 ```bash
 # 1. upload the images (key prefix sets/uffiziarttitles/, Content-Type image/jpeg)
-#    to s3://engagedev-media/sets/uffiziarttitles/uffizi-01.jpg ... uffizi-60.jpg
+#    to s3://engagedev-media/sets/uffiziarttitles/
 
 # 2. dry run, then the same with --apply
 node scripts/install-question-set.js engagedev sets/uffizi-2026-11/uffizi-art-titles.csv \
@@ -128,13 +147,6 @@ render correctly; see the What Is This Thing? QA notes.
 
 ## Credits
 
-These photographs are CC BY-SA 4.0, resized and cropped for this set. Under the same
-licence:
-
-- Bernardo Daddi, *Triptych*, 1328: photo by Francesco Bini (User:Sailko), Wikimedia Commons
-- Botticelli, *Cestello Annunciation*: photo by Armin Kleiner, Wikimedia Commons
-- Verrocchio and Leonardo, *The Baptism of Christ*: photo by Justin Benttinen, Wikimedia Commons
-
-The CC0 photographs, which need no credit, are by Gleb Simonov (Simone Martini), Oursana
+No image needs attribution. The CC0 photographs, which need no credit, are by Gleb Simonov (Simone Martini), Oursana
 (Pietro Lorenzetti) and Fabrizio Garrisi (Baldovinetti). Every file's Commons page is in
 the sidecar.

@@ -1,12 +1,73 @@
 # QA notes: Uffizi Art Titles
 
-## Who checked it
+## History
 
-**No independent reviewer.** This session could not start a subagent, so there was no
-separate reviewer. Instead the author did a second, deliberate pass over every fact,
-location, image and leak path, after writing the content and before installing. The
-results are below. An independent review, like the one What Is This Thing? had, is still
-worth doing; see Known gaps.
+1. **Author's second pass, 7 Nov 2026.** Installed as v1. The author could not start a
+   subagent, so the first check was a deliberate second pass of their own. The v1 sections
+   below record it.
+2. **Independent review, 7 Nov 2026.** A separate reviewer formed their verdicts before
+   reading these notes. They:
+   - read all 60 stories against the 55 uffizi.it pages and Wikipedia;
+   - viewed every image and zoomed the margins;
+   - pulled all 61 Commons licences;
+   - read the player-visible fields in `get-game-state.js`, `QuestionCard.jsx` and
+     `PlayerPage.jsx`.
+
+   They found 1 wrong fact, 2 leaks, 3 licence problems and 16 minor findings. They also
+   confirmed that all 60 works are in the Galleria degli Uffizi and that all 60 images are
+   correct and upright. The full table is outside the repo, at the coordinator's
+   `scratchpad/uffizi-review/review.md`.
+3. **Off-display check, 7 Nov 2026.** `pdf.uffizi.it` became reachable, and the Uffizi's
+   list of works temporarily off display (dated 3 Nov 2026) was read. Three of the 60 were
+   on it and were replaced.
+4. **v2.** Everything below "v2 fixes" is in it.
+
+## v2 fixes
+
+| Q | Finding | What changed |
+|---|---|---|
+| 59 Artemisia | **Wrong.** "Painted in Florence": the Uffizi says it was finished in Rome, after her seven years in Florence, and paid for late, with Galileo's help. | Story rewritten from the Uffizi text. Title is now "THE MAID HOLDS HIM DOWN" (the old "TWO WOMEN, ONE TOUGH JOB" was glib). |
+| 21–30, 51–60 | **Leak.** Players see the category during ASK, on the wall eyebrow and in the player bar. "Botticelli & His Circle" and "Mannerism & Caravaggio" named the painters. | Renamed "Florence, 1470–1500" and "Mannerism & the Baroque". No category names a painter now. |
+| 30 → 33 | **Leak.** Filippino's story said it replaced the altarpiece Leonardo left unfinished, which is Q33. | That clause was cut. |
+| 7, 28, 31 | **Licence.** These were CC BY-SA photographs, and the game shows no credit. | Replaced with public-domain files, each viewed by eye. Daddi is a WGA scan (894 px). The Cestello Annunciation file shows the painting only, so the frame inscription ECCE ANCILLA DOMINI ... is gone. The Baptism of Christ is a 3760 px photograph. |
+| 8 Giottino | **On the off-display list** (in restoration). | Replaced by Ambrogio Lorenzetti, *The Miracle of the Grain Ships and St Nicholas Reviving a Boy* (room A6, 1890 n. 8349). |
+| 51 Pontormo | **On the off-display list** (on loan to the Scuderie del Quirinale, Rome, until 7 Feb 2027). | Replaced by Annibale Carracci (attributed), *Man with a Monkey* (room E5, 1890 n. 799). The disputed attribution is in the story. |
+| 60 Honthorst | **On the off-display list** (on loan to Villa Manin from 14 Nov 2026). | Replaced by Correggio, *Rest on the Flight into Egypt with St Francis* (room D8, 1890 n. 1455). |
+| 18 → 22 | Charity's story pointed at the Botticelli Virtue, Q22. | Sentence dropped. |
+| 24 | "Canvas, still unusual in Florence" overstated the point. | Now "a cheaper support than panel, often used for pictures for country villas". |
+| 55 | The inscription is at the foot of the column, not on the step. | Fixed. |
+| 52 | The Rosso sentence could be read as saying the name and date sit on top of the later background. | Reworded: they were found *under* the background. |
+| 42 | The Mantegna's Mantua origin was stated as fact. | Now "probably". |
+| 16 | "Without his workshop's help" could not be verified. | Dropped. |
+| 57 | The Medusa is the second of two versions. | Added. |
+| 33 | The story praised the 2017 restoration, but the image is the dark photograph from before it. | The story now says the image shows it before cleaning. |
+| 35 | The story mentioned the original frame, which is not in the image. | Clause dropped. |
+| 10 | Crop. | Tightened a little. The grey wall around the pinnacles follows the altarpiece's outline, so the rest stays. Q5 was left uncropped for the same reason: the top panel reaches the edge. |
+| 60 (School) | "Utrecht Caravaggist" was a strong search term. | Moot: Honthorst was replaced. |
+
+**Image names in v2:** the seven changed images (Q7, 8, 10, 28, 31, 51, 60) are new
+files, `uffizi-61.jpg` to `uffizi-67.jpg`, in shuffled order. v1's URLs keep their old
+content.
+
+**Accepted, not changed:**
+
+- **Repeated subjects.** Five RealAnswers are "Adoration of the Magi" (9, 19, 21, 30, 33,
+  45; 60 is no longer one). There are three Coronations and four Annunciations. Each keeps
+  its disambiguator where one exists (Strozzi Altarpiece, tondo). This is an honest picture
+  of the Uffizi, but a bluff-round host may find "Adoration of the Magi" a popular guess.
+- **Low resolution.** No larger public-domain file exists for Q7 (894 px), Q8 (585 x 1098),
+  Q19 (948 px), Q26 (1097 px), Q38 (815 px) or Q51 (708 px). They will look soft on a
+  projector.
+- **Q42 Mantegna:** the black gaps between the three panels are left in.
+
+**Re-checked after the fixes:**
+
+- every changed image, on labelled sheets: right painting, upright;
+- the word-overlap script over Title, Category and School against the real title: none;
+- 60 unique titles;
+- licences: 57 public domain and 3 CC0;
+- the three new works' uffizi.it pages: each gives "The Uffizi" with a gallery room;
+- the new works' inventory numbers are not on the 3 Nov list.
 
 ## Location: is each work in the Galleria degli Uffizi itself?
 
@@ -29,8 +90,9 @@ worth doing; see Known gaps.
   Madonna with the Long Neck (Palatina n. 230) is in room D4, and Botticelli's Pallas and
   the Centaur ("Pitti Objects of Art 1911 n. 752") is in room A11. Both are kept.
 - **Not on display at the moment:** the Uffizi publishes a fortnightly list of works
-  temporarily off display (restoration or loan). The current list, dated 3 Nov 2026, is a
-  PDF on `pdf.uffizi.it`, a host this session's network could not reach. See Known gaps.
+  temporarily off display (restoration or loan). The list of 3 Nov 2026 was read for v2.
+  Three works were replaced (see v2 fixes), and none of the others is on it. It changes
+  every two weeks.
 
 ## Facts
 
@@ -60,8 +122,10 @@ worth doing; see Known gaps.
 
 ## No pre-reveal leak
 
-- **What players see during ASK:** the image (its `alt` is the Title), the Title, and the
-  art-title prompt. Detail_lesson is blank on every row.
+- **What players see during ASK:** the image (its `alt` is the Title), the Title, the
+  art-title prompt, and the **category**, on the wall eyebrow and in the player bar. v1's
+  list left out the category, which hid a leak; see v2 fixes. Detail_lesson is blank on
+  every row.
 - **Titles:** a script checked every Title against its real title and artist for shared
   words. Three titles failed and were rewritten: "THE PROPHETS LIVE DOWNSTAIRS" (it shared
   "Prophets"), "FAMILY PHOTO..." ("Family", in Holy Family) and "THE LUTE IS BIGGER..."
@@ -116,16 +180,16 @@ personal email.
 
 ## Known gaps
 
-1. **No independent review.** A separate reviewer should re-read the 60 stories against
-   the uffizi.it pages and Wikipedia, and look at the 60 images.
-2. **Not-on-display list unchecked.** `pdf.uffizi.it` was blocked, so the 3 Nov 2026 list
-   of works temporarily off display (restoration or loan) was not read. Any of the 60
-   could be off the walls this fortnight. The set is still correct, since the works belong
-   to the Uffizi and hang there normally.
-3. **Image URLs are absolute dev URLs**, as with What Is This Thing?. Promoting the set
+1. **The off-display list changes every two weeks.** This set was checked against the list
+   of 3 Nov 2026. A work can go out on loan later, and the set stays correct, since the
+   works belong to the Uffizi and normally hang there.
+2. **Image URLs are absolute dev URLs**, as with What Is This Thing?. Promoting the set
    means uploading the images to the next tier's bucket and rewriting the 60 URLs.
-4. **Leonardo's Adoration is the pre-restoration photograph.** It is public domain and much
+3. **Leonardo's Adoration is the pre-restoration photograph.** It is public domain and much
    darker than the painting looks since the 2017 restoration. The post-restoration photo on
-   Commons is CC BY-SA.
-5. **The Rucellai Madonna's uffizi.it page has no inventory number or description.** Its
-   location (room A4) is on the page.
+   Commons is CC BY-SA. The story says the image is from before the cleaning.
+4. **The Rucellai Madonna's uffizi.it page gives no inventory number.** It does have a
+   description, which v1 of these notes wrongly said it lacked. Its room (A4) is on the page.
+5. **v1's images stay in the bucket.** `uffizi-NN.jpg` files that v2 no longer uses are
+   still in `engagedev-media`, because v1 references them. Delete them only if v1 will never
+   be restored.
