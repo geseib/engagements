@@ -1,108 +1,89 @@
 # QA notes: What Is This Thing?
 
-Checked 7 Nov 2026 by the author. **No independent review was done.** This session had
-no tool for starting a subagent, so the review the brief asked for is still owed (see
-the end of this file).
+## History
 
-## Patents: 24 of 24 verified
+1. **Author's check, 7 Nov 2026.** Installed as v1.
+2. **Independent review, 7 Nov 2026.** A separate reviewer read every US patent and
+   DE 204,721 on Google Patents, opened the crops and Commons pages, and read the player
+   payload code. It found:
+   - 4 wrong answers or stories
+   - 1 set-wide leak
+   - 16 minor findings
 
-Each patent was checked in at least two places:
+   The full table is outside the repo, at the coordinator's
+   `scratchpad/patent-review/review.md`. Its findings and what was done about each are
+   summarised below.
+3. **v2, 7 Nov 2026.** Every fix below is installed. Read back with 0 mismatches.
 
-1. **The drawing itself.** Each sheet prints its number, inventor and date, and these
-   were read off the image. For the seven hot-linked figure-only files, the Commons
-   description or file name gives the patent instead.
-2. **Google Patents** (`patents.google.com/patent/US<number>`). The title and grant date
-   matched for all 22 US patents. Where Google's OCR mangled the inventor name, the sheet
-   was used. For US 269,766 the patent text was read to confirm "James A. Williams, of
-   Fredonia, Texas".
-3. **Commons.** Every file was read from its description page: public domain (PD-US,
-   PD US Government, or the Public Domain Mark), with the mime type and size recorded.
+## Fixes from the independent review
 
-The two patents that are not US were checked on Commons only:
+| Q | Finding | What changed |
+|---|---|---|
+| 2 drowning hat | **Wrong.** US 1,826 has no tube and no inflation. Buoyancy comes from a sealed air space in the crown, plus a waterproof lining you pull out by a cord into an air bag. | RealAnswer and story rewritten to follow the patent. Added that White was an Englishman (Dorset). |
+| 11 loop bicycle | **Wrong.** The patent is for a broken loop: the rider leaps the gap upside down and rides out on the two upper wheels. | RealAnswer and story rewritten to match. |
+| 17 Landlord's Game | **Wrong.** US 748,626 had expired by 1935. Parker Brothers bought her later 1924 patent, for $500. | Story corrected. Title softened from "A BOARD OF RENTS" to "ROUND AND ROUND THE BOARD". |
+| 23 gun trap | **Wrong.** The patent is a trap for burrowing animals, not a mousetrap, and the shot doubles as an alarm to reset the trap. "Very effective" was unsupported. | RealAnswer and story rewritten. The image file is no longer named "mousetrap". |
+| all | **Leak.** Image URLs named the answer. The crops had descriptive names (`saluting-hat.jpg` ...) and the Commons links had descriptive filenames (`Patente_sacabolas_de_helado`, `Gun-Powered_Mousetrap` ...). | All 24 images are now self-hosted as `witt-01.jpg` ... `witt-24.jpg` in shuffled order. That includes the 7 that had been Commons links. No URL depends on Wikimedia any more. |
+| 10 steam man | Minor in the review: the face can read as a racial caricature. The coordinator asked for a replacement. | **Replaced** with Garrett A. Morgan's traffic signal (US 1,475,024, 1923), which is in the same category. Morgan's Q4 story no longer mentions the signal, so it does not spoil Q10. |
+| 7 rocking-chair fan | The "5231" classification stamp in the crop is the patent number, and can be searched. | Stamp blanked. |
+| 24 vote counter | The crop was sideways. | Rotated upright. |
+| 13 chicken spectacles | Described as "hinged glasses over the beak". | Now "two lens frames held on by a springy band over the head", as in the patent. |
+| 20 yo-yo | "Granted in Cincinnati" was wrong, and "patented" appeared twice. | Now "two Cincinnati men". Uses the patent's own word, bandelore. |
+| 22 baby cage | "London tower blocks in the 1930s" is an anachronism. | Now "London flats". |
+| 6 ice-cream scoop | The 378 px Commons file was soft at 900 px. | Re-cropped from Google Patents' 2320 px sheet, with the header removed. |
+| 9 Lincoln | The title nearly described the mechanism. | Title is now "THIS BOAT HAS A PLAN". |
+| 12 wiper | The title nearly named it, and the streetcar story was stated as fact. | Title is now "WINTER, SOLVED?". The story now opens "the story goes that...". |
+| 14 pigeon camera, 18 golf tee | Licence labels were wrong, the images were never viewed, and "first recorded tee patent" was unhedged. | Labels fixed (PD-old-75; PD-old). Both images viewed by eye (see below). The tee story now says "earliest known tee patent". |
+| 4 Morgan | The licence label should say CC0. | Label fixed. |
+| README | Said no payload carries RealAnswer, but the bluff holder's phone gets it by design. | Reworded. |
 
-- **DE 204,721** (Neubronner's pigeon camera). The drawing page prints the number;
-  Commons names Neubronner.
-- **GB 12,941 of 1889** (Bloxsom & Douglas's golf tee). The sheet header prints the
-  number and date; Commons names both inventors.
+## Minor findings accepted, not changed
 
-The `verification` field of `what-is-this-thing.json` gives the evidence for each row.
+- **School** (inventor and year) is in the unauthenticated question payload during ASK,
+  though it is only drawn after the reveal. A determined player could search it.
+  Accepted, as the review allowed.
+- **Q16 dog-power**: the drawing shows no dog, so the round leans on its title.
+  Acceptable per the review.
+- **Q17 and Q20 are easy wins**: the board's words and the yo-yo drawing give them away.
+  Kept on purpose.
+- **Q24 is hard.** It is kept as the "Just Why?" head-scratcher.
 
-## Images: 22 of 24 verified, 2 pending
+## Verification after the fixes
 
-**The 17 crops.** Each URL on `engage.dev.seibtribe.us/sets/whatisthisthing/` returned
-200 `image/jpeg`. CloudFront answers 200 `text/html` (index.html) for a missing key, so
-the content type is the real test.
+- **Patents**: the review re-confirmed all 22 US patents and DE 204,721 against Google
+  Patents. The new Q10 was checked on its sheet (G. A. Morgan, Traffic Signal,
+  1,475,024, Nov. 20, 1923) and on Google Patents (inventor Garrett A Morgan,
+  1923-11-20). GB 12,941 is still checked only through Commons and its printed sheet
+  header.
+- **Images**: all 24 URLs returned HTTP 200 `image/jpeg` from
+  `engage.dev.seibtribe.us/sets/whatisthisthing/` (`image-check.json`). CloudFront
+  answers 200 `text/html` for a missing key, so the content type is the real test. The
+  files are written by Pillow and carry no EXIF or comment metadata.
+- **Q14 and Q18, viewed by eye**:
+  - Q14 is the drawing sheet of the pigeon camera's harness and mechanism. The
+    "Zu der Patentschrift No 204721" line at the foot was cropped off.
+  - Q18 is three figures of a ball on a small stand. The sheet header carrying the
+    number was cropped off.
+- **What the player and host screens show before the reveal**:
+  - the image, whose `alt` is the Title teaser
+  - the Title
+  - the CustomInstruction prompt
 
-**The 7 Commons hot-links.** Each redirect was followed from `Special:FilePath`:
-FilePath, then `Special:Redirect/file`, then a 960 px thumbnail on
-`thumb.wikimedia.org`. A file narrower than 900 px resolves to the original on
-`upload.wikimedia.org` instead. This sandbox cannot reach `thumb.wikimedia.org`, so the
-same path was fetched from `upload.wikimedia.org`, which serves the same files.
-
-- 5 of the 7 returned `image/*`.
-- 2 (Q14 pigeon camera, Q18 golf tee) got HTTP 429 rate limits from Wikimedia at check
-  time. Both files had already downloaded fine as 960 px PNGs earlier in the session,
-  while the crops were being chosen.
-
-Wikimedia only serves standard thumbnail widths. `?width=900` snaps to 960, as it
-already does for the art set.
-
-## Spoilers on screen
-
-- **Printed titles.** A full patent sheet names the invention in its header, which would
-  end the round the moment it appeared. So 17 sheets were cropped to the drawing. Three
-  pasted Gazette clippings that named the invention were blanked inside the crop
-  (signal chair, cow-tail holder, dog-power), as were the creeping doll's clipping and
-  its "Patented" line. Every crop was then looked at again for leftover text. What
-  remains is figure letters, the inventor's signature, or a classification stamp. The
-  rocking chair crop shows its stamp "5231", which is the patent number and harmless.
-- **Detail** is blank on every row.
-- **School** (inventor and year) is projected to clients but drawn only in the
-  post-round report, after the reveal. None of the inventor names hints at what the
-  invention does.
-- **Titles** are teasers, never the answer. Two lean towards it on purpose, because the
-  drawing already does: "UP AND DOWN, ROUND AND ROUND" (yo-yo) and "A BOARD OF RENTS"
-  (the Landlord's Game).
-- **AnswerDetails and RealAnswer** are not in the get-question or get-game-state
-  projections (`tests/art-title-flow.js`, and the bluff-round design for RealAnswer).
-
-## Content choices
-
-- The set mixes puzzling drawings (dog-power, vote counter, Lincoln's bellows boat) with
-  fair ones you can read (chicken spectacles, gun mousetrap, yo-yo), so every room gets
-  a few wins.
-- The patents run from 1840 to 1923. 5 of the 24 inventors are women (Goode, Benjamin,
-  Anderson, Magie, Read).
-- Stories were kept to what the patent, the drawing or well-documented history supports:
-  - Morgan and the 1916 Lake Erie tunnel rescue
-  - Parker Brothers buying Magie's patent in 1935
-  - Anderson's streetcar ride
-  - Benjamin's chair and the House page signal
-  - London's window baby cages in the 1930s
-  - Edison's 1869 vote recorder
-
-  Where the mechanism is shown rather than described, the wording stays close to the
-  drawing (the 1840 drowning hat, Horst's rocking-chair fan).
+  Detail is blank. AnswerDetails and RealAnswer are not projected to the room (RealAnswer
+  goes only to the bluff holder). No Title names its answer, and no image URL does.
 
 ## Known gaps
 
-1. **No independent review yet.** A reviewer should re-verify a sample of patents (say
-   Q2 White, Q7 Horst, Q16 Pangburn, Q24 Monaghan, the older and thinner ones) and
-   re-read the crops for leftover text.
-2. **The crops are absolute dev URLs.** `toMediaKey` would store a bare filename as
-   `sets/whatisthisthing/<file>`. But `get-question` and `get-game-state` pass `Image`
-   through unchanged, and `PlayerPage`, `GameHostPage` and `QuestionCard` use it as the
-   `<img src>` directly, with no `<base href>` in the page. So a bare key would resolve
-   relative to the current route (for example `/host/sets/...`) and land on index.html.
-   No set on dev uses keyed media yet: `engagedev-media` had no `sets/` objects before
-   this install. Absolute dev URLs are what works today. To promote to test or prod,
-   re-upload the 17 files to that tier's bucket and rewrite the URLs, or fix the
-   relative key first.
-3. **Q6 (ice-cream scoop) is a low-resolution file.** The Commons original is 378 px
-   wide, so it is upscaled at 900 px. It is still legible, but soft.
-4. **The cow-tail holder crop has a plain block** where its Gazette clipping was
-   blanked. The block clips the end of the Fig. 2 bar. The drawing still reads.
-5. **Workie's prompt is the art-title prompt** (`mskc5h7boibe5abg15`), matching the art
-   set as asked. A set-level `aiContextInstruction` tells it to read "title" as "guess"
-   and "real title" as "real answer". Its section headings still say "The Winning Title"
-   and "The Real Title". A dedicated "What Is This Thing?" prompt would fit better.
+1. **Crop URLs are absolute dev URLs.** A bare key (`sets/whatisthisthing/<file>`) is
+   passed to `<img src>` unchanged, with no `<base href>` in the page. So it would
+   resolve relative to the current route and land on index.html. To promote, re-upload
+   to the tier's bucket and rewrite the URLs, or fix keyed-media rendering first.
+2. **v1's descriptively named crops are still in `engagedev-media`** (`saluting-hat.jpg`
+   and so on). v1 references them. v2, which is live, does not. Delete them if v1 will
+   never be restored.
+3. **Workie uses the art-title prompt plus a set-level context note**, as the art set
+   does. Its section headings still say "The Winning Title" and "The Real Title". The
+   host's vote cue for image rounds also says "Vote for the best title"
+   (`GameHostPage.jsx`). A dedicated prompt, and an image-round cue that does not assume
+   art, would fit better.
+4. **The cow-tail crop has a plain block** where its Gazette clipping was blanked.

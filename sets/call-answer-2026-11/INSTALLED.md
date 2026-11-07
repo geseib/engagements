@@ -1,44 +1,51 @@
 # Installed: What Is This Thing?
 
-**Dev only** (`engagedev`), 7 Nov 2026, in the platform Engage library (`SETS`
-partition). Nothing was installed on test or prod, and nothing was pushed or deployed.
+**Dev only** (`engagedev`), in the platform Engage library (`SETS` partition).
+Nothing was installed on test or prod, and nothing was pushed or deployed.
 
 | | |
 |---|---|
-| set id | `whatisthisthing` (version 1) |
+| set id | `whatisthisthing` |
+| live version | **v2** (7 Nov 2026, independent-review fixes). v1 is kept in the set's Versions. |
 | name | What Is This Thing? |
-| type | call-and-answer, active |
+| type | call-and-answer, active, `bluffRound: true` |
 | topic | `science-technology` |
 | tags | inventions, patents, history, icebreaker |
 | persona | `comedian` (The Comedian), as on Famous Art Titles |
 | prompt | `mskc5h7boibe5abg15`, "Art & Creative Titles - Naming Celebration", as on Famous Art Titles |
 | aiContextInstruction | Tells Workie these are patent drawings: "title" means guess, "real title" means real answer |
-| roundNoun | `Invention`, so screens say "Invention 3" rather than "Artwork 3" |
+| roundNoun | `Invention` |
 | questions | 24 in 6 categories (4 each), 0 skipped rows |
-| media | 17 crops at `s3://engagedev-media/sets/whatisthisthing/*.jpg`, served at `https://engage.dev.seibtribe.us/sets/whatisthisthing/` |
+| media | `s3://engagedev-media/sets/whatisthisthing/witt-01.jpg` to `witt-24.jpg`, served at `https://engage.dev.seibtribe.us/sets/whatisthisthing/` |
 
-## How it was installed
+## v1 (7 Nov 2026)
 
-1. Dry run of `scripts/install-question-set.js`: 24 questions, 6 categories, 0 skipped.
-   The persona was found and active.
-2. Uploaded `images/*.jpg` to `engagedev-media` with `Content-Type: image/jpeg`.
-3. Ran the same command with `--apply`. The script wrote `personaId`.
-4. Wrote `promptId`, `aiContextInstruction` and `roundNoun` on the `SETS` /
-   `SET#whatisthisthing` row. The importer writes none of these three.
+1. Ran `scripts/install-question-set.js` with `--persona comedian`, the four tags and
+   `--apply`.
+2. Uploaded 17 crops.
+3. Set `promptId`, `aiContextInstruction` and `roundNoun` on the SETS row.
 
-## Read-back
+## v2 (7 Nov 2026)
 
-- **SETS row**: `active=true`, `engagementType=call-and-answer`,
-  `topic=science-technology`, the 4 tags, `personaId=comedian`,
-  `promptId=mskc5h7boibe5abg15`, `roundNoun=Invention`, `questionCount=24`,
-  `categoryCount=6`, `hasImages=true`, no `ttl`.
-- **Questions**: all 24 rows of `SET#whatisthisthing#v1` were compared with the CSV on
+1. Uploaded the 24 neutral-named images.
+2. Ran `scripts/replace-question-set.js engagedev whatisthisthing --csv
+   sets/call-answer-2026-11/what-is-this-thing.csv --note "Independent review fixes:
+   ..."`, first as a dry run (24 questions, 6 categories, 0 skipped), then with
+   `--apply`. The script left the set's details untouched.
+
+## Read-back of v2
+
+- **SETS row**: `activeVersion=2`, `active=true`, `bluffRound=true`,
+  `engagementType=call-and-answer`, `topic=science-technology`, the 4 tags,
+  `personaId=comedian`, `promptId=mskc5h7boibe5abg15`, `roundNoun=Invention`,
+  `questionCount=24`, `categoryCount=6`, `hasImages=true`, no `ttl`.
+- **Questions**: all 24 rows of `SET#whatisthisthing#v2` were compared with the CSV on
   Category, Title, School, CustomInstructions, AnswerDetails, RealAnswer, Image and
   Detail. **0 mismatches.**
-- **Images**: 22 of 24 URLs returned `image/*`. The other 2 were Wikimedia rate limits
-  (HTTP 429), not missing files; see QA-NOTES.
+- **Images**: 24 of 24 URLs returned 200 `image/jpeg`. Every URL is a neutral
+  `witt-NN.jpg`.
 
 ## To undo
 
-Delete the set in the console (Question sets, What Is This Thing?, Delete). Then remove
-`s3://engagedev-media/sets/whatisthisthing/`.
+Make v1 live again from the set's Versions, or delete the set in the console. Then
+remove `s3://engagedev-media/sets/whatisthisthing/`.

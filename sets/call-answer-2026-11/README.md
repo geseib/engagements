@@ -14,8 +14,9 @@ are not American (a German pigeon camera and a British golf tee).
 |---|---|
 | `what-is-this-thing.csv` | The set, in the art-title column layout plus `RealAnswer` |
 | `what-is-this-thing.json` | Per question: Commons file and page, licence, patent, inventor, year, image URL, how it was verified |
-| `images/*.jpg` | 17 drawings cropped to the figure, so the printed invention name is gone |
-| `images/cropspec.json` | The crop box and blanked areas for each image, as fractions of the Commons thumbnail |
+| `images/witt-NN.jpg` | All 24 drawings, cropped to the figure, under neutral shuffled names (the sidecar maps each to its question) |
+| `images/cropspec.json` | The crop box, blanked areas and rotation for each image (keyed by an internal crop name), as fractions of the source |
+| `image-check.json` | The last URL check: each image URL, HTTP status and content type |
 | `QA-NOTES.md` | What was checked, what was changed, and the known gaps |
 | `INSTALLED.md` | Where it is installed and how it read back |
 
@@ -32,21 +33,27 @@ are not American (a German pigeon camera and a British golf tee).
 - **AnswerDetails**: `Real answer: <what it is>, patented by <inventor>, <year>
   (<patent>). <story>`. Read only by Workie at RESULTS.
 - **RealAnswer**: the answer in one plain sentence, for the bluff-round twist
-  (`docs/design/bluff-round/README.md`). Like AnswerDetails, no player or host
-  payload carries it.
-- **Image**: 7 rows hot-link a Commons `Special:FilePath/...?width=900` URL, as the
-  art set does. Those files are already figure-only. The other 17 point at
-  `https://engage.dev.seibtribe.us/sets/whatisthisthing/<file>.jpg`, a crop served
+  (`docs/design/bluff-round/README.md`). It is withheld from the room until RESULTS.
+  The one exception is by design: `get-question` sends it to the bluff holder's own
+  phone.
+- **Image**: every row points at
+  `https://engage.dev.seibtribe.us/sets/whatisthisthing/witt-NN.jpg`, a crop served
   from the dev media bucket.
 
-## Why most images are crops
+## Why every image is a neutral-named crop
 
-A full US patent sheet prints the inventor and **the name of the invention** across the
-top ("SALUTING DEVICE", "COW-TAIL HOLDER"). Many National Archives sheets also carry a
-handwritten title in the margin or a pasted Gazette clipping. On the projector that
-gives the answer away. So each sheet was cropped to the drawing, with any clipping
-inside the crop blanked. The original Commons file for every crop is recorded in the
-JSON sidecar.
+The Image URL is in the public question payload. A player can see it by long-pressing
+the picture or opening it in a new tab. So the URL must not name the answer: no
+descriptive Commons filenames, and no descriptive crop names. The numbers are shuffled,
+so they do not follow question order either.
+
+The picture itself must not name the answer either. A full US patent sheet prints the
+inventor and **the name of the invention** across the top ("SALUTING DEVICE",
+"COW-TAIL HOLDER"). Many National Archives sheets also carry a handwritten title in the
+margin, a pasted Gazette clipping, or a classification stamp with the patent number.
+So each sheet was cropped to the drawing, and anything naming or numbering the
+invention inside the crop was blanked. The source of every image (Commons file, or
+Google Patents' full-size sheet for two of them) is recorded in the JSON sidecar.
 
 ## Install
 
@@ -59,10 +66,14 @@ node scripts/install-question-set.js engagedev sets/call-answer-2026-11/what-is-
   --persona comedian --tags inventions,patents,history,icebreaker          # dry run; add --apply to write
 ```
 
-Then upload `images/*.jpg` to `s3://<stack>-media/sets/whatisthisthing/` with
+Then upload `images/witt-*.jpg` to `s3://<stack>-media/sets/whatisthisthing/` with
 `Content-Type: image/jpeg`. Set `promptId`, `aiContextInstruction` and
 `roundNoun` on the SETS row as `INSTALLED.md` records, because the importer does not
 write them.
 
-For another tier, the 17 crop URLs must be rewritten to that tier's domain, or turned
-into bare filenames once keyed media renders correctly (see QA-NOTES, known gaps).
+To change an installed set, use `scripts/replace-question-set.js <table> whatisthisthing
+--csv ...`. It writes a new version and keeps the set's other settings.
+
+For another tier, upload `images/witt-*.jpg` to that tier's bucket and rewrite the 24
+URLs to its domain. Or turn them into bare filenames once keyed media renders correctly
+(see QA-NOTES, known gaps).
