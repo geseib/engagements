@@ -49,18 +49,18 @@
  },
  {
   "question": 7,
-  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-40.jpg",
+  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-66.jpg",
   "status": 200,
   "contentType": "image/jpeg",
-  "bytes": 370765,
+  "bytes": 98917,
   "ok": true
  },
  {
   "question": 8,
-  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-33.jpg",
+  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-67.jpg",
   "status": 200,
   "contentType": "image/jpeg",
-  "bytes": 392905,
+  "bytes": 189569,
   "ok": true
  },
  {
@@ -73,10 +73,10 @@
  },
  {
   "question": 10,
-  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-59.jpg",
+  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-63.jpg",
   "status": 200,
   "contentType": "image/jpeg",
-  "bytes": 514045,
+  "bytes": 495383,
   "ok": true
  },
  {
@@ -217,10 +217,10 @@
  },
  {
   "question": 28,
-  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-41.jpg",
+  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-61.jpg",
   "status": 200,
   "contentType": "image/jpeg",
-  "bytes": 746040,
+  "bytes": 433014,
   "ok": true
  },
  {
@@ -241,10 +241,10 @@
  },
  {
   "question": 31,
-  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-27.jpg",
+  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-65.jpg",
   "status": 200,
   "contentType": "image/jpeg",
-  "bytes": 622468,
+  "bytes": 575190,
   "ok": true
  },
  {
@@ -401,10 +401,10 @@
  },
  {
   "question": 51,
-  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-20.jpg",
+  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-62.jpg",
   "status": 200,
   "contentType": "image/jpeg",
-  "bytes": 527972,
+  "bytes": 72537,
   "ok": true
  },
  {
@@ -473,10 +473,10 @@
  },
  {
   "question": 60,
-  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-37.jpg",
+  "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-64.jpg",
   "status": 200,
   "contentType": "image/jpeg",
-  "bytes": 383065,
+  "bytes": 366495,
   "ok": true
  }
 ]
