@@ -30,6 +30,7 @@
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle, chooserOpen,
  *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names),
+ *     bluffChoice (the bluff round, Call & Answer only; null follows the set),
  *     target (the goal of N questions, events M1b — and since then
  *     promptList and knownPromptIds live in components/SessionOptions.jsx),
  *     briefing and briefingWorking (Workie's briefing, Call & Answer only —

@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteComm
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { encryptItem } = require('./tenant-crypto');
 const { displayToCanonical } = require('./answer-order');
+const { bluffSk } = require('./bluff-round');
 const { heldByAnotherDevice, presentedClientId, nameMovedMessage, NAME_MOVED } = require('./name-holder');
 const { orgIsSuspended, sessionUnavailableResponse } = require('./org-standing');
 
@@ -125,6 +126,30 @@ exports.handler = async (event) => {
         body: JSON.stringify({ error: 'Those answers are no longer in this round. Reload and vote again.' }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
+    }
+
+    /*
+      A BLUFF ROUND TAKES NO VOTE FOR YOUR OWN ANSWER (bluff-round.js). In a
+      normal round a player may vote for themselves; here a made-up answer
+      pays its author 2 a pick, so a self-vote would buy points. Only the
+      first-place pick counts in a bluff round, and the phone asks for one.
+    */
+    const bluffRow = (await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: bluffSk(paddedQuestionNumber) }
+    }))).Item;
+    if (bluffRow && bluffRow.Status === 'active') {
+      const ownIdx = (answersQuery.Items || []).findIndex((row) => String(row.SK).endsWith(`#ANSWER#${playerName}`));
+      if (ownIdx !== -1 && Object.prototype.hasOwnProperty.call(mapped.votes, String(ownIdx))) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: "In a bluff round you can't vote for your own answer. Pick another one.",
+            code: 'OWN_ANSWER'
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
     }
 
     // Store vote in database following design doc schema

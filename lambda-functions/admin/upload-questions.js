@@ -468,6 +468,9 @@ exports.handler = async (event) => {
     let schoolIndex = getColumnIndex('School');
     let customInstructionIndex = getColumnIndex('CustomInstruction');
     let imageIndex = getColumnIndex('Image'); // Optional artwork/image URL ("Art Title" sets)
+    // Optional real answer for a bluff round (docs/design/bluff-round/README.md).
+    // A spoiler like AnswerDetails: carried by no payload but the holder's.
+    let realAnswerIndex = getColumnIndex('RealAnswer');
     // Optional Tags column. Every AI builder now suggests tags, and until this
     // existed they were displayed, edited and then silently dropped at import.
     let tagsIndex = getColumnIndex('Tags');
@@ -713,6 +716,7 @@ exports.handler = async (event) => {
         const school = cell(values, schoolIndex);
         const questionCustomInstruction = cell(values, customInstructionIndex);
         const image = cell(values, imageIndex);
+        const realAnswer = cell(values, realAnswerIndex);
         const tagsCell = cell(values, tagsIndex);
         const roundKindCell = cell(values, roundKindIndex);
         const sourceAttribution = cell(values, sourceAttributionIndex);
@@ -828,6 +832,7 @@ exports.handler = async (event) => {
           if (finalAnswerDetails) {
             baseQuestion.AnswerDetails = finalAnswerDetails;
           }
+          if (realAnswer) baseQuestion.RealAnswer = realAnswer;
 
           // BACKGROUND — the author's material for Workie (question-background spec
           // §1). Same property as the reveal: no player or host payload carries it.
@@ -1122,6 +1127,9 @@ exports.handler = async (event) => {
       // distinction between "chose Produce" and "never asked", which is the
       // distinction that keeps the no-migration decision cheap.
       ...(setRoundKind ? { roundKind: setRoundKind } : {}),
+      // The bluff round (docs/design/bluff-round/README.md), Call & Answer
+      // only and only when asked for: absent reads as off.
+      ...(payload.bluffRound === true && engagementType === 'call-and-answer' ? { bluffRound: true } : {}),
       ...(setRoundKindBrief ? { roundKindBrief: setRoundKindBrief } : {}),
       // THE SHELF, and the author's own words. Both written only when there is
       // something to write: an absent `topic` IS the unfiled state, and a
@@ -1237,6 +1245,7 @@ exports.handler = async (event) => {
         // parsed at line ~297, assembled onto baseQuestion, then silently lost
         // here. Written only when non-empty so ordinary sets are unchanged.
         ...(question.AnswerDetails ? { AnswerDetails: question.AnswerDetails } : {}),
+        ...(question.RealAnswer ? { RealAnswer: question.RealAnswer } : {}),
         ...(question.Background ? { Background: question.Background } : {}),
         CustomInstructions: question.CustomInstructions || '',
         Tags: question.Tags || [],

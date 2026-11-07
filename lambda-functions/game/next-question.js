@@ -4,7 +4,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const {
-  OWN_SOURCE, isOwnQueueKey, ownIdOfKey, ownQueueKey, ownSk, ownRowKey, readOwnQuestion,
+  OWN_SOURCE, isOwnQueueKey, ownIdOfKey, ownQueueKey, ownSk, ownRowKey, readOwnQuestion, readRoundQuestion,
 } = require('./round-question');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
@@ -14,6 +14,9 @@ const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
 const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
 // Call & Answer follow-up asks (docs/design/ca-followup-asks SPEC §4.3 step 6).
 const { followUpsEnabled, readLivePointer, finishAsk } = require('./followup-store');
+const {
+  sessionBluffOn, realAnswerOf, eligibleHolders, decideBluff, publicBluff, bluffSk,
+} = require('./bluff-round');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1310,6 +1313,8 @@ exports.handler = async (event) => {
     // README §5.5): `Source: 'host'`, `SourceQuestionId: 'OWNQ#<id>'`, and no
     // set, scope or version — it is in none. Every reader resolves it through
     // round-question.js, which knows to read the session's own row.
+    // The set round's REF, kept for the bluff round below (bluff-round.js).
+    let setRefItem = null;
     if (nextQuestion.own) {
       await db.send(new PutCommand({
         TableName: process.env.TABLE_NAME,
@@ -1333,7 +1338,7 @@ exports.handler = async (event) => {
       })).catch((e) => console.warn(`⚠️ Could not mark own question ${nextQuestion.ownId} asked: ${e.name}`));
     } else await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: {
+      Item: setRefItem = {
         PK: `GAME#${gameId}`,
         SK: `QUESTION#${questionNumber}#REF`,
         SourceQuestionId: nextQuestion.questionId,
@@ -1392,6 +1397,26 @@ exports.handler = async (event) => {
       }
     }));
     const timedState = stateAfterOpening(gameState.Item, newState, now, roundTimer.timer);
+
+    /*
+      THE BLUFF ROUND (bluff-round.js; docs/design/bluff-round/README.md).
+      When the session has it on and this question has a real answer, one
+      connected player is picked to hold it. Written on BLUFF#<nnn>, before
+      the room is told the round has opened, so the holder's first fetch finds
+      it. What goes back to the host is the public status only — never who.
+      A failure here costs the round its twist, never the round.
+    */
+    let bluffStatus = null;
+    if (sessionBluffOn(gameMetadata.Item)) {
+      try {
+        bluffStatus = await openBluffRound({
+          gameId, questionNumber, metadata: gameMetadata.Item, refItem: setRefItem,
+          own: Boolean(nextQuestion.own), sessionTtl,
+        });
+      } catch (error) {
+        console.error(`❌ Bluff round could not open for ${gameId} round ${questionNumber}:`, error?.message);
+      }
+    }
 
     // Served: one question put to the room, counted once per round (platform-metrics.js; never throws).
     // The usage stats ride the same guard: by type for the platform, the team and
@@ -1551,6 +1576,8 @@ exports.handler = async (event) => {
         // left of it. The surface that pressed the button re-renders from this
         // rather than guessing which entry was consumed.
         fromQueue: Boolean(queueOutcome && queueOutcome.served),
+        // On or off, and why — never who holds the real answer.
+        ...(bluffStatus ? { bluff: bluffStatus } : {}),
         // To the host's own request only (never the room's frame, F6): this
         // round is a question the host wrote.
         ...(nextQuestion.own ? { ownQuestion: true } : {}),
@@ -1570,6 +1597,52 @@ exports.handler = async (event) => {
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
   }
+};
+
+/**
+ * Pick this round's truth-holder and write BLUFF#<nnn>. Returns the PUBLIC
+ * status (bluff-round.js publicBluff): the holder's name stays on the row.
+ */
+const openBluffRound = async ({ gameId, questionNumber, metadata, refItem, own, sessionTtl }) => {
+  const table = process.env.TABLE_NAME;
+  const question = !own && refItem
+    ? (await readRoundQuestion(db, table, gameId, refItem)).question
+    : null;
+  let eligible = [];
+  let previousHolder = null;
+  if (!own && realAnswerOf(question)) {
+    const [players, connections, previous] = await Promise.all([
+      db.send(new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'PLAYER#' }
+      })),
+      db.send(new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#' }
+      })),
+      Number(questionNumber) > 1
+        ? db.send(new GetCommand({ TableName: table, Key: { PK: `GAME#${gameId}`, SK: bluffSk(Number(questionNumber) - 1) } }))
+        : Promise.resolve({}),
+    ]);
+    eligible = eligibleHolders(players.Items || [], connections.Items || []);
+    previousHolder = (previous && previous.Item && previous.Item.HolderName) || null;
+  }
+  const decision = decideBluff({ metadata, question, own, eligible, previousHolder });
+  if (!decision) return null;
+  await db.send(new PutCommand({
+    TableName: table,
+    Item: {
+      PK: `GAME#${gameId}`,
+      SK: bluffSk(questionNumber),
+      ...decision,
+      DecidedAt: new Date().toISOString(),
+      ...(sessionTtl !== undefined ? { ttl: sessionTtl } : {})
+    }
+  }));
+  console.log(`🎭 Bluff round ${questionNumber} of ${gameId}: ${decision.Status}${decision.Reason ? ` (${decision.Reason})` : ''}, ${decision.Players || 0} eligible`);
+  return publicBluff(decision);
 };
 
 // Helper function to decrement category count when question is asked

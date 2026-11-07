@@ -36,6 +36,7 @@ import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
 import { editableRows } from '../utils/questionRows';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
+import { BLUFF_WORDS } from '../config/bluffRound';
 
 const API_BASE = () => window.API_BASE;
 
@@ -213,6 +214,7 @@ export default function QuestionSetEditor({
   const [engagementType, setEngagementType] = useState('call-and-answer');
   const [promptId, setPromptId] = useState('');
   const [roundNoun, setRoundNoun] = useState('');
+  const [bluffRound, setBluffRound] = useState(false);
   // Per-set voice. '' means "adapt to the session", which is the default and
   // beats the prompt template's baked-in persona on purpose.
   const [personaId, setPersonaId] = useState('');
@@ -447,6 +449,7 @@ export default function QuestionSetEditor({
     setEngagementType(snapshot.engagementType);
     setPromptId(snapshot.promptId);
     setRoundNoun(snapshot.roundNoun);
+    setBluffRound(snapshot.bluffRound);
     setPersonaId(snapshot.personaId);
     setRoundKind(snapshot.roundKind);
     setRoundKindBrief(snapshot.roundKindBrief);
@@ -749,7 +752,8 @@ export default function QuestionSetEditor({
     // no longer has.
     roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : '',
     topic,
-    tags: ownTags
+    tags: ownTags,
+    bluffRound
   };
 
   // The body this form would send right now. Built here as well as in the save
@@ -1468,6 +1472,21 @@ export default function QuestionSetEditor({
                 {roundKindGaps(roundKind, { brief: roundKindBrief, instruction: 'n/a' }).length > 0
                   && ' Saving without a description leaves the generator no direction to follow.'}
               </small>
+            </div>
+          )}
+
+          {normalizeGameType(engagementType) === 'call-and-answer' && (
+            <div className="form-group">
+              <label htmlFor="edit-bluff-round">
+                <input
+                  id="edit-bluff-round"
+                  type="checkbox"
+                  checked={bluffRound}
+                  onChange={(e) => setBluffRound(e.target.checked)}
+                />{' '}
+                {BLUFF_WORDS.setOption}
+              </label>
+              <small className="help-text">{BLUFF_WORDS.setOptionHelp}</small>
             </div>
           )}
 

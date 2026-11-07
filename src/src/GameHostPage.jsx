@@ -171,6 +171,8 @@ import { consolePeopleFor, personFactsFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
+import BluffLine from './components/stage/BluffLine';
+import { BLUFF_WORDS } from './config/bluffRound';
 import FW from './config/followUpWords';
 import { placeAsks, pointKey } from './config/askAnchors';
 import { sendAsk, closeAsk, cancelAsk, pickIdea } from './utils/followUpsClient';
@@ -10278,6 +10280,12 @@ Focus on actionable business strategy insights.`;
                   : null}
               />
             )}
+            {/* A BLUFF ROUND: that one is in play, never who has the real
+                answer (components/stage/BluffLine.jsx). */}
+            {(hostPhase === 'ASK' || hostPhase === 'VOTE' || hostPhase === 'RESULTS') && currentQuestion
+              && !stageQuestionUp && currentGameType === 'call-and-answer' && (
+              <BluffLine phase={hostPhase} question={currentQuestion} gameId={gameId} round={lessonNumber} apiBase={API_BASE} />
+            )}
 
             {/* THE QUESTION, BACK UP, ON ONE SCREEN (owner, 5 Nov 2026,
                 replacing the white "expanded lesson" overlay: "it turns the
@@ -10327,7 +10335,8 @@ Focus on actionable business strategy insights.`;
                     2026-10-12), so the first votes cannot steer the rest; how
                     many have voted is the meter's. */}
                 <div className="kicker" data-rc-part="cue" data-rc="kicker">
-                  {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
+                  {currentQuestion?.bluff?.active ? BLUFF_WORDS.voteCue
+                    : currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
                 {currentQuestion && <StageQuestionRecap question={currentQuestion} />}
                 {currentQuestion?.image && (

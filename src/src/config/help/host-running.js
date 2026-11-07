@@ -643,7 +643,7 @@ const byType = {
         { t: 'phases', gameType: 'call-and-answer' },
         {
           t: 'p',
-          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote and the only one with Ask the room after Workie\'s read, where it is offered (What we heard and Ask the room › Asking the room a quick question). How points are earned is in the players\' Scoring guide.',
+          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote and the only one with Ask the room after Workie\'s read, where it is offered (What we heard and Ask the room › Asking the room a quick question). How points are earned is in the players\' Scoring guide. In a bluff round the stage says one player has the real answer, never who, the vote asks which one is real, and the results show the real answer (Setting up › Bluff round).',
         },
       ],
     },

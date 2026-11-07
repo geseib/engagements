@@ -71,6 +71,7 @@ const { describeSurveyResults } = require('./survey-digest');
 const { resolveTask, authoredTaskOf } = require('./task-instruction');
 const { displayOrder } = require('./answer-order');
 const { authorTallyLines, findTallyMismatches, tallyRows } = require('./author-tally');
+const { scoreBluff, bluffPromptLines } = require('./bluff-round');
 // Call & Answer follow-up asks (docs/design/ca-followup-asks): suggestions
 // made after the read is stored, never in its way. Off unless
 // FOLLOWUP_ASKS_ENABLED is 'on' (dev only).
@@ -1711,6 +1712,22 @@ const handle = async (event, context) => {
         answerScores[index] = teamScore;
         
         console.log(`🌊 AI WAVELENGTH DEBUG - Player ${voteTallies[index].playerName}: team score=${teamScore}, words submitted=${voteTallies[index].wordsSubmitted}`);
+      });
+    }
+
+    // A BLUFF ROUND'S POINTS (bluff-round.js), as get-results.js paid them,
+    // so {voteTallyByAuthor} and the check of the reply's numbers agree with
+    // the scoreboard rather than with a ranked count nobody was paid.
+    const storedBluff = storedResults && storedResults.Bluff && storedResults.Bluff.holderName
+      ? storedResults.Bluff : null;
+    if (storedBluff && gameType !== 'trivia' && gameType !== 'wavelength') {
+      const bluffScore = scoreBluff({ answers, votes: votes || [], holderName: storedBluff.holderName });
+      Object.keys(voteTallies).forEach((idx) => {
+        voteTallies[idx].firstPlace = bluffScore.votesFor[idx] || 0;
+        voteTallies[idx].secondPlace = 0;
+        voteTallies[idx].thirdPlace = 0;
+        voteTallies[idx].totalScore = bluffScore.points[voteTallies[idx].playerName] || 0;
+        answerScores[idx] = voteTallies[idx].totalScore;
       });
     }
 
@@ -3416,6 +3433,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       a confident wrong sentence is not.
     */
     reveal: question.answerDetails || '',
+    // A bluff round's reveal and outcome (bluff-round.js), '' on every other
+    // round. Appended after the template when the template does not place it.
+    bluffRound: (storedResults && storedResults.Bluff && storedResults.Bluff.holderName)
+      ? bluffPromptLines(storedResults.Bluff, { story: question.answerDetails || '', hidden })
+      : '',
     // The question's Background, for a prompt that wants to place it itself
     // (question-background spec §3). Any other prompt gets it in the context
     // block or in {contextSections} — never both (see templateNamesBackground).
@@ -3693,6 +3715,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Names follow the round's Names setting, as the responses above do.
   if (Array.isArray(lateAnswers) && lateAnswers.length) {
     prompt += `\n\n${lateAnswersLayer(lateAnswers, { hidden })}`;
+  }
+
+  // A BLUFF ROUND (bluff-round.js): the real answer, its story and how the
+  // bluff went, so Workie can reveal it. Its own block after the template,
+  // unless the template placed {bluffRound} itself.
+  if (templateVars.bluffRound && !templateBody.includes('{bluffRound}')) {
+    prompt += `\n\n${templateVars.bluffRound}`;
   }
 
   prompt += `\n\n${HONESTY_RULE}`;

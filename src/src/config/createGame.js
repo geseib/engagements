@@ -108,6 +108,9 @@ export function createGameBody(form = {}) {
     promptId: promptId || '',
     hostName: 'Host',
     ...createPayloadFor({ gameType, anonymousResponses }),
+    // The bluff round (docs/design/bluff-round/README.md): Call & Answer only,
+    // sent only when the form says; absent takes the set's default.
+    ...(gameType === 'call-and-answer' && typeof form.bluffRound === 'boolean' ? { bluffRound: form.bluffRound } : {}),
     ...namesPayloadFor({ gameType, names }),
     ...(briefingApplies(gameType) && briefingValue(form.briefing) ? { briefing: briefingValue(form.briefing) } : {}),
     ...(goalRules.goalApplies(gameType) && hasGoal(target) ? { target: targetOf(target) } : {}),

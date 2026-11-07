@@ -452,6 +452,30 @@ const playing = {
       ],
     },
     {
+      /* The bluff round (docs/design/bluff-round/README.md; config/bluffRound.js
+         BLUFF_WORDS): the holder's card "You have the real answer" + "Put it in
+         your own words, so it sounds like you."; everyone else "Bluff round";
+         the ballot "Which one is real? Pick one."; own answer off the ballot;
+         the reveal card "The real answer" at results. */
+      id: 'bluff-round',
+      title: 'Bluff round',
+      icon: 'EyeSlash',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Some Call & Answer sessions play a bluff round: a picture or a puzzle with a real answer nobody knows. One player, picked at random, is secretly shown the real answer on their phone. They still type it, in their own words, so it sounds like them. Everyone else makes one up.',
+        },
+        {
+          t: 'p',
+          text: 'At the vote you pick one: the answer you think is real. You cannot pick your own. A vote for a made-up answer gives its author 2 points. Spotting the real one gives you 1 point and the player who had it 1 point.',
+        },
+        {
+          t: 'p',
+          text: 'Nobody else is told who has the real answer, not even the host. At results your phone shows the real answer, who had it, and who fooled the most people.',
+        },
+      ],
+    },
+    {
       /* Trivia ASK: options A–F (radiogroup), "X selected. You can change it
          until you send.", Send my answer, then the one receipt "Sent / Your
          answer is in." (config/playerWords.js RECEIPT). RESULTS:
@@ -861,7 +885,7 @@ const scoring = {
           t: 'table',
           head: ['Round', 'Where points come from'],
           rows: [
-            ['Call & Answer', 'Votes from the room: 3 points for each first-place vote, 2 for second, 1 for third.'],
+            ['Call & Answer', 'Votes from the room: 3 points for each first-place vote, 2 for second, 1 for third. In a bluff round, 2 for each vote your made-up answer gets, and 1 for spotting the real one.'],
             ['Trivia', 'Getting it right, plus a speed bonus of up to 5 points: the faster a right answer, the bigger it is.'],
             ['Poll', 'None. A poll counts opinions; nobody scores.'],
             ['Wavelength', 'None. The result shows which words the room landed on together.'],
