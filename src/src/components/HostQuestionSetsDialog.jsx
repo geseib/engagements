@@ -27,8 +27,8 @@ import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerT
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
 import { buildEditPayload, editableSnapshot, summarizeEditResult } from '../utils/questionSetEditing';
-import { SET_SEARCH_FIELDS } from '../config/setFinder';
-import { makeSearchMatcher } from '../config/listControls';
+import SetFilterBar, { SET_LIST_CONFIG, SET_FILTER_LABELS } from './SetFilterBar';
+import useListControls from '../hooks/useListControls';
 import './QuestionSetsPanel.css';
 
 /**
@@ -73,13 +73,20 @@ import './QuestionSetsPanel.css';
  */
 
 /*
-  THE SAME WORDS FIND THE SAME SETS HERE AS IN THE CHOOSER. The owner, 23 Oct
-  2026: "the current UX is not going to scale to find what people need as the
-  question sets grow ... search". The chooser and the console list already
-  match on SET_SEARCH_FIELDS through listControls; a third hand-written matcher
-  here would be the one that disagrees about what a word finds.
+  THE SAME FILTERS AS THE CONSOLE'S LIST, FROM THE SAME MODULE (SetFilterBar).
+  The owner, 23 Oct 2026, asked for "search, filter by mine/team/public/engage
+  or by date or by tag" as libraries grow; this dialog got the search box and
+  nothing else, while the console got every filter. The owner, 7 Nov 2026:
+  "why in the host home page question set explorer do they not feature the
+  same filter treatments?" Now it does — type first, then topic, status, owner,
+  date, sort and the shelf browse — through the console's own config, so a word
+  or a filter finds the same sets in both, and a filter added there lands here.
+
+  The header above ("filters, sort … None of that is a host's job") was written
+  about the console's CURATION — Active toggles, versions, media, prompts —
+  which a host still does not get. Finding a set in a growing library is a
+  host's job, and the owner has said so twice.
 */
-const matchesSearch = makeSearchMatcher(SET_SEARCH_FIELDS);
 
 /** The picker shape, from the admin projection. Only ACTIVE sets can be played. */
 function toPickerSets(sets) {
@@ -188,8 +195,9 @@ export default function HostQuestionSetsDialog({
       pushedFrom.current = null;
     }
   }, []);
-  /** What the search box holds. One box over both lists, not one each. */
-  const [search, setSearch] = useState('');
+  /** The search and the filters. One bar over both lists, not one each. */
+  const controls = useListControls(sets, SET_LIST_CONFIG, { labels: SET_FILTER_LABELS });
+  const { state: filters, set: setFilters, shown, drops, activeFilterCount, clearAll } = controls;
   /** The id of the set whose quickstart flag is currently in flight, or null. */
   const [quickstartBusy, setQuickstartBusy] = useState(null);
   /*
@@ -431,24 +439,49 @@ export default function HostQuestionSetsDialog({
     Save and Cancel with it; the same goes for the set whose editor or delete
     dialog is open, so closing it lands back on the row it came from.
   */
-  const needle = search.trim();
+  const needle = String(filters.search || '').trim();
+  const filtering = activeFilterCount > 0;
+  // The search alone keeps its own words ("match “retro”"); any filter turns
+  // the sentence into a count of what is narrowing the list.
+  const onlySearch = Boolean(needle) && activeFilterCount === 1;
+  const narrowedBy = onlySearch
+    ? `“${needle}”`
+    : activeFilterCount === 1 ? 'this filter' : `these ${activeFilterCount} filters`;
   const inHand = new Set([editing?.id, editingQuestions?.id, deleting?.id].filter(Boolean));
-  const shownBy = (list) => list.filter((set) => inHand.has(set.id) || matchesSearch(set, needle));
-  const mineShown = shownBy(mine);
-  const houseShown = shownBy(house);
-  const countOf = (shown, total) => (needle ? `${shown} of ${total}` : String(total));
+  // `shown` is filtered AND sorted over both lists; a row in hand that the
+  // filters would drop is appended rather than lost.
+  const passing = new Set(shown.map((set) => set.id));
+  const ordered = [...shown, ...sets.filter((set) => inHand.has(set.id) && !passing.has(set.id))];
+  const mineShown = ordered.filter((set) => set.canManage);
+  const houseShown = ordered.filter((set) => !set.canManage);
+  const countOf = (count, total) => (filtering ? `${count} of ${total}` : String(total));
   /*
     THE NO-MATCH LINE NAMES THE SEARCH AND OFFERS THE WAY BACK. "You have no
     sets" would be a lie about a host whose sets are one Esc away; the empty
     state above is for a host who has made none, and only that.
   */
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  const nothingFound = Boolean(needle) && sets.length > 0 && mineShown.length === 0 && houseShown.length === 0;
-  const noMatch = (sentence, testId) => (
+  const nothingFound = filtering && sets.length > 0 && mineShown.length === 0 && houseShown.length === 0;
+  /*
+    THE WAY BACK, NAMED FOR WHAT IT UNDOES. With several filters in force the
+    whole-list message also carries the console's drop-exits (computeDrops):
+    each filter that, removed alone, brings rows back, with how many.
+  */
+  const noMatch = (sentence, testId, withDrops = false) => (
     <div className="qsets-nomatch" data-testid={testId}>
-      <p>{sentence}</p>
-      <Button variant="tertiary" size="sm" className="qsets-clear" onClick={() => setSearch('')}>
-        Clear the search
+      <p>{sentence}{withDrops && !onlySearch && drops.length ? ' Removing any one of these gets you results:' : ''}</p>
+      {withDrops && !onlySearch && drops.length > 0 && (
+        <div className="qsets-drops">
+          {drops.map((drop) => (
+            <button key={drop.key} type="button" className="qsets-drop" onClick={() => controls.clearOne(drop.key)}>
+              <Icon name="X" weight="bold" size={12} color="currentColor" />
+              {drop.label} <em>— {drop.count} set{drop.count === 1 ? '' : 's'}</em>
+            </button>
+          ))}
+        </div>
+      )}
+      <Button variant="tertiary" size="sm" className="qsets-clear" onClick={clearAll}>
+        {onlySearch ? 'Clear the search' : 'Clear all filters'}
       </Button>
     </div>
   );
@@ -779,40 +812,39 @@ export default function HostQuestionSetsDialog({
 
         {sets.length > 0 && (
           /*
-            ONE BOX OVER BOTH LISTS. A host looking for "the retro one" does not
+            ONE BAR OVER BOTH LISTS — the console's own (SetFilterBar), type
+            first. A host looking for "the retro one" does not
             know, and should not need to know, whether it is theirs or the
             library's. Esc empties the box and stops there: the Modal answers Esc
             at the document, so stopping it here is what keeps a host who only
             meant to clear the search from losing the dialog. An empty box lets
             Esc through, and it closes the dialog as it does anywhere else.
           */
-          <div className="qsets-filters">
-            <label className="qsets-search">
-              <Icon name="MagnifyingGlass" size={16} color="var(--muted)" />
-              <input
-                type="search"
-                className="qsets-input"
-                value={search}
-                placeholder="Search name, description, tags"
-                aria-label="Search your question sets and the library"
-                data-testid="hqs-search"
-                onChange={(event) => setSearch(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape' && search) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setSearch('');
-                  }
-                }}
-              />
-            </label>
-          </div>
+          <SetFilterBar
+            sets={sets}
+            controls={controls}
+            search={{
+              ariaLabel: 'Search your question sets and the library',
+              testId: 'hqs-search',
+              onKeyDown: (event) => {
+                if (event.key === 'Escape' && filters.search) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setFilters({ search: '' });
+                }
+              },
+            }}
+          />
         )}
 
         {nothingFound && noMatch(
-          `No set matches “${needle}”. Searched the name, description and tags of your `
-            + `${plural(mine.length, 'set', 'sets')} and ${plural(theirs, 'other', 'others')}.`,
-          'hqs-nomatch'
+          onlySearch
+            ? `No set matches “${needle}”. Searched the name, description and tags of your `
+              + `${plural(mine.length, 'set', 'sets')} and ${plural(theirs, 'other', 'others')}.`
+            : `No set matches ${narrowedBy}, across your `
+              + `${plural(mine.length, 'set', 'sets')} and ${plural(theirs, 'other', 'others')}.`,
+          'hqs-nomatch',
+          true
         )}
 
         {!loading && !error && mine.length === 0 && (
@@ -840,8 +872,8 @@ export default function HostQuestionSetsDialog({
 
         {mine.length > 0 && mineShown.length === 0 && !nothingFound && noMatch(
           mine.length === 1
-            ? `Your one set does not match “${needle}”.`
-            : `None of your ${mine.length} sets match “${needle}”.`,
+            ? `Your one set does not match ${narrowedBy}.`
+            : `None of your ${mine.length} sets match ${narrowedBy}.`,
           'hqs-mine-nomatch'
         )}
 
@@ -1108,8 +1140,8 @@ export default function HostQuestionSetsDialog({
             </p>
             {houseShown.length === 0 && noMatch(
               theirs === 1
-                ? `The one other set does not match “${needle}”.`
-                : `None of the ${theirs} other sets match “${needle}”.`,
+                ? `The one other set does not match ${narrowedBy}.`
+                : `None of the ${theirs} other sets match ${narrowedBy}.`,
               'hqs-house-nomatch'
             )}
             {houseShown.length > 0 && (

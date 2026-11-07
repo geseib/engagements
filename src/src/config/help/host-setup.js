@@ -503,6 +503,11 @@ const gameSetup = {
       Search (23 Oct 2026): one box over both lists, headings "Your sets" and
       "Everyone else's sets" with "N of M"; no match names the words and offers
       Clear the search; Esc clears before it closes.
+      Filters (7 Nov 2026): the console's bar (SetFilterBar.jsx) over both
+      lists: type, topic, status, owner, updated, sort, then "Browse topics
+      and tags"; a list a filter empties names "this filter" / "these N
+      filters" and offers Clear all filters; nothing anywhere adds the
+      one-click drops with counts.
     */
     {
       id: 'choosing-question-set',
@@ -515,7 +520,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The search box above the lists narrows both to sets with your words in the name, description or tags, and each list says how many of its sets match; Esc or **Clear the search** empties it.',
+          text: 'The bar above the lists is the same as in the console\'s Question sets: a search (name, description or tags), then filters by type, topic, status, owner (Yours, Team, Engage, Public) and when it was updated, and a sort. **Browse topics and tags** shows every topic and tag in use, with counts. Each list says how many of its sets match. Esc empties the search; **Clear the search** or **Clear all filters** brings everything back, and when nothing matches at all, each filter that is hiding sets is offered on its own with how many it would bring back.',
         },
         {
           t: 'list',

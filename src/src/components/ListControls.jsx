@@ -18,8 +18,10 @@ import Icon from './Icon';
  *
  * WHAT IS DECLARED VIA PROPS, so the markup cannot drift between screens:
  *
- *   - `search`:  `{ value, onChange(text), ariaLabel, placeholder }`, or
- *                omitted for a bar with no search box;
+ *   - `search`:  `{ value, onChange(text), ariaLabel, placeholder }`, plus
+ *                optional `onKeyDown` and `testId` (the host's set dialog
+ *                clears on Esc before the Modal closes), or omitted for a bar
+ *                with no search box;
  *   - `selects`: `[{ key, value, onChange(value), ariaLabel,
  *                options: [{ value, label }] }]`, rendered in array order —
  *                a filter axis and a sort select are the same control here,
@@ -51,6 +53,8 @@ export default function ListControls({ scope, search, selects = [], count, child
             placeholder={search.placeholder}
             value={search.value}
             onChange={(event) => search.onChange(event.target.value)}
+            onKeyDown={search.onKeyDown}
+            data-testid={search.testId}
           />
         </div>
       )}

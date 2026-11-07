@@ -790,7 +790,7 @@ describe('create', () => {
     fireEvent.click(screen.getByRole('button', { name: /new question set/i }));
 
     // Still the real form: the type control and the CSV upload are the point.
-    expect(screen.getByLabelText(/engagement type/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^engagement type$/i)).toBeTruthy();
     expect(screen.getByLabelText(/csv file/i)).toBeTruthy();
 
     /*
@@ -907,7 +907,7 @@ describe('create', () => {
     // decides how the importer reads their columns.
     await openDialog({ engagementType: 'trivia' });
     fireEvent.click(screen.getByRole('button', { name: /new question set/i }));
-    expect(screen.getByLabelText(/engagement type/i).value).toBe('trivia');
+    expect(screen.getByLabelText(/^engagement type$/i).value).toBe('trivia');
   });
 });
 
@@ -1502,5 +1502,82 @@ describe('one search box narrows both lists', () => {
     type('trivia');
     expect(screen.getByLabelText('Name')).toHaveValue('Ivy Retro');
     expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+  });
+});
+
+/* --------------------------------------------------------------- filters --- */
+
+/*
+  THE CONSOLE'S FILTERS, IN THE CONSOLE'S ORDER. The owner, 7 Nov 2026: "why
+  in the host home page question set explorer do they not feature the same
+  filter treatments?" — this dialog had the search box and nothing else. Both
+  now render components/SetFilterBar.jsx; questionSetsPanel.test.jsx pins the
+  same order on the console side, so a reorder on one side alone fails there.
+*/
+describe('the same filter bar as the console', () => {
+  const filter = (name) => screen.getByRole('combobox', { name });
+
+  test('type first, then topic, status, owner, date and sort — and the shelf browse', async () => {
+    // rejects: the host view keeping a search-only bar, or a filter order of its own.
+    await openDialog();
+    const labels = screen.getAllByRole('combobox').map((el) => el.getAttribute('aria-label'));
+    expect(labels).toEqual([
+      'Filter by engagement type',
+      'Filter by topic',
+      'Filter by status',
+      'Filter by owner',
+      'Filter by when it was updated',
+      'Sort order',
+    ]);
+    expect(screen.getByRole('button', { name: /browse topics and tags/i })).toBeInTheDocument();
+  });
+
+  test('the type filter narrows both lists, and the counts say "N of M"', async () => {
+    await openDialog();
+    fireEvent.change(filter('Filter by engagement type'), { target: { value: 'trivia' } });
+    expect(screen.queryByText('Ivy Retro')).toBeNull();
+    expect(screen.getByText('Raj Quiz')).toBeInTheDocument();
+    expect(screen.getByText('80s Trivia')).toBeInTheDocument();
+    expect(screen.getByTestId('hqs-mine-count')).toHaveTextContent('0 of 1');
+    expect(screen.getByTestId('hqs-house-count')).toHaveTextContent('2 of 2');
+    // A list emptied by a filter names the filter, not a search nobody typed.
+    const none = screen.getByTestId('hqs-mine-nomatch');
+    expect(none).toHaveTextContent('Your one set does not match this filter.');
+    fireEvent.click(within(none).getByRole('button', { name: 'Clear all filters' }));
+    expect(screen.getByText('Ivy Retro')).toBeInTheDocument();
+    expect(filter('Filter by engagement type')).toHaveValue('all');
+  });
+
+  test('nothing anywhere: the console\'s one-click exits, each with its count', async () => {
+    // rejects: a dead end with only "Clear the search" when a filter is what emptied it.
+    await openDialog();
+    fireEvent.change(filter('Filter by engagement type'), { target: { value: 'trivia' } });
+    fireEvent.change(screen.getByTestId('hqs-search'), { target: { value: 'retro' } });
+    const none = screen.getByTestId('hqs-nomatch');
+    expect(none).toHaveTextContent('No set matches these 2 filters, across your 1 set and 2 others.');
+    const exits = within(none).getAllByRole('button').map((b) => b.textContent);
+    expect(exits).toEqual([
+      // Each count is what the list shows with THAT one dropped, the other kept.
+      'Search “retro” — 2 sets',
+      'Type: Trivia — 1 set',
+      'Clear all filters',
+    ]);
+    fireEvent.click(within(none).getByRole('button', { name: /^Type: Trivia/ }));
+    expect(screen.getByText('Ivy Retro')).toBeInTheDocument();
+    expect(screen.getByTestId('hqs-search')).toHaveValue('retro');
+  });
+
+  test('the owner filter reads the same chip the rows carry', async () => {
+    await openDialog({}, {
+      sets: [
+        { ...HOST_VIEW[0], scope: 'org', mine: true },
+        { ...HOST_VIEW[1], scope: 'org', mine: false },
+        HOST_VIEW[2],
+      ],
+    });
+    fireEvent.change(filter('Filter by owner'), { target: { value: 'engage' } });
+    expect(screen.getByText('80s Trivia')).toBeInTheDocument();
+    expect(screen.queryByText('Raj Quiz')).toBeNull();
+    expect(screen.queryByText('Ivy Retro')).toBeNull();
   });
 });
