@@ -1,0 +1,253 @@
+[
+ {
+  "question": 1,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/saluting-hat.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/saluting-hat.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 277421,
+  "ok": true
+ },
+ {
+  "question": 2,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/drowning-hat.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/drowning-hat.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 75464,
+  "ok": true
+ },
+ {
+  "question": 3,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/sunshade-hat.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/sunshade-hat.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 228809,
+  "ok": true
+ },
+ {
+  "question": 4,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/breathing-hood.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/breathing-hood.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 148181,
+  "ok": true
+ },
+ {
+  "question": 5,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/cabinet-bed.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/cabinet-bed.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 150379,
+  "ok": true
+ },
+ {
+  "question": 6,
+  "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Patente_sacabolas_de_helado.jpg?width=900",
+  "redirectChain": [
+   "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Patente_sacabolas_de_helado.jpg&width=900",
+   "https://upload.wikimedia.org/wikipedia/commons/2/2a/Patente_sacabolas_de_helado.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail_unscaled"
+  ],
+  "redirect": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Patente_sacabolas_de_helado.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail_unscaled",
+  "checked": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Patente_sacabolas_de_helado.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 78968,
+  "ok": true
+ },
+ {
+  "question": 7,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/rocking-fan.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/rocking-fan.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 77638,
+  "ok": true
+ },
+ {
+  "question": 8,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/signal-chair.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/signal-chair.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 260486,
+  "ok": true
+ },
+ {
+  "question": 9,
+  "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Lincoln_patent_drawings_(cropped)_Figure_1.jpg?width=900",
+  "redirectChain": [
+   "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Lincoln_patent_drawings_(cropped)_Figure_1.jpg&width=900",
+   "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/Lincoln_patent_drawings_%28cropped%29_Figure_1.jpg/960px-Lincoln_patent_drawings_%28cropped%29_Figure_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail"
+  ],
+  "redirect": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/Lincoln_patent_drawings_%28cropped%29_Figure_1.jpg/960px-Lincoln_patent_drawings_%28cropped%29_Figure_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
+  "checked": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Lincoln_patent_drawings_%28cropped%29_Figure_1.jpg/960px-Lincoln_patent_drawings_%28cropped%29_Figure_1.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 69797,
+  "ok": true
+ },
+ {
+  "question": 10,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/steam-man.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/steam-man.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 35583,
+  "ok": true
+ },
+ {
+  "question": 11,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/loop-bicycle.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/loop-bicycle.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 182423,
+  "ok": true
+ },
+ {
+  "question": 12,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/window-wiper.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/window-wiper.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 328661,
+  "ok": true
+ },
+ {
+  "question": 13,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/chicken-specs.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/chicken-specs.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 142784,
+  "ok": true
+ },
+ {
+  "question": 14,
+  "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Patent_DE204721,_page_3.png?width=900",
+  "redirectChain": [
+   "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Patent_DE204721,_page_3.png&width=900",
+   "https://upload.wikimedia.org/wikipedia/commons/9/90/Patent_DE204721%2C_page_3.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail_unscaled"
+  ],
+  "redirect": "https://upload.wikimedia.org/wikipedia/commons/9/90/Patent_DE204721%2C_page_3.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail_unscaled",
+  "checked": "https://upload.wikimedia.org/wikipedia/commons/9/90/Patent_DE204721%2C_page_3.png",
+  "status": 429,
+  "contentType": null,
+  "bytes": 0,
+  "ok": false
+ },
+ {
+  "question": 15,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/cow-tail.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/cow-tail.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 177130,
+  "ok": true
+ },
+ {
+  "question": 16,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/dog-power.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/dog-power.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 156568,
+  "ok": true
+ },
+ {
+  "question": 17,
+  "image": "https://commons.wikimedia.org/wiki/Special:FilePath/United_States_patent_748626_-_Fig_1.png?width=900",
+  "redirectChain": [
+   "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/United_States_patent_748626_-_Fig_1.png&width=900",
+   "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/United_States_patent_748626_-_Fig_1.png/960px-United_States_patent_748626_-_Fig_1.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail"
+  ],
+  "redirect": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/United_States_patent_748626_-_Fig_1.png/960px-United_States_patent_748626_-_Fig_1.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
+  "checked": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/United_States_patent_748626_-_Fig_1.png/960px-United_States_patent_748626_-_Fig_1.png",
+  "status": 200,
+  "contentType": "image/png",
+  "bytes": 208163,
+  "ok": true
+ },
+ {
+  "question": 18,
+  "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Tee_patent_(cropped).png?width=900",
+  "redirectChain": [
+   "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Tee_patent_(cropped).png&width=900",
+   "https://upload.wikimedia.org/wikipedia/commons/0/0b/Tee_patent_%28cropped%29.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail_unscaled"
+  ],
+  "redirect": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Tee_patent_%28cropped%29.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail_unscaled",
+  "checked": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Tee_patent_%28cropped%29.png",
+  "status": 429,
+  "contentType": null,
+  "bytes": 0,
+  "ok": false
+ },
+ {
+  "question": 19,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/creeping-doll.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/creeping-doll.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 167784,
+  "ok": true
+ },
+ {
+  "question": 20,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/whirligig.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/whirligig.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 101301,
+  "ok": true
+ },
+ {
+  "question": 21,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/dimple-maker.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/dimple-maker.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 116602,
+  "ok": true
+ },
+ {
+  "question": 22,
+  "image": "https://commons.wikimedia.org/wiki/Special:FilePath/US1448235_Portable_Baby_Cage_Fig_1.png?width=900",
+  "redirectChain": [
+   "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/US1448235_Portable_Baby_Cage_Fig_1.png&width=900",
+   "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e5/US1448235_Portable_Baby_Cage_Fig_1.png/960px-US1448235_Portable_Baby_Cage_Fig_1.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail"
+  ],
+  "redirect": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e5/US1448235_Portable_Baby_Cage_Fig_1.png/960px-US1448235_Portable_Baby_Cage_Fig_1.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
+  "checked": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/US1448235_Portable_Baby_Cage_Fig_1.png/960px-US1448235_Portable_Baby_Cage_Fig_1.png",
+  "status": 200,
+  "contentType": "image/png",
+  "bytes": 217554,
+  "ok": true
+ },
+ {
+  "question": 23,
+  "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_(cropped).png?width=900",
+  "redirectChain": [
+   "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_(cropped).png&width=900",
+   "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_%28cropped%29.png/960px-Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_%28cropped%29.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail"
+  ],
+  "redirect": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_%28cropped%29.png/960px-Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_%28cropped%29.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
+  "checked": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_%28cropped%29.png/960px-Gun-Powered_Mousetrap_Drawing_-_Patent_Number_269766_%28cropped%29.png",
+  "status": 200,
+  "contentType": "image/png",
+  "bytes": 455225,
+  "ok": true
+ },
+ {
+  "question": 24,
+  "image": "https://engage.dev.seibtribe.us/sets/whatisthisthing/vote-counter.jpg",
+  "checked": "https://engage.dev.seibtribe.us/sets/whatisthisthing/vote-counter.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 184220,
+  "ok": true
+ }
+]
