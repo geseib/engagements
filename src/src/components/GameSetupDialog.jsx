@@ -1180,6 +1180,7 @@ export default function GameSetupDialog({
         personas={personas}
         setPromptId={chosenSetPromptId}
         namesDefault={chosenSet ? chosenSet.namesDefault : ''}
+        bluffDefault={Boolean(chosenSet && chosenSet.bluffRound === true)}
         shuffleLocked={isEdit}
         questionCount={chosenCount}
         boundBySize={!isEdit}

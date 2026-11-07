@@ -203,7 +203,15 @@ exports.handler = async (event) => {
       // admin/ai-generate-trivia.js store the lower-case spelling, and those
       // leaked the explanation to players during ASK.
       category: questionItem.Category,
-      school: questionItem.School || '',
+      /*
+        THE CREDIT IS A CLUE UNTIL THE REVEAL (bluff-round QA, 2026-11-07).
+        `School` is the artist and date on an art set, the inventor and year
+        on a patent set: enough to look the real answer up mid-round. No live
+        screen draws it (only the past-round report does, after RESULTS), so
+        every caller gets '' until the round is in RESULTS — `role` is the
+        client's own word, so the host door is no exception.
+      */
+      school: gameStateValue.startsWith('RESULTS#') ? (questionItem.School || '') : '',
       image: questionItem.Image || '', // Optional artwork URL ("Art Title" rounds)
       customInstructions: questionItem.CustomInstructions || '',
       lessonNumber: lessonNumber,

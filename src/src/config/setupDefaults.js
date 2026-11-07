@@ -59,6 +59,10 @@ export function advancedSummary({
   promptChoices = [],
   setPromptWillBeUsed = false,
   namesStated = false,
+  // THE BLUFF ROUND (docs/design/bluff-round/README.md): undefined where the
+  // dialog offers none; `bluffDefault` is the set's own setting.
+  bluffRound,
+  bluffDefault = false,
 } = {}) {
   const type = normalizeGameType(gameType);
   const isSurvey = type === 'survey';
@@ -81,6 +85,13 @@ export function advancedSummary({
   } else if (anonymityApplies(type)) {
     if (anonymousResponses === false) changed.push('answers named from the start');
     else { room.push('answers anonymous until voting closes'); responses.push('answers anonymous until voting closes'); }
+  }
+
+  // ── The bluff round: named whenever it is on, and as a change when the
+  // host moved it off the set's own setting.
+  if (typeof bluffRound === 'boolean') {
+    if (bluffRound !== Boolean(bluffDefault)) changed.push(bluffRound ? 'bluff round on' : 'bluff round off');
+    else if (bluffRound) room.push('bluff round on');
   }
 
   // ── Questions

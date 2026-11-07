@@ -13,38 +13,46 @@ import { bluffStageLine, bluffRevealLines, BLUFF_WORDS } from '../../config/bluf
  *
  *   phase     'ASK' | 'VOTE' | 'RESULTS'
  *   question  the round's question payload (carries the public `bluff`)
- *   gameId, round, apiBase   for the results read at RESULTS
+ *   reveal    get-results' `bluff` block for this round (useBluffReveal)
  */
-export default function BluffLine({ phase, question, gameId, round, apiBase }) {
-  const [reveal, setReveal] = useState(null);
-  const bluffOn = Boolean(question && question.bluff && question.bluff.active);
-
-  useEffect(() => {
-    let live = true;
-    setReveal(null);
-    if (phase !== 'RESULTS' || !bluffOn || !gameId || !round || typeof fetch !== 'function') return undefined;
-    fetch(`${apiBase || ''}games/get-results`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId, questionNumber: round }),
-    })
-      .then((res) => (res && res.ok ? res.json() : null))
-      .then((data) => { if (live && data && data.bluff) setReveal(data.bluff); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [phase, bluffOn, gameId, round, apiBase]);
-
+export default function BluffLine({ phase, question, reveal }) {
   if (phase === 'RESULTS') {
     const lines = bluffRevealLines(reveal);
     if (!lines) return null;
     return (
       <p className="qdetail" data-testid="stage-bluff">
         <b>{BLUFF_WORDS.revealHeading}:</b> {lines.realAnswer}
-        {reveal.realBallot ? ` (response ${reveal.realBallot})` : ''}
+        {reveal.realBallot ? ` (${BLUFF_WORDS.ballotNumber(reveal.realBallot).toLowerCase()})` : ''}
       </p>
     );
   }
   const line = bluffStageLine(question);
   if (!line) return null;
   return <p className="qdetail" data-testid="stage-bluff">{line}</p>;
+}
+
+/**
+ * This round's reveal, once it is in RESULTS and the round bluffed: the public
+ * get-results read (which only reports once the room is on that round's
+ * results). null otherwise. One read per round.
+ */
+export function useBluffReveal({ inResults, question, gameId, round, apiBase }) {
+  const [reveal, setReveal] = useState(null);
+  const bluffOn = Boolean(question && question.bluff && question.bluff.active);
+  useEffect(() => {
+    let live = true;
+    setReveal(null);
+    if (!inResults || !bluffOn || !gameId || !round || typeof fetch !== 'function') return undefined;
+    Promise.resolve()
+      .then(() => fetch(`${apiBase || ''}games/get-results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId, questionNumber: round }),
+      }))
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((data) => { if (live && data && data.bluff && data.bluff.realAnswer) setReveal(data.bluff); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [inResults, bluffOn, gameId, round, apiBase]);
+  return reveal;
 }

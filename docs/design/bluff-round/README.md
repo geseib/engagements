@@ -92,6 +92,26 @@ who fooled whom and the points. `{bluffRound}` places it in a template that
 wants it elsewhere. The author tally Workie is checked against is the bluff
 points, not the ranked points.
 
+## After the dev walkthrough (2026-11-07)
+
+- **The room's window (`/present`)** says "Bluff round: one player has the real
+  answer" while the room answers and votes, and at results shows the real
+  answer and its number on the ballot. Its tally names nobody and shows no
+  points in a bluff round (an answer's points are not a player's), labels the
+  real one "The real answer" and the top made-up one "Fooled the most", and
+  drops the "Talk about it" line. The one-screen stage does the same.
+- **The host's console on two screens** shows the same line under the room
+  tile, and its results list gives each name the points that PLAYER scored
+  (get-results `bluff.points`, spotting included).
+- **The phone's "This round"** is the player's own bluff points, not their
+  answer's.
+- **`School` is withheld until RESULTS** in `get-question` and `/state`, for
+  every caller: on these sets it is the artist and date, or the inventor and
+  year, enough to look the real answer up. No live screen drew it.
+- A one-pick ballot says "Your pick", "Send my vote", "Your vote is in.";
+  "Your title is in." only where the round noun asks for a title; the Advanced
+  line says "bluff round on".
+
 ## Deferred
 
 - The per-question editor has no RealAnswer field yet; "Real answer: …" at the

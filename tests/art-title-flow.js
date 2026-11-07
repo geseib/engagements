@@ -219,8 +219,10 @@ function check(label, fn) {
     assert.ok(cq.image && cq.image.startsWith('http'), `image was ${JSON.stringify(cq.image)}`));
   check('image matches what was uploaded', () =>
     assert.strictEqual(cq.image, artQ.Image));
-  check('school (artist credit) also carried', () =>
-    assert.strictEqual(cq.school, artQ.School));
+  // The artist and date are a clue to the real title (bluff-round QA,
+  // 2026-11-07): withheld until RESULTS, then carried.
+  check('school (artist credit) is withheld while the room answers', () =>
+    assert.strictEqual(cq.school, ''));
 
   // The reveal must not reach the room before RESULTS. It is not in
   // get-game-state's currentQuestionData projection at all, which is the
@@ -278,6 +280,18 @@ function check(label, fn) {
       assert.strictEqual(sRes.statusCode, 200, `got ${sRes.statusCode}: ${sRes.body}`);
       assert.ok(!leaks(sRes.body), 'the reveal leaked to the client');
     });
+    // The artist credit is a clue to the real title: only at RESULTS.
+    check(`get-game-state @ ${state}: the artist credit ${state.startsWith('RESULTS') ? 'is carried' : 'is withheld'}`, () => {
+      const cqs = JSON.parse(sRes.body).currentQuestionData || {};
+      assert.strictEqual(cqs.school, state.startsWith('RESULTS') ? artQ.School : '');
+      if (!state.startsWith('RESULTS')) assert.ok(!sRes.body.includes(artQ.School), 'the credit is elsewhere in the payload');
+    });
+    for (const role of ['player', 'host']) {
+      const qRes = await questionHandler({ pathParameters: { gameId: '1234' }, queryStringParameters: { role } });
+      check(`get-question, ${role} @ ${state}: the artist credit ${state.startsWith('RESULTS') ? 'is carried' : 'is withheld'}`, () => {
+        assert.strictEqual(JSON.parse(qRes.body).school, state.startsWith('RESULTS') ? artQ.School : '');
+      });
+    }
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

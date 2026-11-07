@@ -254,6 +254,9 @@ export default function SessionOptions({
      the closed line is the full sentence, as before. */
   briefSummary = false,
   namesStated = false,
+  /* The set's own bluff-round setting, so the Advanced line can say when the
+     host moved off it (docs/design/bluff-round/README.md). */
+  bluffDefault = false,
 }) {
   const isSurvey = normalizeGameType(gameType) === 'survey';
   const anonymous = value.anonymousResponses !== false;
@@ -345,6 +348,8 @@ export default function SessionOptions({
     promptChoices: promptList,
     setPromptWillBeUsed,
     namesStated,
+    ...(gameType === 'call-and-answer' && typeof value.bluffRound === 'boolean'
+      ? { bluffRound: value.bluffRound, bluffDefault } : {}),
   });
 
   return (

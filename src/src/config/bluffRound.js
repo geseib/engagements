@@ -26,6 +26,13 @@ export const BLUFF_WORDS = Object.freeze({
   setOption: 'Bluff round',
   setOptionHelp: 'Sessions on this set start with the bluff round on (the host can switch it off). A question bluffs when it has a real answer: a RealAnswer column, or a reveal that starts "Real answer:" or "Real title:".',
   revealHeading: 'The real answer',
+  realLabel: 'The real answer',
+  pickLabel: 'Your pick',
+  pickThis: 'Pick this one',
+  sendVote: 'Send my vote',
+  voteIn: 'Your vote is in.',
+  fooledLabel: 'Fooled the most',
+  ballotNumber: (n) => `Response ${n} on the ballot`,
 });
 
 /** Is a bluff in play on this round? */
@@ -83,4 +90,20 @@ export function bluffRevealLines(reveal) {
       : 'Nobody was fooled.',
     spotted: spotters.length ? `Spotted it: ${spotters.join(', ')}.` : 'Nobody spotted it.',
   };
+}
+
+/**
+ * A player's own points for a bluff round, from get-results' `bluff.points`
+ * (every part: votes their answer drew and the point for spotting the real
+ * one), or null when the round is not a scored bluff round.
+ */
+export function bluffRoundPoints(results, playerName) {
+  const points = results && results.bluff && results.bluff.points;
+  if (!points || typeof points !== 'object' || !playerName) return null;
+  return Number(points[playerName]) || 0;
+}
+
+/** Is this a played bluff round's result (a reveal with a real answer)? */
+export function isBluffResult(results) {
+  return Boolean(results && results.bluff && results.bluff.realAnswer);
 }

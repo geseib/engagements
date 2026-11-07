@@ -59,6 +59,7 @@ import { timerOnPhase } from './config/roundTimer';
 import { noteServerNow } from './utils/serverClock';
 import {
   BLUFF_WORDS, isBluffRound, bluffHolderCard, ballotSize, bluffIdentityQuery, bluffRevealLines,
+  bluffRoundPoints,
 } from './config/bluffRound';
 
 /** Past this many characters a headline is a passage (PlayerSurface.css `.plr-q--long`). */
@@ -2692,6 +2693,11 @@ function PlayerPage({ event = null } = {}) {
               } else {
                 console.log(`📊 PLAYER: No trivia round score found for ${playerName} in answers`);
               }
+            } else if (bluffRoundPoints(resultsToUse, playerName) !== null) {
+              // A BLUFF ROUND: the player's own points, every part of them —
+              // what their answer drew AND the point for spotting the real one
+              // (config/bluffRound.js). An answer's tally is not a player's.
+              roundScore = bluffRoundPoints(resultsToUse, playerName);
             } else if (resultsToUse.voteTallies) {
               // Call-and-answer format: find player in voteTallies
               const playerResult = Object.values(resultsToUse.voteTallies).find(tally => 
@@ -3483,11 +3489,11 @@ function PlayerPage({ event = null } = {}) {
                       className="plr-rk"
                       onClick={() => handleVoteClick(idx, position)}
                       aria-pressed={isSelected}
-                      aria-label={`Vote this answer ${rankLabel(rank)}`}
-                      title={rankLabel(rank)}
+                      aria-label={singlePick ? BLUFF_WORDS.pickThis : `Vote this answer ${rankLabel(rank)}`}
+                      title={singlePick ? BLUFF_WORDS.pickThis : rankLabel(rank)}
                     >
-                      <RankIcon rank={rank} size={18} />{' '}
-                      {rankLabel(rank)}
+                      {singlePick ? null : <><RankIcon rank={rank} size={18} />{' '}</>}
+                      {singlePick ? BLUFF_WORDS.pickThis : rankLabel(rank)}
                     </button>
                   );
                 })}
@@ -3512,7 +3518,7 @@ function PlayerPage({ event = null } = {}) {
         const filled = idx !== null && Number.isFinite(idx) && answers[idx];
         return (
           <div key={position} className={`plr-slot${filled ? ' plr-slot--filled' : ''}`}>
-            <span className="plr-sk">{rankLabel(VOTE_POSITIONS[position])}</span>
+            <span className="plr-sk">{slotLabel(position)}</span>
             <span className="plr-sv">
               {filled ? displayLabelFor(answers[idx], idx) : '—'}
             </span>
@@ -3941,6 +3947,10 @@ function PlayerPage({ event = null } = {}) {
   const bluffVote = isBluffRound(currentQuestion);
   const ballotOwnIdx = bluffVote ? ownAnswerIndex(answers, mySubmittedAnswer) : null;
   const requiredVotes = ballotSize(answers.length, bluffVote, ballotOwnIdx);
+  // A ONE-PICK BALLOT (a bluff round, or a round of one other answer) says
+  // "your pick" and "my vote", never "1st place" (QA 2026-11-07).
+  const singlePick = requiredVotes === 1;
+  const slotLabel = (slot) => (singlePick ? BLUFF_WORDS.pickLabel : rankLabel(VOTE_POSITIONS[slot]));
   const filledVotes = Object.values(votes).filter((v) => v !== '').length;
   const instruction = getPlayerInstructionText(customInstruction, currentQuestion, gameType);
 
@@ -4721,7 +4731,9 @@ function PlayerPage({ event = null } = {}) {
               is always "Sent"; the heading is always "Your <thing> is in." */}
           <p className="plr-lab plr-lab--good">{SENT}</p>
           <h1 className="plr-h1 plr-h1--primary">
-            {receiptFor(gameType, { artwork: gameType === 'call-and-answer' && Boolean(currentQuestion?.image) })}
+            {/* "Your title is in." only where a title was asked for (an art
+                set's Artwork); a picture of anything else is an answer. */}
+            {receiptFor(gameType, { artwork: gameType === 'call-and-answer' && Boolean(currentQuestion?.image) && /artwork|painting|title/i.test(String(roundNoun || '')) })}
           </h1>
 
           {submittedWords ? (
@@ -4781,14 +4793,14 @@ function PlayerPage({ event = null } = {}) {
       body = (
         <>
           <p className="plr-lab plr-lab--good">{SENT}</p>
-          <h1 className="plr-h1 plr-h1--primary">{RECEIPT.votes}</h1>
+          <h1 className="plr-h1 plr-h1--primary">{singlePick ? BLUFF_WORDS.voteIn : RECEIPT.votes}</h1>
 
           {ranked.length > 0 && (
             <div className="plr-card plr-card--good">
               <p className="plr-lab">{RECEIPT.ballotCard}</p>
               {ranked.map(({ slot, idx }) => (
                 <div key={slot} className="plr-stat">
-                  <span className="plr-k">{rankLabel(VOTE_POSITIONS[slot])}</span>
+                  <span className="plr-k">{slotLabel(slot)}</span>
                   <span className="plr-v">{displayLabelFor(answers[idx], idx)}</span>
                 </div>
               ))}
@@ -4912,8 +4924,8 @@ function PlayerPage({ event = null } = {}) {
               {['first', 'second', 'third'].slice(0, requiredVotes).map((slot) => (
                 <div key={slot} className="plr-vpos">
                   <label className="plr-lab" htmlFor={`plr-rank-${slot}`}>
-                    <RankIcon rank={VOTE_POSITIONS[slot]} size={18} />{' '}
-                    {rankLabel(VOTE_POSITIONS[slot])}
+                    {singlePick ? null : <><RankIcon rank={VOTE_POSITIONS[slot]} size={18} />{' '}</>}
+                    {slotLabel(slot)}
                   </label>
                   <select
                     id={`plr-rank-${slot}`}
@@ -5024,7 +5036,7 @@ function PlayerPage({ event = null } = {}) {
           >
             {filledVotes < requiredVotes
               ? SEND.pickMore(requiredVotes - filledVotes)
-              : SEND.votes}
+              : singlePick ? BLUFF_WORDS.sendVote : SEND.votes}
           </Button>
         </>
       );

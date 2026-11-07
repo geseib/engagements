@@ -23,6 +23,7 @@ import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
 import RoomTimeLine from '../components/RoomTimeLine';
 import TallyRow from '../components/ui/TallyRow';
+import { BLUFF_WORDS } from '../config/bluffRound';
 import PollBoard from '../components/stage/PollBoard';
 import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWords';
 import {
@@ -202,6 +203,33 @@ export function RoomQuestion({ model }) {
   );
 }
 
+/**
+ * A BLUFF ROUND'S LINE (docs/design/bluff-round/README.md): a bluff is in play,
+ * or why not, and never who. Dressed as the talk line (eyebrow + words), so it
+ * is the room's furniture and needs no style of its own.
+ */
+export function BluffNote({ line }) {
+  if (!line) return null;
+  return (
+    <p className="present-talk" data-testid="present-bluff">
+      <span className="present-talk-ey">{BLUFF_WORDS.eyebrow}</span>
+      {line}
+    </p>
+  );
+}
+
+/** The reveal at results: the real answer and its number on the ballot. No name. */
+export function BluffReveal({ reveal }) {
+  if (!reveal || !reveal.realAnswer) return null;
+  return (
+    <p className="present-talk" data-testid="present-bluff-reveal">
+      <span className="present-talk-ey">{BLUFF_WORDS.revealHeading}</span>
+      {reveal.realAnswer}
+      {reveal.realBallot ? ` · ${BLUFF_WORDS.ballotNumber(reveal.realBallot)}` : ''}
+    </p>
+  );
+}
+
 /** How far above the ladder a question-up moment may grow (the stage's ASK: 1.35). */
 export const PRESENT_GROW = '1.3';
 
@@ -211,6 +239,7 @@ export function PresentAnswering({ model }) {
       <Top model={model} right="Answering" />
       <div className="present-main" data-grow={PRESENT_GROW}>
         <RoomQuestion model={model} />
+        <BluffNote line={model.bluffLine} />
       </div>
       <CountsFoot counts={model.counts} time={model.time} />
     </div>
@@ -245,6 +274,7 @@ export function PresentVoting({ model }) {
               </li>
             ))}
           </ol>
+          <BluffNote line={model.bluffLine} />
         </div>
         <div className="present-foot is-start">
           <Meter done={model.counts.done} of={model.counts.of} />
@@ -263,6 +293,7 @@ export function PresentVoting({ model }) {
         {shows(rc, 'title') ? <Heading level={1} size="primary" balance className="present-h2" {...rcAttrs(rc, 'title')}>{model.title}</Heading> : null}
         <TaskLine task={model.task} rc={rc} />
         <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(rc, 'cue')}>{model.lead}</p>
+        <BluffNote line={model.bluffLine} />
       </div>
       <CountsFoot counts={model.counts} time={model.time} />
     </div>
@@ -301,7 +332,7 @@ export function PresentTally({ model }) {
                 rank={row.top ? null : row.n}
                 label={row.top ? (
                   <>
-                    <span className="present-pick-ey">{"The room's pick"}</span>
+                    <span className="present-pick-ey">{row.pickLabel || "The room's pick"}</span>
                     <span className="present-idea">{row.idea}</span>
                   </>
                 ) : <span className="present-idea">{row.idea}</span>}
@@ -317,6 +348,7 @@ export function PresentTally({ model }) {
         <p className="present-more" data-more={model.more || 0} hidden={!(model.more > 0)}>
           {model.more > 0 ? moreAnswers(model.more) : ''}
         </p>
+        <BluffReveal reveal={model.bluffReveal} />
         {talk ? (
           <p className="present-talk" data-drop={String((rc && dropRank(rc, 'talk')) || 1)} {...(rc ? rcAttrs(rc, 'talk') : {})}>
             <span className="present-talk-ey">Talk about it</span>
@@ -387,6 +419,7 @@ export function ResultFocus({ model }) {
             <p className="present-fit-text">{model.text}</p>
             {model.credit ? <p className="present-credit">{model.credit}</p> : null}
             {model.parts > 1 ? <div className="present-part">{RW.partOf(model.part + 1, model.parts)}</div> : null}
+            <BluffReveal reveal={model.bluffReveal} />
           </div>
           <ol className="present-ladder" aria-label="Where it sits">
             {(model.ladder || []).map((r) => (

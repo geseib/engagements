@@ -50,6 +50,8 @@ export function tallyOrder(voteTallies, answers = []) {
       answer: t.answerText,
       points: Number(t.totalScore) || 0,
       votes: (Number(t.firstPlace) || 0) + (Number(t.secondPlace) || 0) + (Number(t.thirdPlace) || 0),
+      // A bluff round marks the real answer (get-results.js `bluffRole`).
+      ...(t.bluffRole === 'real' || t.bluffRole === 'bluff' ? { bluffRole: t.bluffRole } : {}),
     }));
 
   const seen = new Set(rows.map((r) => r.position));

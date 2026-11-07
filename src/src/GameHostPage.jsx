@@ -171,7 +171,7 @@ import { consolePeopleFor, personFactsFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
-import BluffLine from './components/stage/BluffLine';
+import BluffLine, { useBluffReveal } from './components/stage/BluffLine';
 import { BLUFF_WORDS } from './config/bluffRound';
 import FW from './config/followUpWords';
 import { placeAsks, pointKey } from './config/askAnchors';
@@ -7560,6 +7560,17 @@ Focus on actionable business strategy insights.`;
   // and the payload has not landed; the old condition fell through that window
   // to the stage behind, so the button read as broken. GameReport owns the
   // wait now, via `status`.
+  // A bluff round's reveal at RESULTS (components/stage/BluffLine.jsx): the
+  // real answer and its ballot number for the stage, and each player's own
+  // points for this screen's results list. Above the report's early return.
+  const bluffReveal = useBluffReveal({
+    inResults: String(gameState || '').startsWith('RESULTS#'),
+    question: questions[0] || null,
+    gameId,
+    round: lessonNumber,
+    apiBase: API_BASE,
+  });
+
   if (showReport) {
     return (
       <GameReport
@@ -9276,7 +9287,14 @@ Focus on actionable business strategy insights.`;
   // At zero, Your part now says so (D4): "Time's up. Start voting, or give them another minute."
   // Everyone's in leads when the whole room has answered (dev QA 2 Nov).
   const timesUpPart = timesUpPartFor({ timeIsUp, gameState, closesIntoVote, everyoneIn: everybodyIn });
-  const consolePulse = useConsole ? (
+  /* A BLUFF ROUND ON THE HOST'S OWN SCREEN, TWO SCREENS (QA 2026-11-07): the
+     same line the stage gives, under the room tile, from the round itself
+     rather than from the content the console is previewing. Never who. */
+  const consoleBluffPhase = (String(gameState || '').match(/^(ASK|VOTE|RESULTS)#/) || [])[1] || null;
+  const consoleBluff = useConsole && consoleBluffPhase && currentGameType === 'call-and-answer' && questions[0] ? (
+    <BluffLine phase={consoleBluffPhase} question={questions[0]} reveal={bluffReveal} />
+  ) : null;
+  const consolePulseTile = useConsole ? (
     <ConsolePulse
       moment={consoleMoment}
       // THE ONE SOURCE (config/roomProgress.js): the count, who is still out,
@@ -9296,6 +9314,8 @@ Focus on actionable business strategy insights.`;
       choice={consoleChoice}
     />
   ) : null;
+  // The room tile and, in a bluff round, its line under it.
+  const consolePulse = consoleBluff && consolePulseTile ? <>{consolePulseTile}{consoleBluff}</> : consolePulseTile;
   /*
     THE ROUND QUEUE: the rounds played (the session history, `rounds`), the one
     on screen, and what the server's plan says comes next (`upNext`). All
@@ -10283,8 +10303,8 @@ Focus on actionable business strategy insights.`;
             {/* A BLUFF ROUND: that one is in play, never who has the real
                 answer (components/stage/BluffLine.jsx). */}
             {(hostPhase === 'ASK' || hostPhase === 'VOTE' || hostPhase === 'RESULTS') && currentQuestion
-              && !stageQuestionUp && currentGameType === 'call-and-answer' && (
-              <BluffLine phase={hostPhase} question={currentQuestion} gameId={gameId} round={lessonNumber} apiBase={API_BASE} />
+              && !stageQuestionUp && !useConsole && currentGameType === 'call-and-answer' && (
+              <BluffLine phase={hostPhase} question={currentQuestion} reveal={bluffReveal} />
             )}
 
             {/* THE QUESTION, BACK UP, ON ONE SCREEN (owner, 5 Nov 2026,
@@ -10605,11 +10625,22 @@ Focus on actionable business strategy insights.`;
                       // flag away and hardcoded the session setting — so the
                       // points vanished with the names, for the same reason and
                       // in the same rounds.
+                      /* A BLUFF ROUND (QA 2026-11-07): on the room's screen no
+                         name and no points, whatever the setting — the names
+                         would point at the truth-holder, and an answer's points
+                         are not any one player's. On the host's own console
+                         (two screens) the name and that PLAYER's points as
+                         scored, spotting included (get-results bluff.points). */
+                      const bluffRow = bluffReveal ? {
+                        real: Boolean(bluffReveal.holderAnswered && answer.answer === bluffReveal.holderAnswer),
+                        points: Number((bluffReveal.points || {})[answer.playerName || answer.player]) || 0,
+                      } : null;
                       const showPoints = standingsVisible({
                         gameType: currentGameType,
                         anonymousUntilReveal,
                         authorsRevealed,
                       });
+                      const showCredit = bluffRow ? useConsole : showPoints;
                       /*
                         THE CARD OPENS. A card sized to fit a screenful of its
                         siblings is glanceable, not readable, and the host asked
@@ -10631,7 +10662,7 @@ Focus on actionable business strategy insights.`;
                           className={`card is-openable ${pick ? 'lead is-pick' : 'is-runner'}`}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Read this answer in full: ${displayName}`}
+                          aria-label={`Read this answer in full: ${bluffRow && !useConsole ? `Response ${idx + 1}` : displayName}`}
                           onClick={() => openSpotlight(idx)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -10650,10 +10681,14 @@ Focus on actionable business strategy insights.`;
                               pick says what it is in words instead. */}
                           {!pick && <span className="rank">{placeLabel(answer.placement)}</span>}
                           <div className="body">
-                            {pick && <span className="pick-k">{RESULTS_PICK}</span>}
+                            {bluffRow ? (
+                              (bluffRow.real || pick) && (
+                                <span className="pick-k">{bluffRow.real ? BLUFF_WORDS.realLabel : BLUFF_WORDS.fooledLabel}</span>
+                              )
+                            ) : pick && <span className="pick-k">{RESULTS_PICK}</span>}
                             <div className="ans">{answerText(answer.answer)}</div>
-                            {showPoints && (
-                              <span className="who revealed">{RW.backedCredit(points, displayName)}</span>
+                            {showCredit && (
+                              <span className="who revealed">{RW.backedCredit(bluffRow ? bluffRow.points : points, bluffRow ? (answer.playerName || answer.player || '') : displayName)}</span>
                             )}
                           </div>
                         </div>
@@ -10663,7 +10698,7 @@ Focus on actionable business strategy insights.`;
                   {resultsMore > 0 && (
                     <p className="more-answers">{`and ${resultsMore} more ${resultsMore === 1 ? 'answer' : 'answers'}`}</p>
                   )}
-                  {textOf(resultsRoom, 'talk') && (
+                  {textOf(resultsRoom, 'talk') && !bluffReveal && (
                     <p className="talk" data-rc-part="talk" data-rc="support" data-drop="3" data-drop-note="Talk about it">
                       <span className="talk-k">Talk about it</span>
                       <span className="talk-t">{textOf(resultsRoom, 'talk')}</span>
@@ -10735,12 +10770,13 @@ Focus on actionable business strategy insights.`;
                   onClose={closeSpotlight}
                   /* DURING VOTE: no name, no points, whatever the round's
                      names setting (the owner's ruling, two-surface D5). */
-                  showPoints={phaseOfGameState(gameState) !== 'VOTE' && standingsVisible({
+                  showPoints={phaseOfGameState(gameState) !== 'VOTE' && !(bluffReveal && !useConsole) && standingsVisible({
                     gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                   })}
                   labelFor={(answer, idx) => navigatorLabel(answer, idx, {
                     phase: phaseOfGameState(gameState),
-                    authorsHidden: authorsHiddenNow({
+                    // A bluff round names nobody on the room's screen (QA 2026-11-07).
+                    authorsHidden: Boolean(bluffReveal && !useConsole) || authorsHiddenNow({
                       gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                     }),
                   })}

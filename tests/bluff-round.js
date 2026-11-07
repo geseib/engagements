@@ -71,6 +71,7 @@ const SET = 'set-art';
 const SETPK = `SET#${SET}`;
 const REAL = 'The Starry Night';
 const STORY_HOOK = 'Saint-Paul asylum';
+const CREDIT = 'Painted by V. van G., Saint-Remy';
 const REVEAL = `Real title: ${REAL}, Vincent van Gogh, 1889. Trivia: painted from his room at the ${STORY_HOOK}.`;
 
 const asHost = (orgId, extra = {}) => ({
@@ -102,7 +103,7 @@ async function session({ bluffChoice, setBluff = true, players = ['Ada', 'Ben', 
   table.put({ PK, SK: 'CATEGORY#c001#ORDER', QuestionOrder: ['001', '002'], IsRandomized: false });
   table.put({ PK, SK: 'STATE#CATS#COUNTS', '1-8': [2], '9-16': [], '17-24': [], TotalEnabled: 2, TotalRemaining: 2, Version: 1 });
   table.put({ PK: SETPK, SK: 'CATEGORY#c001', Name: 'Post-Impressionism' });
-  table.put({ PK: SETPK, SK: 'QUESTION#c001#001', Category: 'Post-Impressionism', Title: 'A SWIRLING NIGHT SKY', AnswerDetails: REVEAL });
+  table.put({ PK: SETPK, SK: 'QUESTION#c001#001', Category: 'Post-Impressionism', Title: 'A SWIRLING NIGHT SKY', AnswerDetails: REVEAL, School: CREDIT });
   table.put({ PK: SETPK, SK: 'QUESTION#c001#002', Category: 'Post-Impressionism', Title: 'ANOTHER ONE', AnswerDetails: 'Real answer: Sunflowers.' });
 
   for (const name of players) {
@@ -275,6 +276,18 @@ const leaks = (text, holder) => text.includes(REAL) || text.includes(STORY_HOOK)
     const state = JSON.parse(bodies[2]);
     assert.deepStrictEqual(state.currentQuestionData.bluff, { active: true, minPlayers: 3 });
   });
+  // rejects: the credit (artist and date, inventor and year) handing every
+  // phone a clue to look the real answer up (QA, 2026-11-07).
+  await check('the credit is in no payload before RESULTS', async () => {
+    const bodies = [
+      (await question(gameId, { role: 'player', playerName: others[0], clientId: `client-${others[0]}` })).body,
+      (await question(gameId, { role: 'player', playerName: holder, clientId: `client-${holder}` })).body,
+      (await question(gameId, { role: 'host' })).body,
+      (await getGameState({ pathParameters: { gameId }, queryStringParameters: { view: 'room' } })).body,
+    ];
+    bodies.forEach((b) => assert.ok(!b.includes(CREDIT), b.slice(0, 200)));
+  });
+
   // rejects: a frame sent to the room carrying the answer or naming the holder.
   await check('no WebSocket frame carries the real answer or the holder', () => {
     const text = JSON.stringify(sent);

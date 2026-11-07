@@ -340,7 +340,8 @@ exports.handler = async (event) => {
               questionDetail: questionItem.Detail || '',
               category: questionItem.Category,
               field: questionItem.Category,
-              school: questionItem.School || '',
+              // A clue until the reveal (get-question.js says why): '' before RESULTS.
+              school: revealed ? (questionItem.School || '') : '',
               image: questionItem.Image || '', // Optional artwork URL ("Art Title" rounds)
               customInstructions: questionItem.CustomInstructions || '',
               setId: questionSetId,
