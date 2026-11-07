@@ -430,7 +430,14 @@ export default function QuestionSetEditor({
     }
   }, [setId, activeVersion, showVersions]);
 
-  // Reload the form whenever a different set is opened.
+  /* WHETHER THE SET ITSELF HAS ARRIVED, or only its id. A fresh page load on
+     /admin?section=questionsets&set=<id> (the Archive's "Open the set" link)
+     hands the editor a bare `{ id }` before the list loads; the real set then
+     arrives under the same id. Keyed on the id alone, the form never refilled
+     and opened blank: no title, no description, Unfiled (dev QA 2026-11-07). */
+  const setArrived = Boolean(questionSet && Object.keys(questionSet).some((key) => key !== 'id'));
+
+  // Reload the form whenever a different set is opened, or the opened one arrives.
   useEffect(() => {
     const snapshot = editableSnapshot(questionSet || {});
     setTitle(questionSet?.name || '');
@@ -465,7 +472,7 @@ export default function QuestionSetEditor({
     setAiHeld({});
     loadVersions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setId]);
+  }, [setId, setArrived]);
 
   // Pass the Questions panel's unsaved state on to whoever owns the container.
   // Reported rather than reached into, the same way the panel reports it here.
