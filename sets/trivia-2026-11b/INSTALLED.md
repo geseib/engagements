@@ -13,6 +13,19 @@ Settings: active, topic from `manifest.json`, no persona (default trivia prompt
 | `80smoviesbekindrewind` | 80s Movies: Be Kind, Rewind | film-tv | 1980s, movies, hollywood, retro | 7 Nov 2026 | not installed | not installed |
 | `greatestbookspageturners` | Greatest Books: Page Turners | language-literature | books, literature, classics, world-literature | 7 Nov 2026 | not installed | not installed |
 
+**Version 2, same day.** The independent review's 8 minor fixes (see
+`movies-books-qa.md`) were installed as a new version of each set with
+`scripts/replace-question-set.js engagedev <setId> --csv <file> --note "..."`.
+That script calls the app's own upload with `replaceSetId`. `install-question-set.js`
+refuses an id that already exists, so it cannot create a duplicate. Dry run
+first; then `--apply`. Both sets are now on `activeVersion` 2 (`SET#<id>#v2`).
+v1 is kept and can be made live again from the set's Versions. Each set still
+has one SETS row, with name, description, topic, tags and active unchanged. The
+read-back of v2 against the CSV: 60/60 questions, 6 categories, 0 skipped, 0
+mismatches. The importer printed "CHECK_FUNCTION_NAME is not set, so the content
+check … was not started". That is expected when running it from a script; no
+content check ran.
+
 Categories:
 - 80s Movies: Blockbuster Moments; Quote, Unquote; Stars & Roles; Behind the Camera;
   Oscar Night & Box Office; Soundtracks & Theme Songs.

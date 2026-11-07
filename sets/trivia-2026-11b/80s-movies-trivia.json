@@ -189,7 +189,7 @@
       "id": "movies80s-11",
       "category": "Quote, Unquote",
       "difficulty": "easy",
-      "question": "In which 1984 film does Arnold Schwarzenegger first say \"I'll be back\"?",
+      "question": "In which film does Arnold Schwarzenegger first say \"I'll be back\"?",
       "options": [
         "The Terminator",
         "Aliens",
@@ -207,7 +207,7 @@
       "id": "movies80s-12",
       "category": "Quote, Unquote",
       "difficulty": "easy",
-      "question": "Which 1983 film's climactic shoot-out features the line \"Say hello to my little friend!\"?",
+      "question": "Which film's climactic shoot-out features the line \"Say hello to my little friend!\"?",
       "options": [
         "The Untouchables",
         "Scarface",
@@ -277,7 +277,7 @@
       "id": "movies80s-16",
       "category": "Quote, Unquote",
       "difficulty": "medium",
-      "question": "In which 1982 film does little Carol Anne announce \"They're here\"?",
+      "question": "In which film does little Carol Anne announce \"They're here\"?",
       "options": [
         "Gremlins",
         "Poltergeist",
@@ -330,10 +330,10 @@
       "difficulty": "hard",
       "question": "Clint Eastwood's line \"Go ahead, make my day\" comes from which Dirty Harry film?",
       "options": [
-        "The Enforcer (1976)",
-        "Dirty Harry (1971)",
-        "Sudden Impact (1983)",
-        "Magnum Force (1973)"
+        "The Enforcer",
+        "Dirty Harry",
+        "Sudden Impact",
+        "Magnum Force"
       ],
       "correctIndex": 2,
       "explanation": "The line is from Sudden Impact, the fourth Dirty Harry film and the only one Eastwood also directed.",
@@ -345,7 +345,7 @@
       "id": "movies80s-20",
       "category": "Quote, Unquote",
       "difficulty": "hard",
-      "question": "In When Harry Met Sally... (1989), the diner customer who says \"I'll have what she's having\" is played by whose mother?",
+      "question": "In When Harry Met Sally... (1989), the deli customer who says \"I'll have what she's having\" is played by whose mother?",
       "options": [
         "Screenwriter Nora Ephron's",
         "Director Rob Reiner's",
@@ -389,7 +389,7 @@
         "Michael Keaton"
       ],
       "correctIndex": 3,
-      "explanation": "Michael Keaton played Betelgeuse for director Tim Burton a year before the two made Batman.",
+      "explanation": "Michael Keaton played Betelgeuse in Tim Burton's ghost comedy, alongside Alec Baldwin, Geena Davis and Winona Ryder.",
       "sources": [
         "https://en.wikipedia.org/wiki/Beetlejuice"
       ]
@@ -800,7 +800,7 @@
       "id": "movies80s-46",
       "category": "Oscar Night & Box Office",
       "difficulty": "medium",
-      "question": "At 80, Jessica Tandy became the oldest Best Actress winner up to that time. For which 1989 film?",
+      "question": "At 80, Jessica Tandy set the record as the oldest winner of the Best Actress Oscar. For which 1989 film?",
       "options": [
         "The Trip to Bountiful",
         "Steel Magnolias",

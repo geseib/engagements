@@ -95,3 +95,37 @@ about different facts here.
 About a third of the books set is from outside the English-language canon:
 Spanish, Colombian, Russian, French, German, Czech, Italian, Nigerian, Indian,
 Turkish, Egyptian, Japanese, Chinese, Mesopotamian, Sanskrit and Arabic works.
+
+## Independent review, 2026-11-07 (separate reviewer)
+
+A separate reviewer checked all 120 questions after this review was written. They
+did not read this file before reaching their verdicts. They worked **from knowledge
+only**: wikipedia.org does not resolve from that session either, so no source was
+fetched. They found the CSV and JSON identical, and also checked the exact wording
+of every quote and first line.
+
+| Set | wrong | ambiguous | minor |
+|---|---|---|---|
+| 80s Movies | 0 | 0 | 6 (7 questions) |
+| Greatest Books | 0 | 0 | 2 |
+
+All eight were applied to the CSV and the JSON together. No answer key or answer
+position changed.
+- **Year giveaways.** In a set billed as "every film released 1980 to 1989", a year
+  in the prompt or options gave the answer away. movies80s-11, -12 and -16 had the
+  year dropped from the prompt; movies80s-19 had the years dropped from the four
+  Dirty Harry options.
+- **movies80s-22:** the explanation ("a year before the two made Batman") gave
+  away movies80s-34. It now names Tim Burton's ghost comedy and its cast instead.
+- **movies80s-20:** Katz's is a deli, not a diner. The prompt now says "deli customer".
+- **movies80s-46:** Tandy is now described as setting the record as the oldest
+  Best Actress winner. That stays true whether or not she still holds it; I could
+  not check the most recent ceremony.
+- **books-12:** the explanation ("The Nigerian writer…") gave away books-40. It now
+  describes Okonkwo and the arrival of colonial rule instead.
+- **books-04:** Anna Karenina was serialized 1875–77 and appeared as a book in 1878.
+  The explanation now gives both dates.
+
+Not changed: the design note about works that come up more than once (Don
+Quixote ×3 and several ×2). Only the 12→40 repeat gave an answer away, and that
+is fixed.
