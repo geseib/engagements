@@ -238,22 +238,22 @@
    "artist": "Bernardo Daddi",
    "date": "1328",
    "school": "Florentine, 14th century",
-   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-40.jpg",
-   "localImage": "images/uffizi-40.jpg",
-   "commonsFile": "File:Bernardo daddi, madonna col bambino tra i ss. matteo e nicola di bari, 1328.jpg",
-   "commonsPage": "https://commons.wikimedia.org/wiki/File:Bernardo_daddi,_madonna_col_bambino_tra_i_ss._matteo_e_nicola_di_bari,_1328.jpg",
-   "licence": "CC BY-SA 4.0",
-   "licenceUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-   "photoCredit": "Francesco Bini (User:Sailko), CC BY-SA 4.0",
-   "commonsCredit": "Own work",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-66.jpg",
+   "localImage": "images/uffizi-66.jpg",
+   "commonsFile": "File:Bernardo daddi, trittico di ognissanti.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Bernardo_daddi,_trittico_di_ognissanti.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Web Gallery of Art: Image Info about artworkwga QS:P11807,\"d/daddi/mad_chil\"",
    "sourceSize": [
-    3020,
-    2236
+    895,
+    490
    ],
-   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Bernardo_daddi%2C_madonna_col_bambino_tra_i_ss._matteo_e_nicola_di_bari%2C_1328.jpg/1920px-Bernardo_daddi%2C_madonna_col_bambino_tra_i_ss._matteo_e_nicola_di_bari%2C_1328.jpg",
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Bernardo+daddi%2C+trittico+di+ognissanti.jpg&w=894",
    "outputSize": [
-    1600,
-    1185
+    894,
+    489
    ],
    "crop": null,
    "uffiziVerification": {
@@ -268,37 +268,38 @@
   {
    "question": 8,
    "category": "Gothic & Early Renaissance",
-   "title": "THE PATRONS KNEEL IN THE CORNER",
-   "realAnswer": "Lamentation over the Dead Christ (the Pietà of San Remigio)",
-   "artist": "Giottino (Giotto di maestro Stefano)",
-   "date": "c. 1350–1360s",
-   "school": "Florentine, 14th century",
-   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-33.jpg",
-   "localImage": "images/uffizi-33.jpg",
-   "commonsFile": "File:Giottino - Pietà di San Remigio - Google Art Project.jpg",
-   "commonsPage": "https://commons.wikimedia.org/wiki/File:Giottino_-_Piet%C3%A0_di_San_Remigio_-_Google_Art_Project.jpg",
+   "title": "DOWN AT THE HARBOUR",
+   "realAnswer": "The Miracle of the Grain Ships and St Nicholas Reviving a Boy (Stories of St Nicholas)",
+   "artist": "Ambrogio Lorenzetti",
+   "date": "c. 1330–1335",
+   "school": "Sienese, 14th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-67.jpg",
+   "localImage": "images/uffizi-67.jpg",
+   "commonsFile": "File:Ambrogio lorenzetti, storie di san nicola 01 1332.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Ambrogio_lorenzetti,_storie_di_san_nicola_01_1332.jpg",
    "licence": "Public domain",
    "licenceUrl": "",
    "photoCredit": "",
-   "commonsCredit": "Google Arts &amp; Culture — IgHIt6nS8Digmg",
+   "commonsCredit": "photograph of 1332 painting",
    "sourceSize": [
-    2494,
-    3515
+    586,
+    1100
    ],
-   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Giottino_-_Piet%C3%A0_di_San_Remigio_-_Google_Art_Project.jpg/1280px-Giottino_-_Piet%C3%A0_di_San_Remigio_-_Google_Art_Project.jpg",
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Ambrogio+lorenzetti%2C+storie+di+san+nicola+01+1332.jpg&w=585",
    "outputSize": [
-    1135,
-    1600
+    585,
+    1098
    ],
    "crop": null,
    "uffiziVerification": {
     "source": "uffizi.it artwork page",
-    "url": "https://www.uffizi.it/en/artworks/lamentation-giottino",
+    "url": "https://www.uffizi.it/en/artworks/lorenzetti-saint-nicholas-stories",
     "museum": "The Uffizi",
-    "room": "A6 14th Century in Florence",
-    "inventory": "1890 n.454",
+    "room": "A6. 14th Century",
+    "inventory": "1890 n. 8349",
     "checked": "2026-11-07"
-   }
+   },
+   "replaces": "Giottino, Pietà of San Remigio (in restoration, Uffizi list of 3 Nov 2026)"
   },
   {
    "question": 9,
@@ -343,8 +344,8 @@
    "artist": "Lorenzo Monaco",
    "date": "1414",
    "school": "Florentine, early 15th century",
-   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-59.jpg",
-   "localImage": "images/uffizi-59.jpg",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-63.jpg",
+   "localImage": "images/uffizi-63.jpg",
    "commonsFile": "File:Lorenzo Monaco - Incoronazione della Vergine - Google Art Project.jpg",
    "commonsPage": "https://commons.wikimedia.org/wiki/File:Lorenzo_Monaco_-_Incoronazione_della_Vergine_-_Google_Art_Project.jpg",
    "licence": "Public domain",
@@ -358,12 +359,12 @@
    "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Lorenzo_Monaco_-_Incoronazione_della_Vergine_-_Google_Art_Project.jpg/1280px-Lorenzo_Monaco_-_Incoronazione_della_Vergine_-_Google_Art_Project.jpg",
    "outputSize": [
     1145,
-    1327
+    1308
    ],
    "crop": {
     "box": [
      0.05,
-     0,
+     0.015,
      0.945,
      1
     ],
@@ -755,7 +756,7 @@
   },
   {
    "question": 21,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "SPOT THE BANKERS",
    "realAnswer": "Adoration of the Magi",
    "artist": "Sandro Botticelli",
@@ -790,7 +791,7 @@
   },
   {
    "question": 22,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "NOT IN THE MOOD",
    "realAnswer": "Fortitude",
    "artist": "Sandro Botticelli",
@@ -825,7 +826,7 @@
   },
   {
    "question": 23,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "NINE GUESTS IN AN ORANGE GROVE",
    "realAnswer": "Primavera (Spring)",
    "artist": "Sandro Botticelli",
@@ -860,7 +861,7 @@
   },
   {
    "question": 24,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "BEACH ARRIVAL, NO LUGGAGE",
    "realAnswer": "The Birth of Venus",
    "artist": "Sandro Botticelli",
@@ -895,7 +896,7 @@
   },
   {
    "question": 25,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "SHE IS TAKING NOTES",
    "realAnswer": "Madonna of the Magnificat",
    "artist": "Sandro Botticelli",
@@ -945,7 +946,7 @@
   },
   {
    "question": 26,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "A RING OF ANGELS",
    "realAnswer": "Madonna of the Pomegranate",
    "artist": "Sandro Botticelli",
@@ -980,7 +981,7 @@
   },
   {
    "question": 27,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "HAIR-PULLING CONTEST",
    "realAnswer": "Pallas and the Centaur",
    "artist": "Sandro Botticelli",
@@ -1015,38 +1016,30 @@
   },
   {
    "question": 28,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "HE ARRIVES, SHE BENDS",
    "realAnswer": "Cestello Annunciation",
    "artist": "Sandro Botticelli",
    "date": "1489–1490",
    "school": "Florentine, 15th century",
-   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-41.jpg",
-   "localImage": "images/uffizi-41.jpg",
-   "commonsFile": "File:Botticelli, Cestello Annunciation, 1489, Uffizi.jpg",
-   "commonsPage": "https://commons.wikimedia.org/wiki/File:Botticelli,_Cestello_Annunciation,_1489,_Uffizi.jpg",
-   "licence": "CC BY-SA 4.0",
-   "licenceUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-   "photoCredit": "Armin Kleiner, CC BY-SA 4.0",
-   "commonsCredit": "Own work by Armin Kleiner Taken on 14 September 2021, 09:10:29",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-61.jpg",
+   "localImage": "images/uffizi-61.jpg",
+   "commonsFile": "File:Sandro Botticelli - Cestello Verkündigung.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Sandro_Botticelli_-_Cestello_Verk%C3%BCndigung.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Barbara Deimling: Botticelli. Taschen Verlag, Köln 1993; ISBN 9783836542715, S. 67.",
    "sourceSize": [
-    3912,
-    3912
+    2068,
+    2012
    ],
-   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Botticelli%2C+Cestello+Annunciation%2C+1489%2C+Uffizi.jpg&w=1920",
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Sandro+Botticelli+-+Cestello+Verk%C3%BCndigung.jpg&w=1920",
    "outputSize": [
-    1406,
-    1600
+    1600,
+    1557
    ],
-   "crop": {
-    "box": [
-     0.045,
-     0,
-     0.915,
-     0.99
-    ],
-    "why": "gallery photograph: cropped to the work, removing wall and plinth"
-   },
+   "crop": null,
    "uffiziVerification": {
     "source": "uffizi.it artwork page",
     "url": "https://www.uffizi.it/en/artworks/annunciation-d9604d56-89bb-414c-ba3c-fd71f4d28eec",
@@ -1058,7 +1051,7 @@
   },
   {
    "question": 29,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "THE KING HAS DONKEY EARS",
    "realAnswer": "Calumny of Apelles",
    "artist": "Sandro Botticelli",
@@ -1093,7 +1086,7 @@
   },
   {
    "question": 30,
-   "category": "Botticelli & His Circle",
+   "category": "Florence, 1470–1500",
    "title": "EVERYONE WANTS A LOOK",
    "realAnswer": "Adoration of the Magi",
    "artist": "Filippino Lippi",
@@ -1134,22 +1127,22 @@
    "artist": "Andrea del Verrocchio and Leonardo da Vinci",
    "date": "c. 1470–1475",
    "school": "Florentine, 15th century",
-   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-27.jpg",
-   "localImage": "images/uffizi-27.jpg",
-   "commonsFile": "File:The Baptism of Christ (Verrocchio and Leonardo).jpg",
-   "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Baptism_of_Christ_(Verrocchio_and_Leonardo).jpg",
-   "licence": "CC BY-SA 4.0",
-   "licenceUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-   "photoCredit": "Justin Benttinen, CC BY-SA 4.0",
-   "commonsCredit": "Own work",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-65.jpg",
+   "localImage": "images/uffizi-65.jpg",
+   "commonsFile": "File:Verrocchio and Leonardo, Baptism of Christ, c1470-75, Uffizi.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Verrocchio_and_Leonardo,_Baptism_of_Christ,_c1470-75,_Uffizi.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Own work. Taken on 14 September 2021, 15:29:06.",
    "sourceSize": [
-    5200,
-    6210
+    3760,
+    4520
    ],
-   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=The+Baptism+of+Christ+%28Verrocchio+and+Leonardo%29.jpg&w=1280",
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Verrocchio+and+Leonardo%2C+Baptism+of+Christ%2C+c1470-75%2C+Uffizi.jpg&w=1600",
    "outputSize": [
-    1280,
-    1529
+    1331,
+    1600
    ],
    "crop": null,
    "uffiziVerification": {
@@ -1841,42 +1834,43 @@
   },
   {
    "question": 51,
-   "category": "Mannerism & Caravaggio",
-   "title": "AN EYE IN THE TRIANGLE",
-   "realAnswer": "Supper at Emmaus",
-   "artist": "Pontormo",
-   "date": "1525",
-   "school": "Florentine, 16th century",
-   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-20.jpg",
-   "localImage": "images/uffizi-20.jpg",
-   "commonsFile": "File:Pontormo - Cena in Emmaus - Google Art Project.jpg",
-   "commonsPage": "https://commons.wikimedia.org/wiki/File:Pontormo_-_Cena_in_Emmaus_-_Google_Art_Project.jpg",
+   "category": "Mannerism & the Baroque",
+   "title": "HE HAS A NEW HAIRDRESSER",
+   "realAnswer": "Man with a Monkey",
+   "artist": "Annibale Carracci (attributed)",
+   "date": "c. 1590–1591",
+   "school": "Bolognese, late 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-62.jpg",
+   "localImage": "images/uffizi-62.jpg",
+   "commonsFile": "File:Annibale Carracci Uomo con scimmia Firenze.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Annibale_Carracci_Uomo_con_scimmia_Firenze.jpg",
    "licence": "Public domain",
    "licenceUrl": "",
    "photoCredit": "",
-   "commonsCredit": "Google Arts &amp; Culture — MwHPzvKeSKDjPA",
+   "commonsCredit": "https://www.virtualuffizi.com/a-man-with-a-monkey.html",
    "sourceSize": [
-    6816,
-    9240
+    709,
+    835
    ],
-   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Pontormo+-+Cena+in+Emmaus+-+Google+Art+Project.jpg&w=1280",
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Annibale+Carracci+Uomo+con+scimmia+Firenze.jpg&w=708",
    "outputSize": [
-    1180,
-    1600
+    708,
+    834
    ],
    "crop": null,
    "uffiziVerification": {
     "source": "uffizi.it artwork page",
-    "url": "https://www.uffizi.it/en/artworks/pontormo-supper-emmaus",
+    "url": "https://www.uffizi.it/en/artworks/man-monkey-carracci",
     "museum": "The Uffizi",
-    "room": "D12. Pontormo - Rosso Fiorentino",
-    "inventory": "1890 n. 8740",
+    "room": "E5.",
+    "inventory": "1890 no. 799",
     "checked": "2026-11-07"
-   }
+   },
+   "replaces": "Pontormo, Supper at Emmaus (on loan to the Scuderie del Quirinale, Rome, to 7 Feb 2027)"
   },
   {
    "question": 52,
-   "category": "Mannerism & Caravaggio",
+   "category": "Mannerism & the Baroque",
    "title": "TINY HANDS, BIG INSTRUMENT",
    "realAnswer": "Musician Angel (Angel Playing the Lute)",
    "artist": "Rosso Fiorentino",
@@ -1911,7 +1905,7 @@
   },
   {
    "question": 53,
-   "category": "Mannerism & Caravaggio",
+   "category": "Mannerism & the Baroque",
    "title": "BLUE BACKGROUND, BEST DRESS",
    "realAnswer": "Portrait of Eleonora di Toledo with her son Giovanni",
    "artist": "Bronzino",
@@ -1946,7 +1940,7 @@
   },
   {
    "question": 54,
-   "category": "Mannerism & Caravaggio",
+   "category": "Mannerism & the Baroque",
    "title": "A BOOK, A CHAIN, A STEADY GAZE",
    "realAnswer": "Portrait of Lucrezia Panciatichi",
    "artist": "Bronzino",
@@ -1981,7 +1975,7 @@
   },
   {
    "question": 55,
-   "category": "Mannerism & Caravaggio",
+   "category": "Mannerism & the Baroque",
    "title": "ELEGANCE, EXTENDED",
    "realAnswer": "Madonna with the Long Neck",
    "artist": "Parmigianino",
@@ -2016,7 +2010,7 @@
   },
   {
    "question": 56,
-   "category": "Mannerism & Caravaggio",
+   "category": "Mannerism & the Baroque",
    "title": "A GLASS FOR YOU?",
    "realAnswer": "Bacchus",
    "artist": "Caravaggio",
@@ -2051,7 +2045,7 @@
   },
   {
    "question": 57,
-   "category": "Mannerism & Caravaggio",
+   "category": "Mannerism & the Baroque",
    "title": "A SHIELD WITH A SCREAM",
    "realAnswer": "Medusa",
    "artist": "Caravaggio",
@@ -2087,7 +2081,7 @@
   },
   {
    "question": 58,
-   "category": "Mannerism & Caravaggio",
+   "category": "Mannerism & the Baroque",
    "title": "SAVED BY A FIRM GRIP",
    "realAnswer": "Sacrifice of Isaac",
    "artist": "Caravaggio",
@@ -2122,8 +2116,8 @@
   },
   {
    "question": 59,
-   "category": "Mannerism & Caravaggio",
-   "title": "TWO WOMEN, ONE TOUGH JOB",
+   "category": "Mannerism & the Baroque",
+   "title": "THE MAID HOLDS HIM DOWN",
    "realAnswer": "Judith Slaying Holofernes",
    "artist": "Artemisia Gentileschi",
    "date": "c. 1620",
@@ -2157,38 +2151,39 @@
   },
   {
    "question": 60,
-   "category": "Mannerism & Caravaggio",
-   "title": "THE BABY IS THE LAMP",
-   "realAnswer": "Adoration of the Child",
-   "artist": "Gerrit van Honthorst",
-   "date": "c. 1619–1620",
-   "school": "Dutch (Utrecht Caravaggist), 17th century",
-   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-37.jpg",
-   "localImage": "images/uffizi-37.jpg",
-   "commonsFile": "File:Gherardo delle Notti o Gheritt van Hontorst - Adorazione del Bambino - Google Art Project.jpg",
-   "commonsPage": "https://commons.wikimedia.org/wiki/File:Gherardo_delle_Notti_o_Gheritt_van_Hontorst_-_Adorazione_del_Bambino_-_Google_Art_Project.jpg",
+   "category": "Mannerism & the Baroque",
+   "title": "FRUIT FROM A FRIENDLY TREE",
+   "realAnswer": "Rest on the Flight into Egypt with St Francis",
+   "artist": "Correggio",
+   "date": "c. 1520",
+   "school": "Emilian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-64.jpg",
+   "localImage": "images/uffizi-64.jpg",
+   "commonsFile": "File:Correggio 059.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Correggio_059.jpg",
    "licence": "Public domain",
    "licenceUrl": "",
    "photoCredit": "",
-   "commonsCredit": "Google Arts &amp; Culture — MwEXsJEagGGJdQ",
+   "commonsCredit": "The Yorck Project (2002) 10.000 Meisterwerke der Malerei (DVD-ROM), distributed by DIRECTMEDIA Publishing GmbH. ISBN: 3936122202.",
    "sourceSize": [
-    3485,
-    2580
+    2024,
+    2371
    ],
-   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Gherardo+delle+Notti+o+Gheritt+van+Hontorst+-+Adorazione+del+Bambino+-+Google+Art+Project.jpg&w=1920",
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Correggio+059.jpg&w=1600",
    "outputSize": [
-    1600,
-    1184
+    1366,
+    1600
    ],
    "crop": null,
    "uffiziVerification": {
     "source": "uffizi.it artwork page",
-    "url": "https://www.uffizi.it/en/artworks/adoration_of_the_child_gherrit_van_honthorst",
+    "url": "https://www.uffizi.it/en/artworks/correggio-rest-on-the-flight-into-egypt",
     "museum": "The Uffizi",
-    "room": "E6. Painting by Candlelight",
-    "inventory": "1890 no. 739",
+    "room": "D8. Correggio - Parmigianino",
+    "inventory": "1890 no. 1455",
     "checked": "2026-11-07"
-   }
+   },
+   "replaces": "Honthorst, Adoration of the Child (on loan to Villa Manin, 14 Nov 2026 - 21 Feb 2027)"
   }
  ]
 }
