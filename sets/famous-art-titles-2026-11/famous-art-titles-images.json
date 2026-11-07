@@ -1,0 +1,1203 @@
+[
+ {
+  "image": "fat-31.jpg",
+  "devQuestion": "c001#001",
+  "category": "Renaissance",
+  "work": "Mona Lisa (La Gioconda)",
+  "artist": "Leonardo da Vinci, c. 1503",
+  "onTest": true,
+  "commonsFile": "File:Mona Lisa, by Leonardo da Vinci, from C2RMF retouched.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/1280px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg",
+  "sourceSize": [
+   7479,
+   11146
+  ],
+  "savedSize": [
+   1073,
+   1600
+  ]
+ },
+ {
+  "image": "fat-06.jpg",
+  "devQuestion": "c001#002",
+  "category": "Renaissance",
+  "work": "The Birth of Venus",
+  "artist": "Sandro Botticelli, c. 1485",
+  "onTest": true,
+  "commonsFile": "File:Sandro Botticelli - La nascita di Venere - Google Art Project - edited.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg/1920px-Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg",
+  "sourceSize": [
+   30000,
+   18840
+  ],
+  "savedSize": [
+   1600,
+   1005
+  ]
+ },
+ {
+  "image": "fat-13.jpg",
+  "devQuestion": "c001#003",
+  "category": "Renaissance",
+  "work": "The Creation of Adam",
+  "artist": "Michelangelo, 1508-1512",
+  "onTest": false,
+  "commonsFile": "File:Michelangelo - Creation of Adam (cropped).jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Michelangelo_-_Creation_of_Adam_(cropped).jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Michelangelo_-_Creation_of_Adam_%28cropped%29.jpg/1920px-Michelangelo_-_Creation_of_Adam_%28cropped%29.jpg",
+  "sourceSize": [
+   3524,
+   1599
+  ],
+  "savedSize": [
+   1600,
+   726
+  ]
+ },
+ {
+  "image": "fat-07.jpg",
+  "devQuestion": "c001#004",
+  "category": "Renaissance",
+  "work": "The Last Supper",
+  "artist": "Leonardo da Vinci, c. 1495-1498",
+  "onTest": false,
+  "commonsFile": "File:The Last Supper - Leonardo Da Vinci - High Resolution 32x16.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Last_Supper_-_Leonardo_Da_Vinci_-_High_Resolution_32x16.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/The_Last_Supper_-_Leonardo_Da_Vinci_-_High_Resolution_32x16.jpg/1280px-The_Last_Supper_-_Leonardo_Da_Vinci_-_High_Resolution_32x16.jpg",
+  "sourceSize": [
+   9600,
+   4800
+  ],
+  "savedSize": [
+   1280,
+   640
+  ]
+ },
+ {
+  "image": "fat-04.jpg",
+  "devQuestion": "c001#005",
+  "category": "Renaissance",
+  "work": "The School of Athens",
+  "artist": "Raphael, 1509-1511",
+  "onTest": false,
+  "commonsFile": "File:The School of Athens by Raffaello Sanzio da Urbino.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_School_of_Athens_by_Raffaello_Sanzio_da_Urbino.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/The_School_of_Athens_by_Raffaello_Sanzio_da_Urbino.jpg/1920px-The_School_of_Athens_by_Raffaello_Sanzio_da_Urbino.jpg",
+  "sourceSize": [
+   17402,
+   12132
+  ],
+  "savedSize": [
+   1600,
+   1116
+  ]
+ },
+ {
+  "image": "fat-35.jpg",
+  "devQuestion": "c001#006",
+  "category": "Renaissance",
+  "work": "The Arnolfini Portrait",
+  "artist": "Jan van Eyck, 1434",
+  "onTest": false,
+  "commonsFile": "File:Van Eyck - Arnolfini Portrait.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Van_Eyck_-_Arnolfini_Portrait.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Van_Eyck_-_Arnolfini_Portrait.jpg/1280px-Van_Eyck_-_Arnolfini_Portrait.jpg",
+  "sourceSize": [
+   4386,
+   6000
+  ],
+  "savedSize": [
+   1170,
+   1600
+  ]
+ },
+ {
+  "image": "fat-40.jpg",
+  "devQuestion": "c001#007",
+  "category": "Renaissance",
+  "work": "The Garden of Earthly Delights",
+  "artist": "Hieronymus Bosch, c. 1490-1510",
+  "onTest": false,
+  "commonsFile": "File:The Garden of Earthly Delights by Bosch High Resolution.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Garden_of_Earthly_Delights_by_Bosch_High_Resolution.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/The_Garden_of_Earthly_Delights_by_Bosch_High_Resolution.jpg/1280px-The_Garden_of_Earthly_Delights_by_Bosch_High_Resolution.jpg",
+  "sourceSize": [
+   30000,
+   17078
+  ],
+  "savedSize": [
+   1280,
+   729
+  ]
+ },
+ {
+  "image": "fat-33.jpg",
+  "devQuestion": "c001#008",
+  "category": "Renaissance",
+  "work": "The Ambassadors",
+  "artist": "Hans Holbein the Younger, 1533",
+  "onTest": false,
+  "commonsFile": "File:Hans Holbein the Younger - The Ambassadors - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Hans_Holbein_the_Younger_-_The_Ambassadors_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Hans_Holbein_the_Younger_-_The_Ambassadors_-_Google_Art_Project.jpg/1920px-Hans_Holbein_the_Younger_-_The_Ambassadors_-_Google_Art_Project.jpg",
+  "sourceSize": [
+   30000,
+   29560
+  ],
+  "savedSize": [
+   1600,
+   1577
+  ]
+ },
+ {
+  "image": "fat-46.jpg",
+  "devQuestion": "c001#009",
+  "category": "Renaissance",
+  "work": "Primavera (Spring)",
+  "artist": "Sandro Botticelli, c. 1480",
+  "onTest": false,
+  "commonsFile": "File:Botticelli-primavera.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Botticelli-primavera.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Botticelli-primavera.jpg/1920px-Botticelli-primavera.jpg",
+  "sourceSize": [
+   4926,
+   3236
+  ],
+  "savedSize": [
+   1600,
+   1051
+  ]
+ },
+ {
+  "image": "fat-59.jpg",
+  "devQuestion": "c002#001",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "The Starry Night",
+  "artist": "Vincent van Gogh, 1889",
+  "onTest": true,
+  "commonsFile": "File:Van Gogh - Starry Night - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/1280px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg",
+  "sourceSize": [
+   44567,
+   35291
+  ],
+  "savedSize": [
+   1280,
+   1014
+  ]
+ },
+ {
+  "image": "fat-23.jpg",
+  "devQuestion": "c002#002",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "A Sunday Afternoon on the Island of La Grande Jatte",
+  "artist": "Georges Seurat, 1884",
+  "onTest": true,
+  "commonsFile": "File:A Sunday on La Grande Jatte, Georges Seurat, 1884.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:A_Sunday_on_La_Grande_Jatte,_Georges_Seurat,_1884.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg/1280px-A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg",
+  "sourceSize": [
+   20000,
+   13313
+  ],
+  "savedSize": [
+   1280,
+   852
+  ]
+ },
+ {
+  "image": "fat-15.jpg",
+  "devQuestion": "c002#003",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "Impression",
+  "artist": "Claude Monet, 1872",
+  "onTest": false,
+  "commonsFile": "File:Claude Monet, Impression, soleil levant.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Claude_Monet,_Impression,_soleil_levant.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/5/54/Claude_Monet%2C_Impression%2C_soleil_levant.jpg",
+  "sourceSize": [
+   1600,
+   1245
+  ],
+  "savedSize": [
+   1600,
+   1245
+  ]
+ },
+ {
+  "image": "fat-18.jpg",
+  "devQuestion": "c002#004",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "Dance at Le Moulin de la Galette",
+  "artist": "Pierre-Auguste Renoir, 1876",
+  "onTest": false,
+  "commonsFile": "File:Pierre-Auguste Renoir, Le Moulin de la Galette.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Pierre-Auguste_Renoir,_Le_Moulin_de_la_Galette.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Pierre-Auguste_Renoir%2C_Le_Moulin_de_la_Galette.jpg/1280px-Pierre-Auguste_Renoir%2C_Le_Moulin_de_la_Galette.jpg",
+  "sourceSize": [
+   2200,
+   1639
+  ],
+  "savedSize": [
+   1280,
+   954
+  ]
+ },
+ {
+  "image": "fat-24.jpg",
+  "devQuestion": "c002#005",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "A Bar at the Folies-Bergère",
+  "artist": "Édouard Manet, 1882",
+  "onTest": false,
+  "commonsFile": "File:Edouard Manet 004.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Edouard_Manet_004.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Edouard_Manet_004.jpg/1920px-Edouard_Manet_004.jpg",
+  "sourceSize": [
+   2536,
+   1858
+  ],
+  "savedSize": [
+   1600,
+   1172
+  ]
+ },
+ {
+  "image": "fat-09.jpg",
+  "devQuestion": "c002#006",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "The Ballet Class",
+  "artist": "Edgar Degas, c. 1874",
+  "onTest": false,
+  "commonsFile": "File:Edgar Degas - The Ballet Class - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Edgar_Degas_-_The_Ballet_Class_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Edgar_Degas_-_The_Ballet_Class_-_Google_Art_Project.jpg/1280px-Edgar_Degas_-_The_Ballet_Class_-_Google_Art_Project.jpg",
+  "sourceSize": [
+   3950,
+   4535
+  ],
+  "savedSize": [
+   1280,
+   1470
+  ]
+ },
+ {
+  "image": "fat-42.jpg",
+  "devQuestion": "c002#007",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "Woman with a Parasol – Madame Monet and Her Son",
+  "artist": "Claude Monet, 1875",
+  "onTest": false,
+  "commonsFile": "File:Claude Monet - Woman with a Parasol - Madame Monet and Her Son - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Claude_Monet_-_Woman_with_a_Parasol_-_Madame_Monet_and_Her_Son_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Claude_Monet_-_Woman_with_a_Parasol_-_Madame_Monet_and_Her_Son_-_Google_Art_Project.jpg/1280px-Claude_Monet_-_Woman_with_a_Parasol_-_Madame_Monet_and_Her_Son_-_Google_Art_Project.jpg",
+  "sourceSize": [
+   6001,
+   7455
+  ],
+  "savedSize": [
+   1280,
+   1590
+  ]
+ },
+ {
+  "image": "fat-02.jpg",
+  "devQuestion": "c002#008",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "Café Terrace at Night",
+  "artist": "Vincent van Gogh, 1888",
+  "onTest": false,
+  "commonsFile": "File:Vincent Willem van Gogh - Cafe Terrace at Night (Yorck).jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Vincent_Willem_van_Gogh_-_Cafe_Terrace_at_Night_(Yorck).jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Vincent_Willem_van_Gogh_-_Cafe_Terrace_at_Night_%28Yorck%29.jpg/1280px-Vincent_Willem_van_Gogh_-_Cafe_Terrace_at_Night_%28Yorck%29.jpg",
+  "sourceSize": [
+   2348,
+   2945
+  ],
+  "savedSize": [
+   1276,
+   1600
+  ]
+ },
+ {
+  "image": "fat-34.jpg",
+  "devQuestion": "c002#009",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "Sunflowers",
+  "artist": "Vincent van Gogh, 1888",
+  "onTest": false,
+  "commonsFile": "File:Vincent Willem van Gogh 127.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Vincent_Willem_van_Gogh_127.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Vincent_Willem_van_Gogh_127.jpg/1280px-Vincent_Willem_van_Gogh_127.jpg",
+  "sourceSize": [
+   3349,
+   4226
+  ],
+  "savedSize": [
+   1268,
+   1600
+  ]
+ },
+ {
+  "image": "fat-08.jpg",
+  "devQuestion": "c002#010",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "The Card Players",
+  "artist": "Paul Cézanne, c. 1890-1895",
+  "onTest": false,
+  "commonsFile": "File:Les Joueurs de cartes, par Paul Cézanne.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Les_Joueurs_de_cartes,_par_Paul_C%C3%A9zanne.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Les_Joueurs_de_cartes%2C_par_Paul_C%C3%A9zanne.jpg/1920px-Les_Joueurs_de_cartes%2C_par_Paul_C%C3%A9zanne.jpg",
+  "sourceSize": [
+   6048,
+   4961
+  ],
+  "savedSize": [
+   1600,
+   1312
+  ]
+ },
+ {
+  "image": "fat-60.jpg",
+  "devQuestion": "c002#011",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "Ia Orana Maria (Hail Mary)",
+  "artist": "Paul Gauguin, 1891",
+  "onTest": false,
+  "commonsFile": "File:Paul Gauguin - Ia Orana Maria (Hail Mary) - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Paul_Gauguin_-_Ia_Orana_Maria_(Hail_Mary)_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Paul_Gauguin_-_Ia_Orana_Maria_%28Hail_Mary%29_-_Google_Art_Project.jpg/1280px-Paul_Gauguin_-_Ia_Orana_Maria_%28Hail_Mary%29_-_Google_Art_Project.jpg",
+  "sourceSize": [
+   2005,
+   2597
+  ],
+  "savedSize": [
+   1235,
+   1600
+  ]
+ },
+ {
+  "image": "fat-17.jpg",
+  "devQuestion": "c003#001",
+  "category": "Asian Art",
+  "work": "The Great Wave off Kanagawa (Under the Wave off Kanagawa)",
+  "artist": "Katsushika Hokusai, c. 1831",
+  "onTest": true,
+  "commonsFile": "File:The Great Wave off Kanagawa.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Great_Wave_off_Kanagawa.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/The_Great_Wave_off_Kanagawa.jpg/1920px-The_Great_Wave_off_Kanagawa.jpg",
+  "sourceSize": [
+   4335,
+   2990
+  ],
+  "savedSize": [
+   1600,
+   1103
+  ]
+ },
+ {
+  "image": "fat-57.jpg",
+  "devQuestion": "c004#001",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "Girl with a Pearl Earring",
+  "artist": "Johannes Vermeer, c. 1665",
+  "onTest": true,
+  "commonsFile": "File:Meisje met de parel.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Meisje_met_de_parel.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Meisje_met_de_parel.jpg/1280px-Meisje_met_de_parel.jpg",
+  "sourceSize": [
+   4095,
+   4794
+  ],
+  "savedSize": [
+   1280,
+   1498
+  ]
+ },
+ {
+  "image": "fat-55.jpg",
+  "devQuestion": "c004#002",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Night Watch (Militia Company of District II under the Command of Captain Frans Banninck Cocq)",
+  "artist": "Rembrandt van Rijn, 1642",
+  "onTest": true,
+  "commonsFile": "File:The Nightwatch by Rembrandt - Rijksmuseum.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Nightwatch_by_Rembrandt_-_Rijksmuseum.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/The_Nightwatch_by_Rembrandt_-_Rijksmuseum.jpg/1280px-The_Nightwatch_by_Rembrandt_-_Rijksmuseum.jpg",
+  "sourceSize": [
+   14168,
+   11528
+  ],
+  "savedSize": [
+   1280,
+   1041
+  ]
+ },
+ {
+  "image": "fat-01.jpg",
+  "devQuestion": "c004#003",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Calling of Saint Matthew",
+  "artist": "Caravaggio, 1599-1600",
+  "onTest": false,
+  "commonsFile": "File:The Calling of Saint Matthew-Caravaggo (1599-1600).jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Calling_of_Saint_Matthew-Caravaggo_(1599-1600).jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/The_Calling_of_Saint_Matthew-Caravaggo_%281599-1600%29.jpg/1280px-The_Calling_of_Saint_Matthew-Caravaggo_%281599-1600%29.jpg",
+  "sourceSize": [
+   9770,
+   10039
+  ],
+  "savedSize": [
+   1280,
+   1315
+  ]
+ },
+ {
+  "image": "fat-58.jpg",
+  "devQuestion": "c004#004",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "Judith Slaying Holofernes",
+  "artist": "Artemisia Gentileschi, c. 1612-1613",
+  "onTest": false,
+  "commonsFile": "File:Artemisia Gentileschi - Giuditta decapita Oloferne - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Artemisia_Gentileschi_-_Giuditta_decapita_Oloferne_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Artemisia_Gentileschi_-_Giuditta_decapita_Oloferne_-_Google_Art_Project.jpg/1920px-Artemisia_Gentileschi_-_Giuditta_decapita_Oloferne_-_Google_Art_Project.jpg",
+  "sourceSize": [
+   2670,
+   3296
+  ],
+  "savedSize": [
+   1296,
+   1600
+  ]
+ },
+ {
+  "image": "fat-48.jpg",
+  "devQuestion": "c004#005",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "Las Meninas",
+  "artist": "Diego Velázquez, 1656",
+  "onTest": false,
+  "commonsFile": "File:Las Meninas, by Diego Velázquez, from Prado in Google Earth.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Las_Meninas,_by_Diego_Vel%C3%A1zquez,_from_Prado_in_Google_Earth.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg/1920px-Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg",
+  "sourceSize": [
+   26065,
+   30000
+  ],
+  "savedSize": [
+   1390,
+   1600
+  ]
+ },
+ {
+  "image": "fat-32.jpg",
+  "devQuestion": "c004#006",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Anatomy Lesson of Dr. Nicolaes Tulp",
+  "artist": "Rembrandt van Rijn, 1632",
+  "onTest": false,
+  "commonsFile": "File:Rembrandt - The Anatomy Lesson of Dr Nicolaes Tulp.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Rembrandt_-_The_Anatomy_Lesson_of_Dr_Nicolaes_Tulp.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Rembrandt_-_The_Anatomy_Lesson_of_Dr_Nicolaes_Tulp.jpg/1280px-Rembrandt_-_The_Anatomy_Lesson_of_Dr_Nicolaes_Tulp.jpg",
+  "sourceSize": [
+   6000,
+   4520
+  ],
+  "savedSize": [
+   1280,
+   964
+  ]
+ },
+ {
+  "image": "fat-41.jpg",
+  "devQuestion": "c004#007",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Milkmaid",
+  "artist": "Johannes Vermeer, c. 1658-1660",
+  "onTest": false,
+  "commonsFile": "File:Johannes Vermeer - Het melkmeisje - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Johannes_Vermeer_-_Het_melkmeisje_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Johannes_Vermeer_-_Het_melkmeisje_-_Google_Art_Project.jpg&w=1280",
+  "sourceSize": [
+   4000,
+   4485
+  ],
+  "savedSize": [
+   1280,
+   1435
+  ]
+ },
+ {
+  "image": "fat-30.jpg",
+  "devQuestion": "c004#008",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "View of Delft",
+  "artist": "Johannes Vermeer, c. 1660",
+  "onTest": false,
+  "commonsFile": "File:Vermeer-view-of-delft.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Vermeer-view-of-delft.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Vermeer-view-of-delft.jpg&w=1280",
+  "sourceSize": [
+   3000,
+   2491
+  ],
+  "savedSize": [
+   1280,
+   1063
+  ]
+ },
+ {
+  "image": "fat-21.jpg",
+  "devQuestion": "c004#009",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Swing",
+  "artist": "Jean-Honoré Fragonard, 1767",
+  "onTest": false,
+  "commonsFile": "File:Jean-Honoré Fragonard - The Swing - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Jean-Honor%C3%A9_Fragonard_-_The_Swing_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Jean-Honor%C3%A9_Fragonard_-_The_Swing_-_Google_Art_Project.jpg&w=1280",
+  "sourceSize": [
+   3817,
+   4483
+  ],
+  "savedSize": [
+   1280,
+   1503
+  ]
+ },
+ {
+  "image": "fat-27.jpg",
+  "devQuestion": "c004#010",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Oath of the Horatii",
+  "artist": "Jacques-Louis David, 1784",
+  "onTest": false,
+  "commonsFile": "File:Jacques-Louis David, Le Serment des Horaces.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Jacques-Louis_David,_Le_Serment_des_Horaces.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Jacques-Louis_David%2C_Le_Serment_des_Horaces.jpg&w=1280",
+  "sourceSize": [
+   2332,
+   1797
+  ],
+  "savedSize": [
+   1280,
+   986
+  ]
+ },
+ {
+  "image": "fat-28.jpg",
+  "devQuestion": "c004#011",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Death of Marat",
+  "artist": "Jacques-Louis David, 1793",
+  "onTest": false,
+  "commonsFile": "File:Jacques-Louis David - Marat assassinated - Google Art Project 2.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Jacques-Louis_David_-_Marat_assassinated_-_Google_Art_Project_2.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Jacques-Louis_David_-_Marat_assassinated_-_Google_Art_Project_2.jpg&w=1280",
+  "sourceSize": [
+   16134,
+   20762
+  ],
+  "savedSize": [
+   1243,
+   1600
+  ]
+ },
+ {
+  "image": "fat-38.jpg",
+  "devQuestion": "c005#001",
+  "category": "Modernism & Expressionism",
+  "work": "The Scream",
+  "artist": "Edvard Munch, 1893",
+  "onTest": true,
+  "commonsFile": "File:The Scream.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Scream.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=The_Scream.jpg&w=1280",
+  "sourceSize": [
+   3000,
+   3822
+  ],
+  "savedSize": [
+   1256,
+   1600
+  ]
+ },
+ {
+  "image": "fat-56.jpg",
+  "devQuestion": "c005#002",
+  "category": "Modernism & Expressionism",
+  "work": "The Kiss (Der Kuss)",
+  "artist": "Gustav Klimt, 1908",
+  "onTest": true,
+  "commonsFile": "File:Gustav Klimt 016.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Gustav_Klimt_016.jpg",
+  "licence": "Public domain",
+  "fetched": "https://upload.wikimedia.org/wikipedia/commons/f/f3/Gustav_Klimt_016.jpg",
+  "sourceSize": [
+   1079,
+   1080
+  ],
+  "savedSize": [
+   1079,
+   1080
+  ]
+ },
+ {
+  "image": "fat-50.jpg",
+  "devQuestion": "c005#003",
+  "category": "Modernism & Expressionism",
+  "work": "Isle of the Dead",
+  "artist": "Arnold Böcklin, 1883",
+  "onTest": false,
+  "commonsFile": "File:Arnold Böcklin - Die Toteninsel III (Alte Nationalgalerie, Berlin).jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Die_Toteninsel_III_(Alte_Nationalgalerie,_Berlin).jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Arnold_B%C3%B6cklin_-_Die_Toteninsel_III_%28Alte_Nationalgalerie%2C_Berlin%29.jpg&w=1280",
+  "sourceSize": [
+   4933,
+   2628
+  ],
+  "savedSize": [
+   1280,
+   682
+  ]
+ },
+ {
+  "image": "fat-11.jpg",
+  "devQuestion": "c005#004",
+  "category": "Modernism & Expressionism",
+  "work": "Composition VII",
+  "artist": "Wassily Kandinsky, 1913",
+  "onTest": false,
+  "commonsFile": "File:Vassily Kandinsky, 1913 - Composition 7.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Vassily_Kandinsky,_1913_-_Composition_7.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Vassily_Kandinsky%2C_1913_-_Composition_7.jpg&w=960",
+  "sourceSize": [
+   1000,
+   657
+  ],
+  "savedSize": [
+   960,
+   631
+  ]
+ },
+ {
+  "image": "fat-22.jpg",
+  "devQuestion": "c005#005",
+  "category": "Modernism & Expressionism",
+  "work": "Blue Horse I",
+  "artist": "Franz Marc, 1911",
+  "onTest": false,
+  "commonsFile": "File:Franz Marc 005.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Franz_Marc_005.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Franz_Marc_005.jpg&w=1280",
+  "sourceSize": [
+   2048,
+   1171
+  ],
+  "savedSize": [
+   1280,
+   732
+  ]
+ },
+ {
+  "image": "fat-12.jpg",
+  "devQuestion": "c005#006",
+  "category": "Modernism & Expressionism",
+  "work": "Composition 8",
+  "artist": "Wassily Kandinsky, 1923",
+  "onTest": false,
+  "commonsFile": "File:Vassily Kandinsky, 1923 - Composition 8, huile sur toile, 140 cm x 201 cm, Musée Guggenheim, New York.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Vassily_Kandinsky,_1923_-_Composition_8,_huile_sur_toile,_140_cm_x_201_cm,_Mus%C3%A9e_Guggenheim,_New_York.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Vassily_Kandinsky%2C_1923_-_Composition_8%2C_huile_sur_toile%2C_140_cm_x_201_cm%2C_Mus%C3%A9e_Guggenheim%2C_New_York.jpg&w=960",
+  "sourceSize": [
+   1090,
+   755
+  ],
+  "savedSize": [
+   960,
+   665
+  ]
+ },
+ {
+  "image": "fat-19.jpg",
+  "devQuestion": "c005#007",
+  "category": "Modernism & Expressionism",
+  "work": "Portrait of Adele Bloch-Bauer I",
+  "artist": "Gustav Klimt, 1907",
+  "onTest": false,
+  "commonsFile": "File:Gustav Klimt 046.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Gustav_Klimt_046.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Gustav_Klimt_046.jpg&w=1280",
+  "sourceSize": [
+   1415,
+   1416
+  ],
+  "savedSize": [
+   1280,
+   1281
+  ]
+ },
+ {
+  "image": "fat-44.jpg",
+  "devQuestion": "c005#008",
+  "category": "Modernism & Expressionism",
+  "work": "Self-Portrait with Physalis",
+  "artist": "Egon Schiele, 1912",
+  "onTest": false,
+  "commonsFile": "File:Egon Schiele - Self-Portrait with Physalis - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Egon_Schiele_-_Self-Portrait_with_Physalis_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Egon_Schiele_-_Self-Portrait_with_Physalis_-_Google_Art_Project.jpg&w=1280",
+  "sourceSize": [
+   3781,
+   3062
+  ],
+  "savedSize": [
+   1280,
+   1037
+  ]
+ },
+ {
+  "image": "fat-26.jpg",
+  "devQuestion": "c005#009",
+  "category": "Modernism & Expressionism",
+  "work": "Tiger in a Tropical Storm (Surprised!)",
+  "artist": "Henri Rousseau, 1891",
+  "onTest": false,
+  "commonsFile": "File:Surprised-Rousseau.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Surprised-Rousseau.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Surprised-Rousseau.jpg&w=1280",
+  "sourceSize": [
+   3000,
+   2397
+  ],
+  "savedSize": [
+   1280,
+   1023
+  ]
+ },
+ {
+  "image": "fat-49.jpg",
+  "devQuestion": "c005#010",
+  "category": "Modernism & Expressionism",
+  "work": "Composition II in Red",
+  "artist": "Piet Mondrian, 1930",
+  "onTest": false,
+  "commonsFile": "File:Piet Mondriaan, 1930 - Mondrian Composition II in Red, Blue, and Yellow.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Piet_Mondriaan,_1930_-_Mondrian_Composition_II_in_Red,_Blue,_and_Yellow.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Piet_Mondriaan%2C_1930_-_Mondrian_Composition_II_in_Red%2C_Blue%2C_and_Yellow.jpg&w=1280",
+  "sourceSize": [
+   5918,
+   6000
+  ],
+  "savedSize": [
+   1280,
+   1298
+  ]
+ },
+ {
+  "image": "fat-54.jpg",
+  "devQuestion": "c006#001",
+  "category": "Romanticism & Realism",
+  "work": "Wanderer above the Sea of Fog",
+  "artist": "Caspar David Friedrich, c. 1818",
+  "onTest": true,
+  "commonsFile": "File:Caspar David Friedrich - Wanderer above the sea of fog.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Caspar_David_Friedrich_-_Wanderer_above_the_sea_of_fog.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Caspar_David_Friedrich_-_Wanderer_above_the_sea_of_fog.jpg&w=1280",
+  "sourceSize": [
+   2327,
+   2980
+  ],
+  "savedSize": [
+   1250,
+   1600
+  ]
+ },
+ {
+  "image": "fat-53.jpg",
+  "devQuestion": "c006#002",
+  "category": "Romanticism & Realism",
+  "work": "Liberty Leading the People",
+  "artist": "Eugène Delacroix, 1830",
+  "onTest": false,
+  "commonsFile": "File:Eugène Delacroix - La liberté guidant le peuple.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Eug%C3%A8ne_Delacroix_-_La_libert%C3%A9_guidant_le_peuple.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Eug%C3%A8ne_Delacroix_-_La_libert%C3%A9_guidant_le_peuple.jpg&w=1280",
+  "sourceSize": [
+   3133,
+   2480
+  ],
+  "savedSize": [
+   1280,
+   1013
+  ]
+ },
+ {
+  "image": "fat-51.jpg",
+  "devQuestion": "c006#003",
+  "category": "Romanticism & Realism",
+  "work": "The Raft of the Medusa",
+  "artist": "Théodore Géricault, 1818-1819",
+  "onTest": false,
+  "commonsFile": "File:JEAN LOUIS THÉODORE GÉRICAULT - La Balsa de la Medusa (Museo del Louvre, 1818-19).jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:JEAN_LOUIS_TH%C3%89ODORE_G%C3%89RICAULT_-_La_Balsa_de_la_Medusa_(Museo_del_Louvre,_1818-19).jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=JEAN_LOUIS_TH%C3%89ODORE_G%C3%89RICAULT_-_La_Balsa_de_la_Medusa_%28Museo_del_Louvre%2C_1818-19%29.jpg&w=1280",
+  "sourceSize": [
+   5872,
+   4008
+  ],
+  "savedSize": [
+   1280,
+   874
+  ]
+ },
+ {
+  "image": "fat-36.jpg",
+  "devQuestion": "c006#004",
+  "category": "Romanticism & Realism",
+  "work": "Snow Storm: Steam-Boat off a Harbour’s Mouth",
+  "artist": "J. M. W. Turner, 1844",
+  "onTest": false,
+  "commonsFile": "File:Joseph Mallord William Turner - Snow Storm - Steam-Boat off a Harbour's Mouth - WGA23178.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Joseph_Mallord_William_Turner_-_Snow_Storm_-_Steam-Boat_off_a_Harbour%27s_Mouth_-_WGA23178.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Joseph_Mallord_William_Turner_-_Snow_Storm_-_Steam-Boat_off_a_Harbour%27s_Mouth_-_WGA23178.jpg&w=1280",
+  "sourceSize": [
+   2510,
+   1879
+  ],
+  "savedSize": [
+   1280,
+   958
+  ]
+ },
+ {
+  "image": "fat-05.jpg",
+  "devQuestion": "c006#005",
+  "category": "Romanticism & Realism",
+  "work": "A Burial at Ornans",
+  "artist": "Gustave Courbet, 1849-1850",
+  "onTest": false,
+  "commonsFile": "File:Gustave Courbet - A Burial at Ornans - Google Art Project 2.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Gustave_Courbet_-_A_Burial_at_Ornans_-_Google_Art_Project_2.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Gustave_Courbet_-_A_Burial_at_Ornans_-_Google_Art_Project_2.jpg&w=1280",
+  "sourceSize": [
+   6042,
+   2777
+  ],
+  "savedSize": [
+   1280,
+   589
+  ]
+ },
+ {
+  "image": "fat-45.jpg",
+  "devQuestion": "c006#006",
+  "category": "Romanticism & Realism",
+  "work": "The Gleaners",
+  "artist": "Jean-François Millet, 1857",
+  "onTest": false,
+  "commonsFile": "File:Jean-François Millet - Gleaners - Google Art Project 2.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Jean-Fran%C3%A7ois_Millet_-_Gleaners_-_Google_Art_Project_2.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Jean-Fran%C3%A7ois_Millet_-_Gleaners_-_Google_Art_Project_2.jpg&w=1280",
+  "sourceSize": [
+   5354,
+   4006
+  ],
+  "savedSize": [
+   1280,
+   958
+  ]
+ },
+ {
+  "image": "fat-14.jpg",
+  "devQuestion": "c007#001",
+  "category": "American & Mexican Art",
+  "work": "Arrangement in Grey and Black No. 1",
+  "artist": "James McNeill Whistler, 1871",
+  "onTest": false,
+  "commonsFile": "File:Whistlers Mother high res.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Whistlers_Mother_high_res.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Whistlers_Mother_high_res.jpg&w=1280",
+  "sourceSize": [
+   5897,
+   5247
+  ],
+  "savedSize": [
+   1280,
+   1139
+  ]
+ },
+ {
+  "image": "fat-16.jpg",
+  "devQuestion": "c007#002",
+  "category": "American & Mexican Art",
+  "work": "American Gothic",
+  "artist": "Grant Wood, 1930",
+  "onTest": false,
+  "commonsFile": "File:Grant DeVolson Wood - American Gothic.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Grant_DeVolson_Wood_-_American_Gothic.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Grant_DeVolson_Wood_-_American_Gothic.jpg&w=1280",
+  "sourceSize": [
+   1872,
+   2250
+  ],
+  "savedSize": [
+   1280,
+   1538
+  ]
+ },
+ {
+  "image": "fat-20.jpg",
+  "devQuestion": "c007#003",
+  "category": "American & Mexican Art",
+  "work": "Nighthawks",
+  "artist": "Edward Hopper, 1942",
+  "onTest": false,
+  "commonsFile": "File:Nighthawks by Edward Hopper 1942.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Nighthawks_by_Edward_Hopper_1942.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Nighthawks_by_Edward_Hopper_1942.jpg&w=1280",
+  "sourceSize": [
+   6000,
+   3274
+  ],
+  "savedSize": [
+   1280,
+   698
+  ]
+ },
+ {
+  "image": "fat-39.jpg",
+  "devQuestion": "c007#004",
+  "category": "American & Mexican Art",
+  "work": "Washington Crossing the Delaware",
+  "artist": "Emanuel Leutze, 1851",
+  "onTest": false,
+  "commonsFile": "File:Washington Crossing the Delaware by Emanuel Leutze, MMA-NYC, 1851.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Washington_Crossing_the_Delaware_by_Emanuel_Leutze,_MMA-NYC,_1851.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Washington_Crossing_the_Delaware_by_Emanuel_Leutze%2C_MMA-NYC%2C_1851.jpg&w=1280",
+  "sourceSize": [
+   6004,
+   3847
+  ],
+  "savedSize": [
+   1280,
+   820
+  ]
+ },
+ {
+  "image": "fat-47.jpg",
+  "devQuestion": "c007#005",
+  "category": "American & Mexican Art",
+  "work": "The Heart of the Andes",
+  "artist": "Frederic Edwin Church, 1859",
+  "onTest": false,
+  "commonsFile": "File:Church Heart of the Andes.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Church_Heart_of_the_Andes.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Church_Heart_of_the_Andes.jpg&w=1280",
+  "sourceSize": [
+   6400,
+   3503
+  ],
+  "savedSize": [
+   1280,
+   701
+  ]
+ },
+ {
+  "image": "fat-10.jpg",
+  "devQuestion": "c007#006",
+  "category": "American & Mexican Art",
+  "work": "Breezing Up (A Fair Wind)",
+  "artist": "Winslow Homer, 1876",
+  "onTest": false,
+  "commonsFile": "File:Winslow Homer - Breezing Up (A Fair Wind) - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Winslow_Homer_-_Breezing_Up_(A_Fair_Wind)_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Winslow_Homer_-_Breezing_Up_%28A_Fair_Wind%29_-_Google_Art_Project.jpg&w=1280",
+  "sourceSize": [
+   5053,
+   3175
+  ],
+  "savedSize": [
+   1280,
+   804
+  ]
+ },
+ {
+  "image": "fat-03.jpg",
+  "devQuestion": "c007#007",
+  "category": "American & Mexican Art",
+  "work": "The Child's Bath",
+  "artist": "Mary Cassatt, 1893",
+  "onTest": false,
+  "commonsFile": "File:Mary Cassatt - The Child's Bath - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Mary_Cassatt_-_The_Child%27s_Bath_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Mary_Cassatt_-_The_Child%27s_Bath_-_Google_Art_Project.jpg&w=1280",
+  "sourceSize": [
+   3219,
+   4912
+  ],
+  "savedSize": [
+   1049,
+   1600
+  ]
+ },
+ {
+  "image": "fat-52.jpg",
+  "devQuestion": "c007#008",
+  "category": "American & Mexican Art",
+  "work": "Madame X (Madame Pierre Gautreau)",
+  "artist": "John Singer Sargent, 1884",
+  "onTest": false,
+  "commonsFile": "File:Madame X (Madame Pierre Gautreau), John Singer Sargent, 1884 (unfree frame crop).jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Madame_X_(Madame_Pierre_Gautreau),_John_Singer_Sargent,_1884_(unfree_frame_crop).jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Madame_X_%28Madame_Pierre_Gautreau%29%2C_John_Singer_Sargent%2C_1884_%28unfree_frame_crop%29.jpg&w=1280",
+  "sourceSize": [
+   1895,
+   3680
+  ],
+  "savedSize": [
+   824,
+   1600
+  ]
+ },
+ {
+  "image": "fat-29.jpg",
+  "devQuestion": "c008#001",
+  "category": "Dreams & Visions",
+  "work": "The Nightmare",
+  "artist": "Henry Fuseli, 1781",
+  "onTest": false,
+  "commonsFile": "File:John Henry Fuseli - The Nightmare.JPG",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:John_Henry_Fuseli_-_The_Nightmare.JPG",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=John_Henry_Fuseli_-_The_Nightmare.JPG&w=1280",
+  "sourceSize": [
+   3013,
+   2442
+  ],
+  "savedSize": [
+   1280,
+   1037
+  ],
+  "replaces": "File:The Nightmare.jpg (a 596 px CC BY-SA photograph of a different work, by Lieve Prins)"
+ },
+ {
+  "image": "fat-25.jpg",
+  "devQuestion": "c008#002",
+  "category": "Dreams & Visions",
+  "work": "The Dream",
+  "artist": "Henri Rousseau, 1910",
+  "onTest": false,
+  "commonsFile": "File:Henri Rousseau 005.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Henri_Rousseau_005.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Henri_Rousseau_005.jpg&w=1280",
+  "sourceSize": [
+   4482,
+   3035
+  ],
+  "savedSize": [
+   1280,
+   867
+  ]
+ },
+ {
+  "image": "fat-43.jpg",
+  "devQuestion": "c008#003",
+  "category": "Dreams & Visions",
+  "work": "Saturn Devouring His Son",
+  "artist": "Francisco de Goya, c. 1820",
+  "onTest": false,
+  "commonsFile": "File:Francisco de Goya, Saturno devorando a su hijo (1819-1823).jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Francisco_de_Goya,_Saturno_devorando_a_su_hijo_(1819-1823).jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Francisco_de_Goya%2C_Saturno_devorando_a_su_hijo_%281819-1823%29.jpg&w=1280",
+  "sourceSize": [
+   1661,
+   3051
+  ],
+  "savedSize": [
+   871,
+   1600
+  ]
+ },
+ {
+  "image": "fat-37.jpg",
+  "devQuestion": "c008#004",
+  "category": "Dreams & Visions",
+  "work": "The Great Red Dragon and the Woman Clothed in Sun",
+  "artist": "William Blake, c. 1805",
+  "onTest": false,
+  "commonsFile": "File:William Blake 003.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:William_Blake_003.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=William_Blake_003.jpg&w=1280",
+  "sourceSize": [
+   2384,
+   2932
+  ],
+  "savedSize": [
+   1280,
+   1574
+  ]
+ }
+]
