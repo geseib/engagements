@@ -56,6 +56,7 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import './GameSetupDialog.css';
 import Button from './ui/Button';
+import { BLUFF_WORDS } from '../config/bluffRound';
 
 /** "None picked, so all 4 are in · 12 questions" — what will be asked, not the chips. */
 const questionsIn = (list) => {
@@ -439,6 +440,24 @@ export default function SessionOptions({
               {NAMES_HIDDEN} In a small group, people may still
               recognise each other’s answers.
             </p>
+          </div>
+        )}
+
+        {/* THE BLUFF ROUND (docs/design/bluff-round/README.md): Call & Answer
+            only, offered only by a parent that carries the choice, defaulting
+            from the set (GameSetupDialog). */}
+        {gameType === 'call-and-answer' && typeof value.bluffRound === 'boolean' && (
+          <div className={`gsd-opt${value.bluffRound ? ' is-on' : ''}`}>
+            <label className="gsd-opt-head">
+              <input
+                type="checkbox"
+                checked={value.bluffRound}
+                onChange={(e) => onChange({ bluffRound: e.target.checked })}
+              />
+              <span className="gsd-opt-name">{BLUFF_WORDS.setupLabel}</span>
+              <span className="gsd-opt-state" aria-hidden="true">{value.bluffRound ? 'On' : 'Off'}</span>
+            </label>
+            <p className="gsd-opt-does">{BLUFF_WORDS.setupHelp}</p>
           </div>
         )}
 

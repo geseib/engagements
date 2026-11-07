@@ -470,6 +470,30 @@ const gameSetup = {
       ],
     },
     /*
+      The bluff round (docs/design/bluff-round/README.md): SessionOptions.jsx
+      checkbox BLUFF_WORDS.setupLabel, defaulting from the set's bluffRound;
+      the stage and the remote say BLUFF_WORDS.stageOn, never who.
+    */
+    {
+      id: 'bluff-round',
+      title: 'Bluff round (Call & Answer)',
+      icon: 'EyeSlash',
+      blocks: [
+        {
+          t: 'p',
+          text: 'In Advanced, a Call & Answer session can play a bluff round: one player secretly gets the real answer. It starts on when the set has it on, and you can switch it either way for this session.',
+        },
+        {
+          t: 'p',
+          text: 'Each round with a real answer (a picture\'s real title, what a patent drawing really is), one connected player is picked at random and shown it on their phone. They type it in their own words; everyone else makes one up. The vote asks which one is real, and nobody can vote for their own.',
+        },
+        {
+          t: 'p',
+          text: 'Points: 2 to the author for each vote a made-up answer gets; 1 to the player who had the real answer and 1 to each voter who spotted it. The stage and your remote say a bluff is in play, never who has it, and you are not told either. With fewer than 3 players connected, or a question with no real answer, the round plays normally and the stage says so. At results the stage shows the real answer, and Workie tells its story and who fooled the room.',
+        },
+      ],
+    },
+    /*
       SessionHistoryPanel.jsx rowActions: Edit only while not started; the
       dialog in mode="edit": "Edit session", "Save changes", format and set
       disabled with "The format and question set are fixed once a session is
@@ -561,6 +585,7 @@ const gameSetup = {
           t: 'list',
           items: [
             { title: 'Details', text: 'The name, description, format, categories and the set\'s Workie. **Save Changes** saves these.' },
+            { title: 'Bluff round (Call & Answer)', text: 'Sessions on the set start with the bluff round on. A question bluffs when it has a real answer: a RealAnswer column in the CSV, or a reveal that starts "Real answer:" or "Real title:".' },
             { title: 'Questions', text: 'Add, edit, delete and reorder questions, pull some from another set, or **Add questions** with Workie. **Save** saves the questions as a new version.' },
             { title: 'Images', text: 'The pictures the set\'s questions use.' },
           ],

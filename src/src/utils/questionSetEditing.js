@@ -69,6 +69,8 @@ const sameTags = (a, b) => {
 };
 
 export function describeSetChange(field, value) {
+  // The bluff round is a switch, not a value to quote.
+  if (field === 'bluffRound') return value ? 'bluff round on' : 'bluff round off';
   const label = EDITABLE_SET_FIELDS[field] || SET_FILING_FIELDS[field] || field;
   // BEFORE the falsy branch, because `[]` is truthy in JavaScript: an emptied
   // list would otherwise fall to the generic line and report `tags set to ""`,
@@ -132,7 +134,10 @@ export function editableSnapshot(questionSet = {}) {
     topic: normalizeSetTopic(questionSet.topic) || '',
     // Canonicalised here so an untouched set reports no changes: the row may
     // hold 'Pop' from an older write and the input produces 'pop'.
-    tags: normalizeSetTags(questionSet.tags)
+    tags: normalizeSetTags(questionSet.tags),
+    // THE BLUFF ROUND (docs/design/bluff-round/README.md): a switch, diffed
+    // on its own below because `false` is a value, not a clear.
+    bluffRound: questionSet.bluffRound === true
   };
 }
 
@@ -156,6 +161,9 @@ export function buildEditPayload(name, current, original = {}) {
   // author's own word and has to be removable.
   if ('tags' in current && !sameTags(current.tags, original.tags)) {
     changed.tags = Array.isArray(current.tags) ? current.tags : [];
+  }
+  if (typeof current.bluffRound === 'boolean' && current.bluffRound !== (original.bluffRound === true)) {
+    changed.bluffRound = current.bluffRound;
   }
   return { name: trimmed(name), ...changed };
 }

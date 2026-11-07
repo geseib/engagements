@@ -57,6 +57,9 @@ import { rankResponses } from './config/responseOrder';
 import RoomTimeLine from './components/RoomTimeLine';
 import { timerOnPhase } from './config/roundTimer';
 import { noteServerNow } from './utils/serverClock';
+import {
+  BLUFF_WORDS, isBluffRound, bluffHolderCard, ballotSize, bluffIdentityQuery, bluffRevealLines,
+} from './config/bluffRound';
 
 /** Past this many characters a headline is a passage (PlayerSurface.css `.plr-q--long`). */
 const LONG_HEADLINE = 160;
@@ -1792,7 +1795,10 @@ function PlayerPage({ event = null } = {}) {
     
     try {
       console.log(`🎯 PLAYER: Fetching question ${questionNumber} for game ${gameId}`);
-      const questionRes = await fetch(`${API_BASE}games/${gameId}/question?role=player`);
+      // Name and client id ride along so a bluff round's truth-holder gets
+      // their real answer (game/bluff-round.js); everyone else gets the same
+      // payload as before.
+      const questionRes = await fetch(`${API_BASE}games/${gameId}/question?role=player${bluffIdentityQuery(playerName, getClientId(gameId))}`);
       
       if (!questionRes.ok) {
         console.error('❌ Failed to fetch question:', questionRes.status);
@@ -3079,7 +3085,7 @@ function PlayerPage({ event = null } = {}) {
 
     const round = roundOf(gameState);
     const eligibleAnswers = answers;
-    const requiredRanks = Math.min(3, eligibleAnswers.length);
+    const requiredRanks = requiredVotes;
     const filledVotes = Object.values(votes).filter(v => v !== '').length;
 
     // The button is disabled until the ballot is full and says how many are
@@ -3387,7 +3393,7 @@ function PlayerPage({ event = null } = {}) {
     container it lives in, and it is unusable with a screen reader or a switch
     device. Three buttons are boring and work for everybody.
   */
-  const DetailedVotingMode = ({ answers, votes, onVoteChange, requiredVotes, mySubmittedAnswer }) => {
+  const DetailedVotingMode = ({ answers, votes, onVoteChange, requiredVotes, mySubmittedAnswer, ownLocked = false }) => {
     const handleVoteClick = (answerIndex, position) => {
       // Track interaction to prevent polling interference
       setLastVoteInteraction(Date.now());
@@ -3430,6 +3436,7 @@ function PlayerPage({ event = null } = {}) {
                     moment self-voting is blocked. */}
                 {isOwn && <span className="plr-flag plr-flag--mine">Yours</span>}
               </div>
+              {isOwn && ownLocked && <p className="plr-help">{BLUFF_WORDS.ownLocked}</p>}
 
               {/* THE TEXT OPENS; THE RANK BUTTONS DO NOT.
                   A click handler on the whole card would fire behind every one
@@ -3929,7 +3936,11 @@ function PlayerPage({ event = null } = {}) {
   const roundNoun = resolveRoundNoun(currentQuestion, gameType, setRoundNoun);
   const position = roundNo !== null ? `${roundNoun} ${roundNo}` : null;
   const category = currentQuestion?.field || currentQuestion?.category || null;
-  const requiredVotes = Math.min(3, answers.length);
+  // A BLUFF ROUND (config/bluffRound.js): one pick, "which one is real?",
+  // and never your own answer.
+  const bluffVote = isBluffRound(currentQuestion);
+  const ballotOwnIdx = bluffVote ? ownAnswerIndex(answers, mySubmittedAnswer) : null;
+  const requiredVotes = ballotSize(answers.length, bluffVote, ballotOwnIdx);
   const filledVotes = Object.values(votes).filter((v) => v !== '').length;
   const instruction = getPlayerInstructionText(customInstruction, currentQuestion, gameType);
 
@@ -4409,6 +4420,26 @@ function PlayerPage({ event = null } = {}) {
       </div>
     ) : null;
 
+    /* A BLUFF ROUND (config/bluffRound.js). The truth-holder's phone alone
+       carries `bluff.yours` (game/get-question.js checks the client id); it
+       shows them the real answer to put in their own words. Everyone else is
+       told a bluff is in play, and never who has it. */
+    const bluffYours = bluffHolderCard(currentQuestion);
+    const bluffBlock = gameType === 'call-and-answer' && isBluffRound(currentQuestion) ? (
+      bluffYours ? (
+        <div className="plr-card plr-bluff plr-bluff--yours">
+          <p className="plr-lab">{BLUFF_WORDS.yoursEyebrow}</p>
+          <p className="plr-quote">{bluffYours.realAnswer}</p>
+          <p className="plr-detail">{bluffYours.prompt}</p>
+        </div>
+      ) : (
+        <div className="plr-task plr-bluff">
+          <p className="plr-lab">{BLUFF_WORDS.eyebrow}</p>
+          <p>{BLUFF_WORDS.othersLine}</p>
+        </div>
+      )
+    ) : null;
+
     // Only a held answer for the round on screen. One for an earlier round goes
     // late when the connection is back (session flow v3 §4.4); this round's
     // form stays open meanwhile.
@@ -4617,6 +4648,7 @@ function PlayerPage({ event = null } = {}) {
             <div className="plr-compose__read">
               {questionBlock}
               {taskBlock}
+              {bluffBlock}
             </div>
             <form id="plr-answer-form" className="plr-compose__write" onSubmit={handleSubmitAnswer}>
               <label className="plr-lab" htmlFor="plr-answer">Your response</label>
@@ -4869,7 +4901,11 @@ function PlayerPage({ event = null } = {}) {
 
           {/* The instruction is the ballot's own label now, not a heading over
               the question: one line, directly above what it describes. */}
-          <p className="plr-rank-cue">Rank your top {rankWord}.</p>
+          {bluffVote ? (
+            <p className="plr-rank-cue">{BLUFF_WORDS.voteCue}</p>
+          ) : (
+            <p className="plr-rank-cue">Rank your top {rankWord}.</p>
+          )}
 
           {votingMode === 'quick' ? (
             <div className="plr-quick">
@@ -4912,6 +4948,8 @@ function PlayerPage({ event = null } = {}) {
                       const heldRank = rankHolding(votes, idx);
                       const isCurrentSelection = heldRank === slot;
                       const isOwn = idx === ownAnswerIdx;
+                      // A bluff round takes no vote for your own answer.
+                      if (bluffVote && idx === ballotOwnIdx) return null;
 
                       /* THE NUMBER COMES FIRST because it is the handle a
                          facilitator reads aloud — on the shipped ballot it was
@@ -4944,6 +4982,7 @@ function PlayerPage({ event = null } = {}) {
               onVoteChange={handleVoteChange}
               requiredVotes={requiredVotes}
               mySubmittedAnswer={mySubmittedAnswer}
+              ownLocked={bluffVote}
             />
           )}
 
@@ -5275,6 +5314,8 @@ function PlayerPage({ event = null } = {}) {
       // RESULTS the rows carry names, and that label would be their own name.
       // After a reload the own answer is read back from the server; while that
       // read is out the heading says so rather than "you didn't send one".
+      // A bluff round's reveal (get-results' `bluff`, config/bluffRound.js).
+      const bluffReveal = gameType === 'call-and-answer' ? bluffRevealLines(results && results.bluff) : null;
       const resultHeading = myRow
         ? `You wrote response ${ownAnswerIdx + 1}`
         : (mySubmittedAnswer || hasAnswered || ownAnswerStatus === 'withheld')
@@ -5289,6 +5330,14 @@ function PlayerPage({ event = null } = {}) {
           {(mySubmittedAnswer || myRow?.answer) && (
             <div className="plr-card">
               <p className="plr-quote">{mySubmittedAnswer || myRow.answer}</p>
+            </div>
+          )}
+          {bluffReveal && (
+            <div className="plr-card plr-bluff">
+              <p className="plr-lab">{BLUFF_WORDS.revealHeading}</p>
+              <p className="plr-quote">{bluffReveal.realAnswer}</p>
+              <p className="plr-detail">{bluffReveal.holder}</p>
+              <p className="plr-detail">{bluffReveal.fooled} {bluffReveal.spotted}</p>
             </div>
           )}
           {scoreRows}

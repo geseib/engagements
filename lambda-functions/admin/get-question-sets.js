@@ -173,6 +173,8 @@ exports.handler = async (event) => {
       // Per-set round-label override ("Lesson 3" on a genuine lessons set while
       // the default stays "Round"). Resolved for display by resolveRoundNoun().
       roundNoun: item.roundNoun,
+      // The bluff round set option (docs/design/bluff-round/README.md).
+      bluffRound: item.bluffRound === true,
       // THE SET'S DIRECTION — what the room is asked to DO with each item, as
       // distinct from the topic it is about. Projected RAW, not resolved to
       // `produce`: the editor has to be able to tell "the author chose Produce"

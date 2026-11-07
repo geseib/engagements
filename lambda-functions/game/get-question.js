@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { readRoundQuestion } = require('./round-question');
 const { decryptItem } = require('./tenant-crypto');
 const { isPollRound, pollQuestionOf } = require('./poll-question');
+const { bluffSk, publicBluff, isHolder, realAnswerOf, HOLDER_PROMPT } = require('./bluff-round');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -222,6 +223,36 @@ exports.handler = async (event) => {
       // poll played as a free-text box (poll-question.js).
       ...(isPollRound(resolved.metadata, questionItem) ? { poll: pollQuestionOf(questionItem) } : {})
     };
+
+    /*
+      THE BLUFF ROUND (bluff-round.js). Every caller learns whether a bluff is
+      in play and why not — never who. The real answer goes to ONE caller: the
+      player the round picked, proven by the client id on their PLAYER row
+      (the same proof get-answers.js accepts for a player's own answer). Only
+      while the round is being answered or voted; the reveal is get-results'.
+    */
+    const bluffRow = (await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: bluffSk(questionNumber) }
+    }))).Item;
+    const bluffPublic = publicBluff(bluffRow);
+    if (bluffPublic) {
+      baseQuestionInfo.bluff = bluffPublic;
+      const askedBy = typeof queryParams.playerName === 'string' ? queryParams.playerName : '';
+      const live = gameStateValue.startsWith('ASK#') || gameStateValue.startsWith('VOTE#');
+      if (live && bluffPublic.active && askedBy && bluffRow.HolderName === askedBy) {
+        const playerRow = (await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${askedBy}` },
+          ProjectionExpression: 'ClientId',
+          ConsistentRead: true
+        }))).Item;
+        const real = realAnswerOf(questionItem);
+        if (real && isHolder(bluffRow, playerRow, askedBy, queryParams.clientId)) {
+          baseQuestionInfo.bluff = { ...bluffPublic, yours: { realAnswer: real.realAnswer, prompt: HOLDER_PROMPT } };
+        }
+      }
+    }
 
     // Include correct answer for both host and player in RESULTS state
     if (gameStateValue.startsWith('RESULTS#')) {

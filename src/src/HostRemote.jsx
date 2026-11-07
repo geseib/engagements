@@ -65,6 +65,7 @@ import RemoteScoreboardPanel from './components/RemoteScoreboardPanel';
 import RemoteTimeCard from './components/RemoteTimeCard';
 import { timerOnPhase, timeLeft } from './config/roundTimer';
 import { noteServerNow, serverNowMs } from './utils/serverClock';
+import { bluffStageLine } from './config/bluffRound';
 
 /**
  * The host's phone.
@@ -1969,6 +1970,10 @@ function HostRemote() {
               <p className="hr-status-kicker">{summary.detail}</p>
               <h1 className="hr-status-phase">{summary.headline}</h1>
               {goal.progress && <p className="hr-goal" data-testid="remote-goal">{goal.progress}</p>}
+              {/* A bluff round: that one is in play, never who (config/bluffRound.js). */}
+              {/^(ASK|VOTE)#/.test(String(snapshot?.state || '')) && bluffStageLine(snapshot?.currentQuestionData) && (
+                <p className="hr-goal" data-testid="remote-bluff">{bluffStageLine(snapshot?.currentQuestionData)}</p>
+              )}
 
               {progress.applicable ? (
                 <div className={`hr-progress ${progress.allIn ? 'is-complete' : ''}`}>

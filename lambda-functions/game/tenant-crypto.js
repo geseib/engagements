@@ -245,6 +245,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'Detail',
     'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF',
     'AnswerDetails',
+    // A bluff round's real answer (bluff-round.js) — the same spoiler.
+    'RealAnswer',
     'Background',
     'CustomInstructions', 'ClaudeNote',
     'options',
@@ -389,6 +391,9 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'answers',
     'question',
     'wordAnalysis',
+    // A bluff round's reveal (bluff-round.js): the real answer, the
+    // truth-holder's name and their words.
+    'Bluff',
   ]),
 
   /** An AI generation job: PK=AIJOBS, SK=AIJOB#<id>. `request` is where a

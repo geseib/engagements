@@ -354,6 +354,9 @@ export default function GameSetupDialog({
   const [newGamePromptId, setNewGamePromptId] = useState(isEdit ? (seed.promptId || '') : '');
   const [randomizeQuestions, setRandomizeQuestions] = useState(isEdit ? seed.randomizeQuestions !== false : true);
   const [anonymousResponses, setAnonymousResponses] = useState(isEdit ? seed.anonymousUntilReveal !== false : true);
+  // THE BLUFF ROUND (docs/design/bluff-round/README.md): the set's default
+  // until the host touches it. A create only; an edit leaves it alone.
+  const [bluffChoice, setBluffChoice] = useState(null);
   // A SURVEY'S NAMES: seeded from the session, else Anonymous, then from the
   // chosen set's own default until the host picks.
   const [namesChoice, setNamesChoice] = useState(isEdit ? namesMode(seed.names).id : NAMES_DEFAULT);
@@ -434,6 +437,7 @@ export default function GameSetupDialog({
   const sessionSets = allSets.filter(offeredForSessions);
   const setsForType = hasFormat ? sessionSets.filter((set) => set.engagementType === engagementType) : [];
   const chosenSet = allSets.find((s) => sameSetRef(s, newGameSetRef)) || null;
+  const bluffOn = bluffChoice === null ? Boolean(chosenSet && chosenSet.bluffRound === true) : bluffChoice;
   const chosenCount = chosenSet ? Number(chosenSet.totalQuestions) || 0 : 0;
   // An edit gates the goal by the whole-number rule only; the PUT checks the
   // pinned version's size (final review Minor 1b).
@@ -594,6 +598,7 @@ export default function GameSetupDialog({
   /** SessionOptions reports each change under the payload's own key. */
   const changeOptions = (patch) => {
     if ('anonymousResponses' in patch) setAnonymousResponses(patch.anonymousResponses);
+    if ('bluffRound' in patch) setBluffChoice(patch.bluffRound);
     if ('randomizeQuestions' in patch) setRandomizeQuestions(patch.randomizeQuestions);
     if ('names' in patch) pickNames(patch.names);
     if ('target' in patch) setTarget(patch.target);
@@ -685,6 +690,7 @@ export default function GameSetupDialog({
       // A survey is never shuffled, whatever the (hidden) card last said.
       randomizeQuestions: isSurvey ? false : randomizeQuestions,
       anonymousResponses,
+      ...(isCallAndAnswer && !isEdit ? { bluffRound: bluffOn } : {}),
       ...(isSurvey ? { names: namesChoice } : {}),
       ...(isSurvey ? {} : { target }),
       ...(isCallAndAnswer
@@ -1141,6 +1147,7 @@ export default function GameSetupDialog({
         gameType={engagementType}
         value={{
           anonymousResponses,
+          ...(isCallAndAnswer && !isEdit ? { bluffRound: bluffOn } : {}),
           randomizeQuestions,
           names: namesChoice,
           target,
