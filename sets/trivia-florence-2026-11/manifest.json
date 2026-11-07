@@ -1,0 +1,16 @@
+[
+  {
+    "file": "trivia-florence.csv",
+    "title": "Florence: Ciao, Firenze!",
+    "description": "60 light questions about Florence, Italy: the Duomo and the landmarks, the Medici and the Renaissance crowd, sculpture and museums, bistecca to gelato, wine windows and lucky boars, and the purple shirts, fashion houses and modern city.",
+    "topic": "geography-travel",
+    "tags": [
+      "florence",
+      "italy",
+      "renaissance",
+      "travel"
+    ],
+    "questions": 60,
+    "categories": 6
+  }
+]

@@ -1,0 +1,1053 @@
+{
+  "title": "Florence: Ciao, Firenze!",
+  "description": "60 light questions about Florence, Italy: the Duomo and the landmarks, the Medici and the Renaissance crowd, sculpture and museums, bistecca to gelato, wine windows and lucky boars, and the purple shirts, fashion houses and modern city.",
+  "categories": [
+    "Landmarks & the Duomo",
+    "The Medici & Renaissance People",
+    "Sculpture, Art & Museums",
+    "Florentine Food & Drink",
+    "Curious Florence",
+    "Fashion, Football & Modern Florence"
+  ],
+  "questions": [
+    {
+      "id": "florence-01",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "easy",
+      "question": "Who engineered the giant red-brick dome that crowns Florence Cathedral?",
+      "options": [
+        "Gian Lorenzo Bernini",
+        "Leonardo da Vinci",
+        "Filippo Brunelleschi",
+        "Michelangelo"
+      ],
+      "correctIndex": 2,
+      "explanation": "Built between 1420 and 1436, it was the first octagonal dome ever raised without a temporary wooden frame to hold it up during construction.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence_Cathedral",
+        "https://en.wikipedia.org/wiki/Filippo_Brunelleschi"
+      ]
+    },
+    {
+      "id": "florence-02",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "easy",
+      "question": "Everyone calls it the Duomo, but what is the official name of Florence Cathedral?",
+      "options": [
+        "Santo Spirito",
+        "San Lorenzo",
+        "Santa Croce",
+        "Santa Maria del Fiore"
+      ],
+      "correctIndex": 3,
+      "explanation": "The name means Saint Mary of the Flower. Work began in 1296 to a design by Arnolfo di Cambio, and the church was consecrated in 1436.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence_Cathedral"
+      ]
+    },
+    {
+      "id": "florence-03",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "medium",
+      "question": "What is the name of the raised, enclosed walkway that Cosimo I de' Medici had built in 1565, running right over the Ponte Vecchio?",
+      "options": [
+        "The Passetto di Borgo",
+        "The Bridge of Sighs",
+        "The Vasari Corridor",
+        "The Brunelleschi Passage"
+      ],
+      "correctIndex": 2,
+      "explanation": "Named after its architect, Giorgio Vasari, it runs for about a kilometre, so the Medici could cross from the seat of government to their home across the river without stepping into the street.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Vasari_Corridor",
+        "https://www.uffizi.it/en/corridoio-vasariano/history"
+      ]
+    },
+    {
+      "id": "florence-04",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "easy",
+      "question": "Which fortress-like palace with a tall tower on Piazza della Signoria is still Florence's town hall?",
+      "options": [
+        "Palazzo Strozzi",
+        "Palazzo Medici Riccardi",
+        "Palazzo Pitti",
+        "Palazzo Vecchio"
+      ],
+      "correctIndex": 3,
+      "explanation": "Its name means \"Old Palace\", which it got once the Medici moved house across the Arno. The mayor of Florence has had an office there since 1872.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Palazzo_Vecchio"
+      ]
+    },
+    {
+      "id": "florence-05",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "medium",
+      "question": "The cathedral's slender bell tower, about 85 metres tall, is named after which artist, who designed it?",
+      "options": [
+        "Botticelli",
+        "Brunelleschi",
+        "Giotto",
+        "Donatello"
+      ],
+      "correctIndex": 2,
+      "explanation": "Giotto laid the first stone in 1334. Andrea Pisano and then Francesco Talenti finished it in 1359, leaving off the tall spire Giotto had planned.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Giotto's_Campanile"
+      ]
+    },
+    {
+      "id": "florence-06",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "easy",
+      "question": "Which hilltop square on the south bank of the Arno, home to a bronze copy of David, is the classic spot for a panoramic view of Florence?",
+      "options": [
+        "Piazza della Repubblica",
+        "Piazzale Michelangelo",
+        "Piazza della Signoria",
+        "Piazza Santo Spirito"
+      ],
+      "correctIndex": 1,
+      "explanation": "The terrace is dedicated to the sculptor and sits in the Oltrarno, the district whose name simply means \"beyond the Arno\".",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Piazzale_Michelangelo"
+      ]
+    },
+    {
+      "id": "florence-07",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "medium",
+      "question": "In which Florentine church are Michelangelo, Galileo and Machiavelli all buried?",
+      "options": [
+        "Santa Maria Novella",
+        "San Lorenzo",
+        "San Miniato al Monte",
+        "Santa Croce"
+      ],
+      "correctIndex": 3,
+      "explanation": "The great Franciscan basilica holds so many famous Italians, Rossini among them, that it is nicknamed the Temple of the Italian Glories.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Santa_Croce,_Florence"
+      ]
+    },
+    {
+      "id": "florence-08",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "hard",
+      "question": "Florence Cathedral was consecrated in 1436, but its striped marble front was finished much later. When?",
+      "options": [
+        "1610",
+        "1504",
+        "1887",
+        "1748"
+      ],
+      "correctIndex": 2,
+      "explanation": "The front stood unfinished for centuries. Emilio De Fabris won a design competition in 1871, and his white, green and red marble façade was completed in 1887.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence_Cathedral"
+      ]
+    },
+    {
+      "id": "florence-09",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "hard",
+      "question": "The Loggia dei Lanzi, the open-air sculpture gallery on Piazza della Signoria, is named after whom?",
+      "options": [
+        "German mercenary pikemen",
+        "A family of wool merchants",
+        "Lanzo, its architect",
+        "The city's lantern-makers"
+      ],
+      "correctIndex": 0,
+      "explanation": "Cosimo I housed his Landsknechts there. Italians called them lanzichenecchi, which got shortened to \"lanzi\".",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Loggia_dei_Lanzi"
+      ]
+    },
+    {
+      "id": "florence-10",
+      "category": "Landmarks & the Duomo",
+      "difficulty": "medium",
+      "question": "What record does Florence Cathedral's dome still hold?",
+      "options": [
+        "Oldest dome in Europe",
+        "Tallest church dome in the world",
+        "First dome made of concrete",
+        "Largest masonry dome ever built"
+      ],
+      "correctIndex": 3,
+      "explanation": "Masonry means brick and stone. Nobody has built a bigger dome out of brick or stone since. Not bad for the 1400s!",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence_Cathedral",
+        "https://en.wikipedia.org/wiki/Filippo_Brunelleschi"
+      ]
+    },
+    {
+      "id": "florence-11",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "easy",
+      "question": "What appears on the Medici family's coat of arms?",
+      "options": [
+        "A crowned eagle",
+        "A red lily on white",
+        "A winged lion",
+        "Red balls on a gold shield"
+      ],
+      "correctIndex": 3,
+      "explanation": "The balls, called palle, changed in number over the years. Nobody wrote down where they came from, and the stories about pills or coins are just legends.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/House_of_Medici"
+      ]
+    },
+    {
+      "id": "florence-12",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "easy",
+      "question": "Dante Alighieri, born in Florence around 1265, wrote which epic poem?",
+      "options": [
+        "The Divine Comedy",
+        "The Decameron",
+        "Orlando Furioso",
+        "The Aeneid"
+      ],
+      "correctIndex": 0,
+      "explanation": "Its three parts, Inferno, Purgatorio and Paradiso, follow Dante through hell, purgatory and heaven, guided at first by the Roman poet Virgil.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Dante_Alighieri",
+        "https://en.wikipedia.org/wiki/Divine_Comedy"
+      ]
+    },
+    {
+      "id": "florence-13",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "medium",
+      "question": "Exiled from Florence in 1302, Dante never went home again. In which city is he buried?",
+      "options": [
+        "Ravenna",
+        "Verona",
+        "Florence",
+        "Rome"
+      ],
+      "correctIndex": 0,
+      "explanation": "He died there in 1321. Florence asked for his bones for centuries and built him a tomb in 1829 that is still empty. In 2008 the city council finally cancelled his sentence.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Dante_Alighieri"
+      ]
+    },
+    {
+      "id": "florence-14",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "easy",
+      "question": "Which Florentine wrote The Prince, the famous handbook on how rulers win and keep power?",
+      "options": [
+        "Galileo Galilei",
+        "Francesco Petrarca",
+        "Niccolò Machiavelli",
+        "Dante Alighieri"
+      ],
+      "correctIndex": 2,
+      "explanation": "He wrote it in 1513 and dedicated it to a Medici ruler, but it was not printed until 1532, five years after he died.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Prince",
+        "https://en.wikipedia.org/wiki/Niccolò_Machiavelli"
+      ]
+    },
+    {
+      "id": "florence-15",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "medium",
+      "question": "Which part of Galileo's body is on display in a glass egg at Florence's Museo Galileo?",
+      "options": [
+        "His middle finger",
+        "His heart",
+        "His skull",
+        "His right eye"
+      ],
+      "correctIndex": 0,
+      "explanation": "Admirers cut it off in 1737, 95 years after he died, while moving his remains to a grander tomb. It is the middle finger of his right hand, set on a marble base.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Galileo's_middle_finger",
+        "https://en.wikipedia.org/wiki/Museo_Galileo"
+      ]
+    },
+    {
+      "id": "florence-16",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "easy",
+      "question": "Lorenzo de' Medici, banker, poet and patron of the arts, is known by which nickname?",
+      "options": [
+        "The Elder",
+        "The Magnificent",
+        "The Great",
+        "The Gouty"
+      ],
+      "correctIndex": 1,
+      "explanation": "Il Magnifico (1449–1492) led Florence in its golden age. His circle included Botticelli and the young Michelangelo. \"The Gouty\" was his father, Piero.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Lorenzo_de'_Medici"
+      ]
+    },
+    {
+      "id": "florence-17",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "easy",
+      "question": "Leonardo was born in 1452 in or near which Tuscan hill town, the place that gave him his name?",
+      "options": [
+        "Pisa",
+        "Siena",
+        "Lucca",
+        "Vinci"
+      ],
+      "correctIndex": 3,
+      "explanation": "\"Da Vinci\" just means \"from Vinci\". As a teenager he became an apprentice in the Florence workshop of Andrea del Verrocchio.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Leonardo_da_Vinci"
+      ]
+    },
+    {
+      "id": "florence-18",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "hard",
+      "question": "In the Pazzi conspiracy of 1478, killers attacked two Medici brothers during Mass in the cathedral. Which brother died?",
+      "options": [
+        "Piero",
+        "Giuliano",
+        "Cosimo",
+        "Lorenzo"
+      ],
+      "correctIndex": 1,
+      "explanation": "His brother Lorenzo was wounded but escaped into the sacristy. About eighty people were executed in the months after the plot failed.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Pazzi_conspiracy",
+        "https://en.wikipedia.org/wiki/Giuliano_de'_Medici"
+      ]
+    },
+    {
+      "id": "florence-19",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "medium",
+      "question": "Which friar's followers held the \"Bonfire of the Vanities\" in 1497, burning mirrors, cosmetics, books and art?",
+      "options": [
+        "Girolamo Savonarola",
+        "Bernardino of Siena",
+        "Thomas Aquinas",
+        "Saint Antoninus"
+      ],
+      "correctIndex": 0,
+      "explanation": "The fiery Dominican preacher's followers lit it on Shrove Tuesday. The next year Savonarola himself was hanged and burned in the city's main square.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Bonfire_of_the_vanities",
+        "https://en.wikipedia.org/wiki/Girolamo_Savonarola"
+      ]
+    },
+    {
+      "id": "florence-20",
+      "category": "The Medici & Renaissance People",
+      "difficulty": "easy",
+      "question": "The Americas are named after which Florentine navigator?",
+      "options": [
+        "Ferdinand Magellan",
+        "Marco Polo",
+        "Amerigo Vespucci",
+        "Christopher Columbus"
+      ],
+      "correctIndex": 2,
+      "explanation": "Vespucci argued that the lands across the Atlantic were a \"New World\", and in 1507 the mapmaker Martin Waldseemüller put \"America\" on a map in his honour.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Amerigo_Vespucci"
+      ]
+    },
+    {
+      "id": "florence-21",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "easy",
+      "question": "Where in Florence does Michelangelo's original marble David stand today?",
+      "options": [
+        "Uffizi Gallery",
+        "Palazzo Pitti",
+        "Bargello",
+        "Galleria dell'Accademia"
+      ],
+      "correctIndex": 3,
+      "explanation": "David stood outdoors in Piazza della Signoria from 1504 until 1873, when it was moved inside to protect it. The copy in the square went up in 1910.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/David_(Michelangelo)"
+      ]
+    },
+    {
+      "id": "florence-22",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "medium",
+      "question": "About how tall is Michelangelo's David?",
+      "options": [
+        "About 8 metres (26 ft)",
+        "About 5 metres (17 ft)",
+        "About 3 metres (10 ft)",
+        "About 2 metres (6.5 ft)"
+      ],
+      "correctIndex": 1,
+      "explanation": "It measures 5.17 metres. Michelangelo carved it in 1501–1504 from a huge block another sculptor had started and left. People called the block \"the Giant\".",
+      "sources": [
+        "https://en.wikipedia.org/wiki/David_(Michelangelo)"
+      ]
+    },
+    {
+      "id": "florence-23",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "medium",
+      "question": "Michelangelo is said to have given Lorenzo Ghiberti's gilded bronze east doors of the Baptistery which nickname?",
+      "options": [
+        "The Gates of Paradise",
+        "The Doors of Judgment",
+        "The Doors of Glory",
+        "The Golden Gate"
+      ],
+      "correctIndex": 0,
+      "explanation": "Their ten panels tell Old Testament stories in amazing depth and perspective. The doors on the Baptistery today are replicas.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Lorenzo_Ghiberti",
+        "https://en.wikipedia.org/wiki/Florence_Baptistery"
+      ]
+    },
+    {
+      "id": "florence-24",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "medium",
+      "question": "Who cast the bronze Perseus holding up the head of Medusa that stands on Piazza della Signoria?",
+      "options": [
+        "Giambologna",
+        "Donatello",
+        "Benvenuto Cellini",
+        "Andrea del Verrocchio"
+      ],
+      "correctIndex": 2,
+      "explanation": "Cellini, a goldsmith as well as a sculptor, made it between 1545 and 1554 for Cosimo I. His colourful autobiography is still a great read.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Perseus_with_the_Head_of_Medusa",
+        "https://en.wikipedia.org/wiki/Benvenuto_Cellini"
+      ]
+    },
+    {
+      "id": "florence-25",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "hard",
+      "question": "Orsanmichele, the tall church whose outside niches hold statues paid for by the city's guilds, began life as what?",
+      "options": [
+        "A grain market",
+        "A wool warehouse",
+        "A city gatehouse",
+        "A Medici palace"
+      ],
+      "correctIndex": 0,
+      "explanation": "It was finished in 1290 as an open loggia for selling grain. Later its arches were walled in and the ground floor became a church for the guilds.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Orsanmichele"
+      ]
+    },
+    {
+      "id": "florence-26",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "easy",
+      "question": "The Uffizi is now one of the world's great art galleries. What does its name mean in Italian?",
+      "options": [
+        "Galleries",
+        "Offices",
+        "Palaces",
+        "Treasures"
+      ],
+      "correctIndex": 1,
+      "explanation": "Building began in 1560 so Cosimo I could put Florence's government offices, committees and guilds under one roof. The Medici art collection moved in later.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Uffizi"
+      ]
+    },
+    {
+      "id": "florence-27",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "medium",
+      "question": "Which friar-painter decorated the monks' cells of the San Marco convent with frescoes?",
+      "options": [
+        "Fra Filippo Lippi",
+        "Fra Angelico",
+        "Giotto",
+        "Masaccio"
+      ],
+      "correctIndex": 1,
+      "explanation": "He lived there as a Dominican friar. The convent is now a museum with the largest collection of his work anywhere in the world.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Museo_Nazionale_di_San_Marco",
+        "https://en.wikipedia.org/wiki/Fra_Angelico"
+      ]
+    },
+    {
+      "id": "florence-28",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "medium",
+      "question": "Before it became Florence's national sculpture museum, the Bargello was used as what?",
+      "options": [
+        "The city mint",
+        "A royal hospital",
+        "A convent",
+        "A police headquarters and prison"
+      ],
+      "correctIndex": 3,
+      "explanation": "Begun in 1255, it is Florence's oldest public building. It is named after the bargello, the police chief, who moved in in 1574.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Bargello"
+      ]
+    },
+    {
+      "id": "florence-29",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "medium",
+      "question": "On the Medici tombs in San Lorenzo's New Sacristy, Michelangelo's four reclining marble figures stand for what?",
+      "options": [
+        "The four elements",
+        "The four seasons",
+        "The four virtues",
+        "Times of day"
+      ],
+      "correctIndex": 3,
+      "explanation": "Night and Day lie on one tomb, Dawn and Dusk on the other. Michelangelo designed the chapel itself, too.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Sagrestia_Nuova"
+      ]
+    },
+    {
+      "id": "florence-30",
+      "category": "Sculpture, Art & Museums",
+      "difficulty": "hard",
+      "question": "Florence's Opificio delle Pietre Dure, founded by the Medici in 1588, became famous for which craft?",
+      "options": [
+        "Tapestry weaving",
+        "Pictures made of inlaid stone",
+        "Porcelain",
+        "Stained glass"
+      ],
+      "correctIndex": 1,
+      "explanation": "Craftsmen cut thin slices of coloured semi-precious stone and fitted them together like a jigsaw to make pictures. Today the institute is a world leader in restoring art.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Opificio_delle_pietre_dure"
+      ]
+    },
+    {
+      "id": "florence-31",
+      "category": "Florentine Food & Drink",
+      "difficulty": "easy",
+      "question": "How is a classic bistecca alla fiorentina usually cooked?",
+      "options": [
+        "Pan-cooked well done",
+        "Slow-stewed in red wine",
+        "Breaded and fried",
+        "Grilled and served rare"
+      ],
+      "correctIndex": 3,
+      "explanation": "It is a thick T-bone steak, with fillet on one side of the bone and sirloin on the other, grilled over the fire until rare.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Bistecca_alla_fiorentina"
+      ]
+    },
+    {
+      "id": "florence-32",
+      "category": "Florentine Food & Drink",
+      "difficulty": "medium",
+      "question": "Which white Tuscan cattle breed traditionally supplies the meat for bistecca alla fiorentina?",
+      "options": [
+        "Angus",
+        "Hereford",
+        "Chianina",
+        "Wagyu"
+      ],
+      "correctIndex": 2,
+      "explanation": "It is the largest cattle breed and one of the oldest. It comes from the Val di Chiana, and the oxen once pulled the region's ploughs.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Chianina",
+        "https://en.wikipedia.org/wiki/Bistecca_alla_fiorentina"
+      ]
+    },
+    {
+      "id": "florence-33",
+      "category": "Florentine Food & Drink",
+      "difficulty": "medium",
+      "question": "Lampredotto, sold in a bread roll at Florence's street-food stalls, is made from which part of the cow?",
+      "options": [
+        "The tongue",
+        "The cheek",
+        "The tail",
+        "The fourth stomach"
+      ],
+      "correctIndex": 3,
+      "explanation": "It is the abomasum, slow-cooked in vegetable broth, chopped, and often topped with green sauce or a spicy one. A true Florentine classic.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Lampredotto"
+      ]
+    },
+    {
+      "id": "florence-34",
+      "category": "Florentine Food & Drink",
+      "difficulty": "easy",
+      "question": "What does the name of the Tuscan bread-and-vegetable soup ribollita literally mean?",
+      "options": [
+        "Reboiled",
+        "Peasant's pot",
+        "Twice-baked",
+        "Black cabbage"
+      ],
+      "correctIndex": 0,
+      "explanation": "Cooks made it by reheating yesterday's leftover soup with stale bread. It usually has cannellini beans and lacinato kale.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ribollita"
+      ]
+    },
+    {
+      "id": "florence-35",
+      "category": "Florentine Food & Drink",
+      "difficulty": "medium",
+      "question": "Florentine tradition credits which Medici court architect and party designer with inventing an early version of gelato?",
+      "options": [
+        "Bernardo Buontalenti",
+        "Filippo Brunelleschi",
+        "Michelozzo",
+        "Leon Battista Alberti"
+      ],
+      "correctIndex": 0,
+      "explanation": "He also designed stage sets, costumes and fortresses for the Medici, and was a pioneer in storing ice. His love of fireworks earned him the nickname \"Bernardo delle Girandole\".",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Bernardo_Buontalenti",
+        "https://en.wikipedia.org/wiki/Gelato"
+      ]
+    },
+    {
+      "id": "florence-36",
+      "category": "Florentine Food & Drink",
+      "difficulty": "easy",
+      "question": "The Chianti Classico wine area stretches across the hills between Florence and which other city?",
+      "options": [
+        "Bologna",
+        "Siena",
+        "Rome",
+        "Pisa"
+      ],
+      "correctIndex": 1,
+      "explanation": "Chianti was once famous for its squat, straw-wrapped bottle, called a fiasco (\"flask\"). Most Chianti now comes in ordinary bottles.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Chianti"
+      ]
+    },
+    {
+      "id": "florence-37",
+      "category": "Florentine Food & Drink",
+      "difficulty": "medium",
+      "question": "Only Chianti Classico may carry which symbol on the neck of the bottle?",
+      "options": [
+        "A golden lion",
+        "A silver star",
+        "A black rooster",
+        "A red lily"
+      ],
+      "correctIndex": 2,
+      "explanation": "The gallo nero seal shows the producer belongs to the Chianti Classico Consortium, which covers the original Chianti heartland.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Chianti"
+      ]
+    },
+    {
+      "id": "florence-38",
+      "category": "Florentine Food & Drink",
+      "difficulty": "medium",
+      "question": "Which grape must make up at least 80% of any Chianti?",
+      "options": [
+        "Barbera",
+        "Sangiovese",
+        "Pinot Noir",
+        "Nebbiolo"
+      ],
+      "correctIndex": 1,
+      "explanation": "Since 1995 a Chianti may even be 100% Sangiovese. In the 1800s Baron Bettino Ricasoli, later prime minister of Italy, made it the main grape of the blend.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Chianti",
+        "https://en.wikipedia.org/wiki/Sangiovese"
+      ]
+    },
+    {
+      "id": "florence-39",
+      "category": "Florentine Food & Drink",
+      "difficulty": "easy",
+      "question": "What is famously missing from a loaf of traditional Tuscan bread?",
+      "options": [
+        "Crust",
+        "Flour",
+        "Water",
+        "Salt"
+      ],
+      "correctIndex": 3,
+      "explanation": "It is called pane sciocco. In Tuscany \"sciocco\" means unsalted (elsewhere it means silly). Legend says bakers left the salt out to dodge a salt tax.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Pane_sciocco"
+      ]
+    },
+    {
+      "id": "florence-40",
+      "category": "Florentine Food & Drink",
+      "difficulty": "medium",
+      "question": "On a French or English menu, what does a dish served \"Florentine\" come with?",
+      "options": [
+        "Tomato sauce",
+        "Truffles",
+        "Spinach",
+        "Mushrooms"
+      ],
+      "correctIndex": 2,
+      "explanation": "A popular story says Catherine de' Medici brought a love of spinach to Paris when she married in 1533. Food historians say that story is a myth.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florentine_(culinary_term)"
+      ]
+    },
+    {
+      "id": "florence-41",
+      "category": "Curious Florence",
+      "difficulty": "easy",
+      "question": "Florence's buchette, small hatches in the walls of old palaces, were made for selling what?",
+      "options": [
+        "Holy water",
+        "Wine",
+        "Love letters",
+        "Bread"
+      ],
+      "correctIndex": 1,
+      "explanation": "From 1559, Cosimo I let estate owners sell their wine straight from their houses, one flask at a time. During plagues the hatches meant less contact, and some reopened in 2020.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Buchetta_shop"
+      ]
+    },
+    {
+      "id": "florence-42",
+      "category": "Curious Florence",
+      "difficulty": "easy",
+      "question": "Il Porcellino, the bronze fountain whose shiny snout visitors rub for luck, actually shows which animal?",
+      "options": [
+        "A wild boar",
+        "A wolf",
+        "A bear",
+        "A badger"
+      ],
+      "correctIndex": 0,
+      "explanation": "Porcellino means \"piglet\", but Pietro Tacca's bronze is a boar. Rubbing the snout is said to bring you back to Florence. The one outside today is a copy.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Porcellino"
+      ]
+    },
+    {
+      "id": "florence-43",
+      "category": "Curious Florence",
+      "difficulty": "medium",
+      "question": "Before the goldsmiths moved in, which trade filled the shops on the Ponte Vecchio?",
+      "options": [
+        "Butchers",
+        "Bakers",
+        "Booksellers",
+        "Barbers"
+      ],
+      "correctIndex": 0,
+      "explanation": "In the 1500s the Medici moved the meat sellers out, partly to keep the smell away from the corridor overhead. In 1944 it was the only bridge in Florence the retreating German army did not destroy.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ponte_Vecchio",
+        "https://en.wikipedia.org/wiki/Vasari_Corridor"
+      ]
+    },
+    {
+      "id": "florence-44",
+      "category": "Curious Florence",
+      "difficulty": "medium",
+      "question": "How many players are on each team in Calcio Storico, Florence's rough-and-tumble historic football?",
+      "options": [
+        "40",
+        "27",
+        "11",
+        "15"
+      ],
+      "correctIndex": 1,
+      "explanation": "No substitutes are allowed. Teams from the city's four historic quarters play every June in a mix of football, rugby and wrestling.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Calcio_storico_fiorentino"
+      ]
+    },
+    {
+      "id": "florence-45",
+      "category": "Curious Florence",
+      "difficulty": "medium",
+      "question": "Florence's gold florin, first struck in 1252, showed which saint, the city's patron?",
+      "options": [
+        "Saint George",
+        "Saint Francis",
+        "Saint Mark",
+        "John the Baptist"
+      ],
+      "correctIndex": 3,
+      "explanation": "The city's lily badge was on the other side. The coin was copied all over Europe, and the Hungarian forint and the Dutch guilder's \"fl.\" sign both come from it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florin",
+        "https://en.wikipedia.org/wiki/Hungarian_forint"
+      ]
+    },
+    {
+      "id": "florence-46",
+      "category": "Curious Florence",
+      "difficulty": "medium",
+      "question": "After the Arno flooded Florence on 4 November 1966, what were the volunteers who dug art and books out of the mud called?",
+      "options": [
+        "Mud Angels",
+        "Blue Helmets",
+        "River Saints",
+        "Arno Guards"
+      ],
+      "correctIndex": 0,
+      "explanation": "In Italian, angeli del fango. Italians and foreigners alike came to help, and the rescue led to new art-conservation methods.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/1966_flood_of_the_Arno"
+      ]
+    },
+    {
+      "id": "florence-47",
+      "category": "Curious Florence",
+      "difficulty": "easy",
+      "question": "Modern standard Italian grew mainly out of the dialect of which city?",
+      "options": [
+        "Naples",
+        "Florence",
+        "Rome",
+        "Milan"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dante, Petrarch and Boccaccio all wrote in literary Florentine, and their fame made it the model for written Italian.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence",
+        "https://en.wikipedia.org/wiki/Florentine_dialect"
+      ]
+    },
+    {
+      "id": "florence-48",
+      "category": "Curious Florence",
+      "difficulty": "medium",
+      "question": "Florence began as a Roman garrison in 59 BC. What is its Latin name, Florentia, usually taken to mean?",
+      "options": [
+        "The hill fort",
+        "The flourishing town",
+        "The golden city",
+        "The river crossing"
+      ],
+      "correctIndex": 1,
+      "explanation": "It comes from the Latin florere, \"to flourish\" or \"to blossom\". Over time Florentia became Fiorenza, and then Firenze.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence"
+      ]
+    },
+    {
+      "id": "florence-49",
+      "category": "Curious Florence",
+      "difficulty": "hard",
+      "question": "At Florence's Easter Sunday \"Explosion of the Cart\", what zooms along a wire from the cathedral's altar to light the fireworks?",
+      "options": [
+        "A wooden angel",
+        "A golden star",
+        "A mechanical dove",
+        "A paper dragon"
+      ],
+      "correctIndex": 2,
+      "explanation": "The \"colombina\" is lit from a fire struck with flints said to have come from Jerusalem in the First Crusade. A good show is meant to bring a good harvest.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Scoppio_del_carro"
+      ]
+    },
+    {
+      "id": "florence-50",
+      "category": "Curious Florence",
+      "difficulty": "easy",
+      "question": "From 1865 to 1871 Florence was the capital of the new Kingdom of Italy. Which city took over in 1871?",
+      "options": [
+        "Naples",
+        "Rome",
+        "Turin",
+        "Milan"
+      ],
+      "correctIndex": 1,
+      "explanation": "Florence's ring of wide avenues, the viali, was laid out in the Paris style during its years as capital.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence",
+        "https://en.wikipedia.org/wiki/Historic_Centre_of_Florence"
+      ]
+    },
+    {
+      "id": "florence-51",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "easy",
+      "question": "Which colour gives ACF Fiorentina its nickname, \"i Viola\"?",
+      "options": [
+        "Purple",
+        "Green",
+        "Red",
+        "Sky blue"
+      ],
+      "correctIndex": 0,
+      "explanation": "The club was founded in 1926, and its players are known simply as \"the Purples\" after their famous shirts.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/ACF_Fiorentina"
+      ]
+    },
+    {
+      "id": "florence-52",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "medium",
+      "question": "Which Argentine striker, nicknamed \"Batigol\", is Fiorentina's all-time top scorer in Serie A?",
+      "options": [
+        "Gonzalo Higuaín",
+        "Diego Maradona",
+        "Gabriel Batistuta",
+        "Lionel Messi"
+      ],
+      "correctIndex": 2,
+      "explanation": "He played for the club from 1991 to 2000 and scored 151 Serie A goals for it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Gabriel_Batistuta"
+      ]
+    },
+    {
+      "id": "florence-53",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "hard",
+      "question": "Fiorentina's home, the Stadio Artemio Franchi, was designed by which famous engineer?",
+      "options": [
+        "Renzo Piano",
+        "Gio Ponti",
+        "Gae Aulenti",
+        "Pier Luigi Nervi"
+      ],
+      "correctIndex": 3,
+      "explanation": "It opened in 1931, built entirely of reinforced concrete, with a 70-metre tower called the Tower of Marathon.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Stadio_Artemio_Franchi"
+      ]
+    },
+    {
+      "id": "florence-54",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "medium",
+      "question": "Before he founded his Florence shop in 1921, Guccio Gucci picked up his taste for fine luggage as a bellhop at which hotel?",
+      "options": [
+        "The Excelsior in Rome",
+        "The Ritz in Paris",
+        "The Savoy in London",
+        "The Waldorf-Astoria in New York"
+      ],
+      "correctIndex": 2,
+      "explanation": "Loading and unloading rich guests' trunks, he studied their leather goods. His first shop, on Via della Vigna Nuova, sold imported leather luggage.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Gucci"
+      ]
+    },
+    {
+      "id": "florence-55",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "medium",
+      "question": "Salvatore Ferragamo, Florence's \"Shoemaker to the Stars\", famously made wedge heels out of what during the material shortages of the 1930s?",
+      "options": [
+        "Bamboo",
+        "Glass",
+        "Rubber",
+        "Cork"
+      ],
+      "correctIndex": 3,
+      "explanation": "He had made his name in Hollywood in the 1920s, making shoes for stars like Rudolph Valentino and Gloria Swanson, before setting up his workshop in Florence.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Salvatore_Ferragamo"
+      ]
+    },
+    {
+      "id": "florence-56",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "easy",
+      "question": "Pitti Uomo, held twice a year in Florence, is one of the world's top trade fairs for what?",
+      "options": [
+        "Sports cars",
+        "Furniture",
+        "Menswear",
+        "Wine"
+      ],
+      "correctIndex": 2,
+      "explanation": "First held in 1972, it is named after its first home, the Palazzo Pitti, and now fills the Fortezza da Basso.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Pitti_Immagine"
+      ]
+    },
+    {
+      "id": "florence-57",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "easy",
+      "question": "Which famous Briton was named after Florence, the city where she was born in 1820?",
+      "options": [
+        "Florence Nightingale",
+        "Mary Shelley",
+        "Jane Austen",
+        "Elizabeth Barrett Browning"
+      ],
+      "correctIndex": 0,
+      "explanation": "The founder of modern nursing was born at Villa Colombaia, near Porta Romana. Her older sister was named Parthenope, partly after the old Greek settlement on the site of Naples.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Florence_Nightingale"
+      ]
+    },
+    {
+      "id": "florence-58",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "medium",
+      "question": "In E. M. Forster's A Room with a View, Lucy Honeychurch is upset that her room in the Florence pensione does not look out on what?",
+      "options": [
+        "The Boboli Gardens",
+        "Piazza della Signoria",
+        "The River Arno",
+        "The Duomo"
+      ],
+      "correctIndex": 2,
+      "explanation": "She and her cousin were promised Arno views at the Pensione Bertolini. The 1908 novel became a Merchant Ivory film in 1985.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/A_Room_with_a_View"
+      ]
+    },
+    {
+      "id": "florence-59",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "hard",
+      "question": "In which year did UNESCO make the historic centre of Florence a World Heritage Site?",
+      "options": [
+        "1997",
+        "1982",
+        "1965",
+        "2005"
+      ],
+      "correctIndex": 1,
+      "explanation": "The listing covers the old heart of the city, where the Renaissance landmarks stand. Millions of tourists visit it every year.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Historic_Centre_of_Florence",
+        "https://en.wikipedia.org/wiki/Florence"
+      ]
+    },
+    {
+      "id": "florence-60",
+      "category": "Fashion, Football & Modern Florence",
+      "difficulty": "medium",
+      "question": "Florence's Officina Profumo-Farmaceutica di Santa Maria Novella, which still sells perfumes and soaps, grew out of the work of whom?",
+      "options": [
+        "Dominican friars",
+        "The Medici grand dukes",
+        "An English perfumer",
+        "The goldsmiths' guild"
+      ],
+      "correctIndex": 0,
+      "explanation": "The friars arrived in 1221 and grew medicinal herbs. By 1381 they were selling rose water as a disinfectant, and the shop is said to have opened to the public in 1612.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Officina_Profumo-Farmaceutica_di_Santa_Maria_Novella"
+      ]
+    }
+  ]
+}
