@@ -57,7 +57,7 @@
         "The Brunelleschi Passage"
       ],
       "correctIndex": 2,
-      "explanation": "Named after its architect, Giorgio Vasari, it runs for about a kilometre, so the Medici could cross from the seat of government to their home across the river without stepping into the street.",
+      "explanation": "Named after its architect, Giorgio Vasari, it took just five months to build. The Uffizi puts it at 760 metres from the Uffizi to the Boboli Gardens, so the Medici could cross the river without stepping into the street.",
       "sources": [
         "https://en.wikipedia.org/wiki/Vasari_Corridor",
         "https://www.uffizi.it/en/corridoio-vasariano/history"
@@ -101,7 +101,7 @@
       "id": "florence-06",
       "category": "Landmarks & the Duomo",
       "difficulty": "easy",
-      "question": "Which hilltop square on the south bank of the Arno, home to a bronze copy of David, is the classic spot for a panoramic view of Florence?",
+      "question": "Which hilltop square on the south bank of the Arno is the classic spot for a panoramic view of Florence?",
       "options": [
         "Piazza della Repubblica",
         "Piazzale Michelangelo",
@@ -109,7 +109,7 @@
         "Piazza Santo Spirito"
       ],
       "correctIndex": 1,
-      "explanation": "The terrace is dedicated to the sculptor and sits in the Oltrarno, the district whose name simply means \"beyond the Arno\".",
+      "explanation": "The terrace is dedicated to Michelangelo and has a bronze copy of his David. It sits in the Oltrarno, the district whose name simply means \"beyond the Arno\".",
       "sources": [
         "https://en.wikipedia.org/wiki/Piazzale_Michelangelo"
       ]
@@ -265,7 +265,7 @@
         "His right eye"
       ],
       "correctIndex": 0,
-      "explanation": "Admirers cut it off in 1737, 95 years after he died, while moving his remains to a grander tomb. It is the middle finger of his right hand, set on a marble base.",
+      "explanation": "Admirers cut it off in 1737, 95 years after he died, while moving his remains to a grander tomb. It is the middle finger of his right hand. His thumb, index finger and a tooth, taken at the same time, were lost for about a century and are now in the museum too.",
       "sources": [
         "https://en.wikipedia.org/wiki/Galileo's_middle_finger",
         "https://en.wikipedia.org/wiki/Museo_Galileo"
@@ -440,7 +440,7 @@
         "A Medici palace"
       ],
       "correctIndex": 0,
-      "explanation": "It was finished in 1290 as an open loggia for selling grain. Later its arches were walled in and the ground floor became a church for the guilds.",
+      "explanation": "The first grain loggia went up in 1290 but burned down in 1304. Its replacement, begun in 1337, had its arches walled in later that century; the ground floor became the guilds' church, with grain stored upstairs.",
       "sources": [
         "https://en.wikipedia.org/wiki/Orsanmichele"
       ]
@@ -506,7 +506,7 @@
         "The four elements",
         "The four seasons",
         "The four virtues",
-        "Times of day"
+        "The four times of day"
       ],
       "correctIndex": 3,
       "explanation": "Night and Day lie on one tomb, Dawn and Dusk on the other. Michelangelo designed the chapel itself, too.",
@@ -521,7 +521,7 @@
       "question": "Florence's Opificio delle Pietre Dure, founded by the Medici in 1588, became famous for which craft?",
       "options": [
         "Tapestry weaving",
-        "Pictures made of inlaid stone",
+        "Stone mosaics (commesso)",
         "Porcelain",
         "Stained glass"
       ],
@@ -647,7 +647,7 @@
         "A red lily"
       ],
       "correctIndex": 2,
-      "explanation": "The gallo nero seal shows the producer belongs to the Chianti Classico Consortium, which covers the original Chianti heartland.",
+      "explanation": "The black rooster, or gallo nero, is the official mark of Chianti Classico, the original Chianti heartland. Legend says a rooster's early crow settled the old border between Florence and Siena.",
       "sources": [
         "https://en.wikipedia.org/wiki/Chianti"
       ]
@@ -656,7 +656,7 @@
       "id": "florence-38",
       "category": "Florentine Food & Drink",
       "difficulty": "medium",
-      "question": "Which grape must make up at least 80% of any Chianti?",
+      "question": "Which grape must make up at least 80% of a Chianti Classico?",
       "options": [
         "Barbera",
         "Sangiovese",
@@ -664,7 +664,7 @@
         "Nebbiolo"
       ],
       "correctIndex": 1,
-      "explanation": "Since 1995 a Chianti may even be 100% Sangiovese. In the 1800s Baron Bettino Ricasoli, later prime minister of Italy, made it the main grape of the blend.",
+      "explanation": "Since the 1990s it may even be 100% Sangiovese. In the 1800s Baron Bettino Ricasoli, who also served as prime minister of Italy, made it the main grape of the blend.",
       "sources": [
         "https://en.wikipedia.org/wiki/Chianti",
         "https://en.wikipedia.org/wiki/Sangiovese"
@@ -984,7 +984,7 @@
       "id": "florence-57",
       "category": "Fashion, Football & Modern Florence",
       "difficulty": "easy",
-      "question": "Which famous Briton was named after Florence, the city where she was born in 1820?",
+      "question": "Which famous Briton, later known as \"the Lady with the Lamp\", was born in Florence in 1820?",
       "options": [
         "Florence Nightingale",
         "Mary Shelley",
@@ -992,7 +992,7 @@
         "Elizabeth Barrett Browning"
       ],
       "correctIndex": 0,
-      "explanation": "The founder of modern nursing was born at Villa Colombaia, near Porta Romana. Her older sister was named Parthenope, partly after the old Greek settlement on the site of Naples.",
+      "explanation": "Florence Nightingale was named after her birthplace: she was born at Villa Colombaia, near Porta Romana. Her older sister was named Parthenope, partly after the old Greek settlement on the site of Naples.",
       "sources": [
         "https://en.wikipedia.org/wiki/Florence_Nightingale"
       ]
@@ -1026,7 +1026,7 @@
         "2005"
       ],
       "correctIndex": 1,
-      "explanation": "The listing covers the old heart of the city, where the Renaissance landmarks stand. Millions of tourists visit it every year.",
+      "explanation": "1982 was early days: the list itself only started in 1978. Florence's listing covers the whole old heart of the city, from the Duomo to the Ponte Vecchio and the Pitti Palace.",
       "sources": [
         "https://en.wikipedia.org/wiki/Historic_Centre_of_Florence",
         "https://en.wikipedia.org/wiki/Florence"

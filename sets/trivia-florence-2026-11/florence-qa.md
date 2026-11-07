@@ -111,3 +111,53 @@ the wine windows. Leaks found by reading and fixed:
   on the page ("re-emergence", "coronavirus"), not by the page text itself.
 - Wikipedia is the only source for most questions. Only Q3 also cites
   uffizi.it.
+
+## Independent review, 2026-11-07 (separate reviewer)
+
+After this file was written, a separate reviewer checked all 60 questions. They
+did not read this file before reaching their verdicts. They found the CSV and
+JSON identical. Some pages were rate-limited, so they judged 14 questions (and
+parts of three explanations) from knowledge only.
+
+| wrong | ambiguous | minor |
+|---|---|---|
+| 0 | 0 | 10 |
+
+All ten were applied to the CSV and the JSON together. No answer key changed,
+and no answer letter moved: the set is still 15 A / 15 B / 15 C / 15 D, with no
+letter three times running.
+- **03 Vasari Corridor:** "about a kilometre" became the Uffizi's own figure,
+  760 m from the Uffizi to the Boboli Gardens. The Uffizi page, fetched for this
+  fix, also says it was built in just five months. Wikipedia's figure of about a
+  kilometre starts from the Palazzo Vecchio.
+- **06 Piazzale Michelangelo:** "home to a bronze copy of David" was taken out of
+  the prompt, because it pointed at Michelangelo. It moved to the explanation.
+- **25 Orsanmichele:** the explanation now separates the two buildings: the
+  first grain loggia (1290) burned in 1304, and its replacement was begun in
+  1337. The 1304 fire is confirmed in the fetched text.
+- **29 New Sacristy:** the key now reads "The four times of day", matching the
+  other three options, so it no longer stands out by its wording.
+- **30 Opificio** (optional, applied): the key changed from "Pictures made of
+  inlaid stone", which is close to a translation of the institute's name, to
+  "Stone mosaics (commesso)".
+- **37 black rooster:** the explanation no longer says the seal marks Consortium
+  membership. Since about 2005 the gallo nero has been the official mark of all
+  Chianti Classico. It also gains the border-legend fact. This rests on the
+  reviewer's knowledge; Wikipedia still has the older wording.
+- **38 Sangiovese:** the prompt now says "at least 80% of a Chianti Classico".
+  Plain Chianti DOCG needs 70%. The explanation no longer says Ricasoli became
+  prime minister "later", since he first held the post in 1861, in the middle of
+  his work on the blend.
+- **57 Nightingale:** "named after Florence" was taken out of the prompt, which
+  had given the answer away. It moved to the explanation. The prompt now uses
+  "the Lady with the Lamp" (confirmed in the fetched text). The reviewer's draft
+  said Parthenope was born in Naples; that was not in the fetched text, so the
+  existing "partly after the old Greek settlement" wording was kept.
+- **59 UNESCO:** a flat explanation was replaced by a livelier one: the list
+  itself only started in 1978. That date is from the reviewer's knowledge.
+- **15 Galileo** (optional, applied): the explanation now adds that his thumb,
+  index finger and a tooth, taken at the same time, were lost for about a
+  century and are now in the museum too. The fetched text says they disappeared
+  after 1905 and were found at auction in 2009.
+
+The reviewer found no cross-question giveaways.
