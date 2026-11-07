@@ -39,7 +39,8 @@
  *     ("How it runs" folded to its rail, remembered in localStorage),
  *     hoverFormat (the gallery card the pane previews while none is chosen),
  *     setsDialog (which route
- *     the sets side task opened on), chooserClose, view (the form or Compare),
+ *     the sets side task opened on), previewSet (the set the read-only
+ *     preview layer shows, SetPreview.jsx), chooserClose, view (the form or Compare),
  *     meeting (the "Planning a…" chip), galleryDone, announce and clearedNote,
  *     pendingCreate (a ⌘↵ queued while topics load) and narrow (useNarrow:
  *     whether the window is a phone's), and round 4's (31 Oct 2026):

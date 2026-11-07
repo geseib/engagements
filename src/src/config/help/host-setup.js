@@ -255,7 +255,9 @@ const gameSetup = {
       MEETING_TYPES), or "Format" chips; "Compare formats" top right; one
       radio group (arrows choose). "Question set": the recents list ("Used
       by you lately", "Browse all"), or for a host with none a line on what a
-      set is and "Browse all N sets" beside the search; "Your question sets ·
+      set is and "Browse all N sets" beside the search; a Preview on every
+      readable set and on the picked line (SetPreview.jsx: Use this set,
+      Back); "Your question sets ·
       Make a new set" for a host who owns a set of the format, else "Make
       your own set"; the set is remembered per format while open. "Topics in
       this set" (all on, "Switch off any you want to skip.", "Loading this
@@ -287,7 +289,7 @@ const gameSetup = {
             { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required, but reveals nothing. Enter moves on.' },
             { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. A card each the first time, chips later. Arrow keys choose; Enter moves on.' },
             { title: 'Build Room and Event', text: 'Under **Bigger than one session**. In Question set\'s place: a Build Room\'s settings, folded under **Build Room setup**, or an event\'s date and start. **Create the Build Room** opens the room; **Create the event** opens its agenda. Event needs a plan with events.' },
-            { title: 'Question set', text: 'A search box with the sets you used lately under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. **Your question sets** opens sets you own; **Make a new set** or **Make your own set** opens the new-set panel.' },
+            { title: 'Question set', text: 'A search box with the sets you used lately under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. **Preview** shows a set\'s questions first. **Your question sets** opens sets you own; **Make a new set** or **Make your own set** opens the new-set panel.' },
           ],
         },
         {
@@ -378,6 +380,20 @@ const gameSetup = {
         },
         { t: 'p', text: 'In Create engagement the list takes the whole dialog while it is open; your title and format fold to one line with **Edit**, and **Keep the set I had** (or Esc) folds the list again. There Engage\'s sets read **Ready-made**. The same chooser picks an agenda item\'s set.' },
         { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions. They stay in your question sets, where you change them.' },
+      ],
+    },
+    /*
+      SetChooser.jsx onPreview, drawn by SetPreview.jsx in GameSetupDialog's
+      afterContent layer: GET question-sets/{id}/questions?scope=…; no
+      Preview on an unreadable set; Use this set / Back / × / Esc.
+    */
+    {
+      id: 'previewing-a-set',
+      title: 'Previewing a set',
+      icon: 'Eye',
+      blocks: [
+        { t: 'p', text: '**Preview** sits on every set in the list, on the sets you used lately and on the picked line. It opens the set over Create engagement without picking it: its format, owner, topic, tags and description, then its questions by topic. Trivia marks the right option; a poll or survey question shows its kind and options; a picture shows small.' },
+        { t: 'p', text: '**Use this set** picks it, as clicking its row does. **Back**, the × or Esc returns to the form exactly as you left it. A set that cannot be read has no Preview.' },
       ],
     },
     /*

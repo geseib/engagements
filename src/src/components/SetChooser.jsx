@@ -148,6 +148,14 @@ export default function SetChooser({
    * never sees it. With it, "Browse all" sits beside the search.
    */
   intro = '',
+  /**
+   * PREVIEW (owner, 7 Nov 2026: "add the set preview to the new engagement
+   * dialog"): (set) => void. Given, every readable set's row — the table, the
+   * recents list, the picked line — carries a Preview button; the caller
+   * draws the read-only panel (components/SetPreview.jsx). An unreadable set
+   * gets none: its row's refusal is all there is.
+   */
+  onPreview = null,
   now: nowProp = 0,
 }) {
   const [now] = useState(() => nowProp || Date.now());
@@ -304,6 +312,22 @@ export default function SetChooser({
     }
   };
 
+  /* The button takes the focus before the panel opens, so the panel's Modal
+     records it as the opener and gives the focus back to it on Back / Esc. */
+  const previewBtn = (set, extra = '') => (onPreview && set && pickable(set) ? (
+    <button
+      type="button"
+      className={`schs-btn schs-prev${extra}`}
+      aria-label={`Preview ${label(set)}`}
+      data-preview-key={keyOf(set)}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); if (e.currentTarget.focus) e.currentTarget.focus(); onPreview(set); }}
+    >
+      <Icon name="Eye" size={14} />
+      Preview
+    </button>
+  ) : null);
+
   const listId = `${idPrefix}-list`;
   const recentsId = `${idPrefix}-recents`;
   const optionId = (i) => `${idPrefix}-opt-${i}`;
@@ -380,6 +404,7 @@ export default function SetChooser({
             {/* "Unfiled" reads as something forgotten (live dev test 1 C1): say nothing instead. */}
             {chosen && !compact && chosen.topic && topicWords(chosen) && <span className="schs-dim">{topicWords(chosen)}</span>}
             {!disabled && <button type="button" ref={changeRef} className="schs-btn schs-push" onClick={() => { setOpen(true); }}>Change</button>}
+            {chosen && previewBtn(chosen, disabled ? ' schs-push' : '')}
           </div>
         </div>
       );
@@ -438,6 +463,7 @@ export default function SetChooser({
                         <span className="schs-dim">{set.totalQuestions || set.questionCount || 0} questions</span>
                         <span className={`schs-own${setOwnerIsOurs(set) ? '' : ' schs-own--off'}`} title={setOwnerTitle(set)}>{ownerChip(set)}</span>
                         <span className="schs-dim schs-push">{whenWords(set, recent.get(keyOf(set)), now)}</span>
+                        {previewBtn(set)}
                       </li>
                     ))}
                   </ul>
@@ -649,14 +675,20 @@ export default function SetChooser({
                       title={ok ? undefined : unreadableReason}
                     >
                       <td title={label(set)}>
-                        {/* Out of the Tab order and never committed by an arrow
-                            key (H3): the row's click commits, as does Enter in
-                            the search on the highlighted row. */}
-                        <input type="radio" id={optionId(i)} name={`${idPrefix}-set`} data-set-key={k} checked={k === value} disabled={!ok} tabIndex={-1} onChange={() => {}} onKeyDown={(e) => rowKey(e, i)} aria-label={label(set)} />
-                        {label(set)}{imageMarkerSuffix(set.hasImages)}
-                        {/* The current set in words, not only the wash (visual review). */}
-                        {k === value && <span className="schs-current"><Icon name="Check" size={12} /> current</span>}
-                        {note && <span className="schs-note">{note}</span>}
+                        {/* THE NAME LINE: the name is its own truncating text
+                            node (hard rule 8), so Preview at its end is never
+                            cut off by a long name. */}
+                        <span className="schs-nameline">
+                          {/* Out of the Tab order and never committed by an arrow
+                              key (H3): the row's click commits, as does Enter in
+                              the search on the highlighted row. */}
+                          <input type="radio" id={optionId(i)} name={`${idPrefix}-set`} data-set-key={k} checked={k === value} disabled={!ok} tabIndex={-1} onChange={() => {}} onKeyDown={(e) => rowKey(e, i)} aria-label={label(set)} />
+                          <span className="schs-name">{label(set)}{imageMarkerSuffix(set.hasImages)}</span>
+                          {/* The current set in words, not only the wash (visual review). */}
+                          {k === value && <span className="schs-current"><Icon name="Check" size={12} /> current</span>}
+                          {note && <span className="schs-note">{note}</span>}
+                          {previewBtn(set)}
+                        </span>
                         {wide && ok && set.description && <span className="schs-desc" title={set.description}>{set.description}</span>}
                       </td>
                       <td>{set.totalQuestions || set.questionCount || 0}</td>

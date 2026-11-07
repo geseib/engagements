@@ -413,11 +413,24 @@
 /* The scrolling list is a Tab stop in Chrome: the same ring as everything else (devtest 6 N4). */
 .schs .schs-list:focus-visible { outline: 2px solid var(--schs-link); outline-offset: 2px; }
 
+/* PREVIEW (owner, 7 Nov 2026): a quiet button at the end of each set's name
+   line, the recents row and the picked line. The name is its own truncating
+   text node (hard rule 8: never a flex container), so a long name gives way
+   and Preview stays reachable. */
+.schs .schs-nameline { display: flex; align-items: center; min-width: 0; }
+.schs .schs-name { flex: 0 1 auto; min-width: 0; margin-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schs .schs-prev { flex: none; min-height: 30px; padding: 0 10px; color: var(--schs-link); }
+.schs .schs-nameline .schs-prev { margin-left: auto; }
+.schs .schs-picked .schs-prev.schs-push { margin-left: auto; }
+.schs .schs-prev:hover { border-color: var(--schs-link); }
+
 /* THE PHONE (devtest 5 N5, devtest 4 V1): the name gets the width — it wraps
    to two lines, and the Owner and Updated columns step aside. */
 @media (max-width: 600px) {
   .schs .schs-keys { display: none; }
   .schs .schs-tbl td:first-child { white-space: normal; overflow-wrap: anywhere; }
+  .schs .schs-tbl .schs-name { white-space: normal; }
+  .schs .schs-nameline { flex-wrap: wrap; gap: 4px 0; }
   .schs .schs-tbl .schs-desc { display: none; }
   /* `.schs--wide` too: its 120px Owner column out-ranked the plain rule and
      kept an empty strip on the right of the phone list (devtest 8 R3-4). */

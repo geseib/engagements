@@ -96,6 +96,7 @@ import {
   readHowHidden, writeHowHidden, isMacPlatform, createShortcutLabel, isCreateShortcut,
 } from '../config/formatGuide';
 import SetChooser from './SetChooser';
+import SetPreview from './SetPreview';
 import { ENGAGE } from '../utils/setOwnerTag';
 import FormatPicker from './FormatPicker';
 import FormatCompare from './FormatCompare';
@@ -379,6 +380,10 @@ export default function GameSetupDialog({
   const [setsDialog, setSetsDialog] = useState(null);
   /** Sets seen by <HostQuestionSetsDialog>, including any just created. */
   const [localSets, setLocalSets] = useState(null);
+  /** The set being previewed (components/SetPreview), or null. A sibling layer, like the sets dialog. */
+  const [previewSet, setPreviewSet] = useState(null);
+  /* After "Use this set", the focus goes to the folded line's Change once it is drawn. */
+  const focusChangeAfterUse = useRef(false);
   /** The set chooser's full list is open: the body folds to the Questions step. */
   const [chooserOpen, setChooserOpen] = useState(false);
   const [chooserClose, setChooserClose] = useState(0);
@@ -594,6 +599,20 @@ export default function GameSetupDialog({
     knownWhenOpened.current = 'baseline';
     setSetsDialog(route);
   };
+
+  /* PREVIEW → USE THIS SET: the row click's path (chooseSet), then the chooser
+     folds as a pick folds it, and the panel closes. */
+  const usePreviewed = (set) => {
+    chooseSet(setRefKey(set));
+    setChooserClose((n) => n + 1);
+    setPreviewSet(null);
+    focusChangeAfterUse.current = true;
+  };
+  useEffect(() => {
+    if (!focusChangeAfterUse.current || previewSet) return;
+    const change = bodyRef.current && bodyRef.current.querySelector('.schs-picked .schs-btn:not(.schs-prev)');
+    if (change && change.focus) { focusChangeAfterUse.current = false; change.focus(); }
+  });
 
   /** SessionOptions reports each change under the payload's own key. */
   const changeOptions = (patch) => {
@@ -1035,6 +1054,7 @@ export default function GameSetupDialog({
         theme="dark"
         wide
         onOpenChange={setChooserOpen}
+        onPreview={(set) => setPreviewSet(set)}
       />
       {/* THE ENTRY POINT in create mode. "Your question sets" only for a host
           who owns a set of this format; otherwise one link (round 4). While
@@ -1381,6 +1401,16 @@ export default function GameSetupDialog({
           initialRoute={setsDialog}
           onClose={() => setSetsDialog(null)}
           onSetsChanged={takeSets}
+        />
+      ) : previewSet ? (
+        /* THE SET PREVIEW, the same sibling layer: the form under it stays
+           mounted, so nothing typed is lost. Read-only on an edit. */
+        <SetPreview
+          set={previewSet}
+          onClose={() => setPreviewSet(null)}
+          onUse={isEdit ? null : usePreviewed}
+          ownerLabels={{ [ENGAGE]: 'Ready-made' }}
+          teamName={(team && team.name) || ''}
         />
       ) : null}
     >
