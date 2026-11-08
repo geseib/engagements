@@ -1,5 +1,41 @@
 # Installed: Uffizi Art Titles
 
+## Prod (8 Nov 2026): installed as a new set
+
+Owner-approved. Installed on **prod** (`engageprod`, platform `SETS` library) as a new set
+`uffiziarttitles`, at **v1**. No set with that id existed on prod beforehand. Prod's Archive cannot
+copy images on its older code, so this was done by hand, the same way as prod's Famous Art
+Titles.
+
+1. Re-read the **live dev** set (its active version, v2) and wrote `uffizi-art-titles-prod.csv` from it. Every
+   column (RealAnswer included) is as stored on dev. Only the Image host changes, to
+   `https://engage.seibtribe.us/`.
+2. Copied all 60 images from `s3://engagedev-media/sets/uffiziarttitles/` to
+   `s3://engageprod-media/sets/uffiziarttitles/` under the same neutral names, with
+   `Content-Type: image/jpeg`. Each prod URL returned 200 `image/jpeg`, with the same bytes as
+   dev (`image-check-prod.json`).
+3. Ran `node scripts/install-question-set.js engageprod sets/uffizi-2026-11/uffizi-art-titles-prod.csv --type call-and-answer
+   --title "Uffizi Art Titles" --topic arts-culture --description "..." --persona comedian --tags art-history,painting,uffizi,renaissance`, first
+   as a dry run (60 questions, 6 categories, 0 skipped), then with `--apply`.
+4. Set `bluffRound: false` and `promptId` on the SETS row, because the installer writes none of them.
+
+**Read-back against dev:**
+- All 66 rows (questions and categories) were compared by SK on every attribute, with
+  Image compared after the host swap: **0 mismatches**. RealAnswer is stored on every row.
+- The SETS row matches dev on name, description, type, active, topic, tags, persona,
+  `bluffRound: false`, instructions, question and category counts and hasImages. It has no ttl. Only
+  `promptId` differs, as described below.
+- Every prod Image is on engage.seibtribe.us and serves image/jpeg.
+
+**What prod's older code does with these fields:** `bluffRound` and RealAnswer are stored,
+but prod's code from before the bluff round may ignore them until its next deploy.
+
+**Prompt.** The set points at prod's **"Art & Creative Titles - Naming Celebration"**
+(`mvru8w1qz3hhl8oqlqn`). That is prod's copy of the art prompt. On dev the set uses `mskc5h7boibe5abg15`, the dev copy of the
+same prompt (matched by name, as the Archive matched it on test).
+
+Dev and test were not touched. Nothing was pushed or deployed.
+
 ## Test (8 Nov 2026): Image URLs moved to engage.test
 
 The set was promoted to **test** (`engagetest`, platform `SETS`) through the Archive
