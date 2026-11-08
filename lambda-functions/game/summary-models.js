@@ -142,11 +142,27 @@ function estimateCostUsd(model, inputTokens, outputTokens) {
 const variantSkPrefix = (paddedQuestionNumber) => 'QUESTION#' + paddedQuestionNumber + '#AIVARIANT#';
 const variantSk = (paddedQuestionNumber, id) => variantSkPrefix(paddedQuestionNumber) + id;
 
+/**
+ * THE MODEL A WORKIE NAMED FOR ITS OWN READS (prompt-shape.js
+ * normalizeSummaryModel), or null for the house default. Bedrock rows only:
+ * an id that is malformed, not in this catalogue, not on Bedrock, or the
+ * default itself reads as null, so a bad value degrades to the read as it
+ * always was rather than failing it.
+ */
+function promptSummaryModel(promptData) {
+  const { normalizeSummaryModel } = require('./prompt-shape');
+  const { ok, model } = normalizeSummaryModel(promptData && promptData.summaryModel);
+  if (!ok || !model) return null;
+  const entry = findModel(model);
+  return entry && entry.provider === 'bedrock' && entry !== DEFAULT_MODEL ? entry : null;
+}
+
 module.exports = {
   MODELS,
   DEFAULT_MODEL_ID,
   DEFAULT_MODEL,
   findModel,
+  promptSummaryModel,
   modelByProviderId,
   modelPickerOn,
   pickerCatalogue,
