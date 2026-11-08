@@ -9,6 +9,35 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 8 Nov 2026, later (Archive promotion: images travel, one batch)
+
+**Test:** merge of dev `718f7161f`. The entry below (the earlier 8 Nov push) is already on test.
+
+Found by promoting the five new sets from dev to test through the Archive this morning.
+
+### New
+
+- **Sets and prompts promote in one batch.** The export dialog has one selection across Question sets and Prompts, and one **Export** and one **Promote to test…** / **Promote to prod…** at its foot. The link carries everything picked.
+
+### Fixed
+
+- **Images now travel with a promoted set.** A set whose pictures live on an Engage tier's own site (the patent drawings, the Uffizi paintings) used to arrive still loading them from the tier it came from. The backup now carries those images; the restore copies them into the receiving tier and points the set at its own copy. Pictures on another site (e.g. Wikimedia) stay where they are, and the export report, the preview and the restore report say "N images stay on another site" instead of saying nothing.
+- **Prompts are restored before sets**, so a set arrives linked to the copy of its Workie prompt that came in the same batch.
+- **The check after a restore covers prompts** (version, whether it is active, name), including a batch of prompts only.
+
+### What to look at
+
+1. On dev's Archive, open **Export from dev…**, tick a set that has its own Workie prompt (*What Is This Thing?*) and that prompt; check both stay ticked and one **Promote to test…** offers both.
+2. Don't restore it on test (both are already there): open the link, check the banner and preview list the prompt first and the set second, then **Back**.
+3. On test's *What Is This Thing?* and *Uffizi Art Titles*, long-press or open an image in a new tab: the address is on engage.test, not engage.dev.
+
+### Known gaps
+
+- Prod still runs the older Archive until its next deploy, so a promotion into prod does not copy images yet; *What Is This Thing?* and *Uffizi Art Titles* reached prod by script with their images hosted on prod.
+- Older backups taken before this change never carried their images; restoring one lists them as staying on another site.
+
+---
+
 ## 8 Nov 2026 (the bluff round, promoting sets through the Archive, the question picker, Auto that never stalls)
 
 **Test:** merge of dev `d708952db` plus these notes. Everything below this entry is already on test.
