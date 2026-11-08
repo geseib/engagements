@@ -34,7 +34,7 @@ const { promptKey, promptBodyKey } = require('./prompt-access');
 const promptVersions = require('./prompt-versions');
 const { resolveLocalPromptId } = require('./archive-prompt-link');
 const { normalizeGameType, DEFAULT_GAME_TYPE } = require('./game-types');
-const { copyMediaIn } = require('./archive-media');
+const { copyMediaIn, rewriteTierUrls, absoluteImagesIn } = require('./archive-media');
 const snap = require('./archive-snapshot');
 
 const nowIso = (deps) => (deps.now ? deps.now() : new Date().toISOString());
@@ -80,7 +80,12 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
   // Images first, before any row is written. copyMediaIn never overwrites an object that is
   // already there, so a media fault (a missing bucket, AccessDenied — deployment faults, which
   // it rethrows) costs at most an orphaned copy, never a half-written version.
-  const media = await copyMediaIn(deps.s3, { mediaBucket: deps.mediaBucket, archiveBucket: deps.archiveBucket, media: envelope.media });
+  const copied = await copyMediaIn(deps.s3, { mediaBucket: deps.mediaBucket, archiveBucket: deps.archiveBucket, media: envelope.media });
+  // An image that was an absolute URL on the source tier's site is now an object in THIS tier's
+  // bucket: the row names it by its stored key, which every tier serves same-origin. Whatever
+  // absolute URL is left stays on another site, and the report says so (archive-media.js).
+  const landedRows = rewriteTierUrls(rows, envelope.media, [...copied.missing, ...copied.skipped]);
+  const media = { ...copied, external: absoluteImagesIn(landedRows) };
 
   // A set that has never been versioned keeps its content in the legacy partition. Snapshot it
   // to a version first (v1, unless v1 already holds debris), exactly as a replace does
@@ -124,7 +129,7 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
   }
 
   const contentPk = setPartition(ref, targetVersion);
-  const items = rows.map((row) => ({ ...row, PK: contentPk }));
+  const items = landedRows.map((row) => ({ ...row, PK: contentPk }));
   try {
     await batchPutItems(db, tableName, items);
   } catch (error) {
@@ -329,6 +334,9 @@ async function planSetSnapshot(deps, envelope) {
   // new set lands inactive and an existing one keeps the status it has.
   const active = snapshotActive !== null ? snapshotActive : (existing ? currentlyActive : false);
   const settings = snap.settingsFrom(envelope.metadata);
+  // The images that would stay on another site: what is left absolute once every tier-site URL
+  // the backup carries an object for is rewritten to its key.
+  const externalImages = absoluteImagesIn(rewriteTierUrls(envelope.rows, envelope.media));
   return {
     kind: 'set',
     id: setId,
@@ -339,6 +347,7 @@ async function planSetSnapshot(deps, envelope) {
     active,
     questionCount: counts.questions,
     categoryCount: counts.categories,
+    externalImages,
   };
 }
 
@@ -389,7 +398,38 @@ async function checkRestoredSet(deps, setId, expected) {
   }
 }
 
+/**
+ * Re-read a prompt this request just restored. `expected` is `{version, status, name}` as the
+ * restore wrote them; each is reported beside what the row now says, with `active` read from
+ * the status the way the prompt library reads it. Never throws, like checkRestoredSet.
+ */
+async function checkRestoredPrompt(deps, promptId, expected) {
+  try {
+    const found = await deps.db.send(new GetCommand({ TableName: deps.tableName, Key: promptKey({ scope: tenant.PLATFORM, promptId }) }));
+    const row = found && found.Item;
+    if (!row) return { matches: false, error: 'The prompt is not there after the restore.' };
+    const live = {
+      version: toVersion(row.version) || null,
+      status: String(row.status || ''),
+      name: String(row.name || ''),
+    };
+    const same = (key) => expected[key] === null || expected[key] === undefined || String(expected[key]) === String(live[key]);
+    // A row with neither a body key nor text of its own is an empty prompt, whatever it is called.
+    const hasBody = Boolean(row.s3Key) || snap.rowCarriesPromptText(row);
+    return {
+      version: live.version,
+      status: live.status,
+      active: live.status === 'active',
+      name: live.name,
+      hasBody,
+      matches: hasBody && same('version') && same('status') && same('name'),
+    };
+  } catch (error) {
+    return { matches: false, error: `The check could not read the prompt back: ${error.message}` };
+  }
+}
+
 module.exports = {
   restoreSetSnapshot, restorePromptSnapshot, resolvePromptLink,
-  snapshotCounts, planSetSnapshot, planPromptSnapshot, checkRestoredSet,
+  snapshotCounts, planSetSnapshot, planPromptSnapshot, checkRestoredSet, checkRestoredPrompt,
 };

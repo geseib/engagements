@@ -21,6 +21,11 @@
  * THEN IT CHECKS. Each restored set is read back and its live question and category counts are
  * reported beside the snapshot's (`check` on the entry), so "it worked" is a read, not a claim.
  *
+ * PROMPTS GO FIRST. Every item in the batch is downloaded and parsed before anything is written,
+ * then restored prompts-before-sets (batchInOrder), so a set whose prompt travels in the same
+ * batch links to the copy that has just landed here, not to whatever this tier had before or to
+ * nothing. The dry run lists them in the same order.
+ *
  * `dryRun: true` ASKS WHAT WOULD HAPPEN, AND WRITES NOTHING. Each item is downloaded and parsed,
  * the set or prompt it names is looked up, and the answer is per item: a new set or a new
  * version of vN, whether that one is live now, its counts, and whether it will be active on
@@ -40,7 +45,8 @@ const { promptNameFromTags, resolveLocalPromptId } = require('./shared/archive-p
 const archive = require('./shared/archive-client');
 const snap = require('./shared/archive-snapshot');
 const {
-  restoreSetSnapshot, restorePromptSnapshot, snapshotCounts, planSetSnapshot, planPromptSnapshot, checkRestoredSet,
+  restoreSetSnapshot, restorePromptSnapshot, snapshotCounts, planSetSnapshot, planPromptSnapshot,
+  checkRestoredSet, checkRestoredPrompt,
 } = require('./shared/archive-restore');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
@@ -64,6 +70,32 @@ const LEGACY_TYPES = ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey
  * Decided by content because the row's ContentType is not always there to ask.
  */
 const isLegacyPromptDoc = (doc) => Boolean(doc) && typeof doc === 'object' && !Array.isArray(doc);
+
+/** Is this downloaded item a prompt, snapshot or legacy? */
+const isPromptItem = ({ item, parsed }) => parsed.kind === 'prompt'
+  || (parsed.kind === 'legacy' && (item.ContentType === 'prompt' || isLegacyPromptDoc(parsed.doc)));
+
+/**
+ * Download and parse every item, then put the prompts first, keeping the order asked within each
+ * kind. An item that cannot be downloaded or parsed is returned as `{archiveId, error}` in place.
+ */
+async function batchInOrder(selectedItems) {
+  const loaded = [];
+  for (const raw of selectedItems) {
+    const archiveId = String(raw || '').trim();
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const { item, content } = await archive.downloadItem(archiveId);
+      loaded.push({ archiveId, item, content, parsed: snap.parseArchiveContent(content) });
+    } catch (error) {
+      loaded.push({ archiveId, error });
+    }
+  }
+  const rank = (entry) => (!entry.error && isPromptItem(entry) ? 0 : 1);
+  return loaded.map((entry, index) => ({ entry, index }))
+    .sort((a, b) => rank(a.entry) - rank(b.entry) || a.index - b.index)
+    .map(({ entry }) => entry);
+}
 
 exports.handler = async (event) => {
   if (event && event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: corsHeaders, body: '' };
@@ -92,13 +124,13 @@ exports.handler = async (event) => {
   };
   const results = { successful: [], failed: [], totalRequested: selectedItems.length };
   const becameActive = [];
-  const media = { copied: 0, kept: 0, missing: [], skipped: [] };
+  const media = { copied: 0, kept: 0, missing: [], skipped: [], external: [] };
 
-  for (const raw of selectedItems) {
-    const archiveId = String(raw || '').trim();
+  for (const loaded of await batchInOrder(selectedItems)) {
+    const { archiveId } = loaded;
     try {
-      const { item, content } = await archive.downloadItem(archiveId);
-      const parsed = snap.parseArchiveContent(content);
+      if (loaded.error) throw loaded.error;
+      const { item, content, parsed } = loaded;
 
       if (parsed.kind === 'unknown') {
         results.failed.push({ archiveId, refused: true, error: `This backup uses a format this version does not read (${JSON.stringify(parsed.schema)}), so it is not restored.` });
@@ -111,6 +143,9 @@ exports.handler = async (event) => {
           : await restoreLegacySet(event, archiveId, item, content);
         if (entry.kind === 'set' && entry.id) {
           entry.check = await checkRestoredSet(deps, entry.id, { questions: entry.questionCount ?? null, categories: null });
+        }
+        if (entry.kind === 'prompt' && entry.id) {
+          entry.check = await checkRestoredPrompt(deps, entry.id, { version: entry.version, status: entry.status, name: entry.name });
         }
         results.successful.push(entry);
         continue;
@@ -128,13 +163,14 @@ exports.handler = async (event) => {
       const { media: restoredMedia, wasActive, ...entry } = outcome;
       const check = parsed.kind === 'set'
         ? await checkRestoredSet(deps, outcome.id, snapshotCounts(parsed.envelope))
-        : undefined;
+        : await checkRestoredPrompt(deps, outcome.id, { version: outcome.version, status: outcome.status, name: outcome.name });
       results.successful.push({ archiveId, ...entry, ...(check ? { check } : {}) });
       if (restoredMedia) {
         media.copied += restoredMedia.copied;
         media.kept += restoredMedia.kept;
         media.missing.push(...restoredMedia.missing);
         media.skipped.push(...restoredMedia.skipped);
+        media.external.push(...(restoredMedia.external || []));
       }
       if (outcome.kind === 'set' && outcome.active === true && wasActive !== true) {
         becameActive.push({ id: outcome.id, name: outcome.name });
@@ -163,11 +199,11 @@ async function planRestore(selectedItems) {
   const deps = { db, tableName: process.env.TABLE_NAME };
   const plan = [];
   const failed = [];
-  for (const raw of selectedItems) {
-    const archiveId = String(raw || '').trim();
+  for (const loaded of await batchInOrder(selectedItems)) {
+    const { archiveId } = loaded;
     try {
-      const { item, content } = await archive.downloadItem(archiveId);
-      const parsed = snap.parseArchiveContent(content);
+      if (loaded.error) throw loaded.error;
+      const { item, parsed } = loaded;
       if (parsed.kind === 'unknown') {
         failed.push({ archiveId, refused: true, error: `This backup uses a format this version does not read (${JSON.stringify(parsed.schema)}), so it would not be restored.` });
         continue;

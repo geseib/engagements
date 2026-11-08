@@ -586,7 +586,7 @@ test('Promote to test… exports and hands on a link to test\'s Archive with the
   fireEvent.click(screen.getByRole('button', { name: /export from dev…/i }));
   fireEvent.click(await within(dialog()).findByLabelText('Select Historic World Leaders'));
   fireEvent.click(within(dialog()).getByLabelText('Select lessons from the Tech World'));
-  fireEvent.click(within(dialog()).getAllByRole('button', { name: /promote to test…/i })[0]);
+  fireEvent.click(within(dialog()).getByRole('button', { name: /^promote 2 sets to test…$/i }));
   const result = await screen.findByTestId('archive-export-result');
   expect(result).toHaveTextContent('2 items ready for test');
   expect(within(result).getByRole('link', { name: /open test’s archive/i }))
@@ -618,4 +618,101 @@ test('a plain export also offers the ids and a way on; prod has no Promote butto
   fireEvent.click(screen.getByRole('button', { name: /export from prod…/i }));
   await within(dialog()).findByLabelText('Select lessons from the Tech World');
   expect(within(dialog()).queryByRole('button', { name: /promote to/i })).not.toBeInTheDocument();
+});
+
+/* ------------------------------------- one batch for sets and prompts (2026-11-08) */
+const PICK_PROMPTS = [{ promptId: 'witt-reveal', name: 'What Is This Thing? reveal', scope: 'platform', status: 'active', gameType: 'call-and-answer' }];
+
+test('sets and prompts are one selection with one Promote, prompts first, and the link carries every id', async () => {
+  route([
+    ['GET', /admin\/archive\/items(\?|$)/, () => reply({ items: [EARLIER, LEGACY, LATEST] })],
+    ['GET', /admin\/question-sets$/, () => reply({ questionSets: PICKER_SETS })],
+    ['GET', /admin\/ai-prompts$/, () => reply({ prompts: PICK_PROMPTS })],
+    ['POST', /admin\/export-to-archive$/, (_url, init) => (JSON.parse(init.body).exportType === 'prompts'
+      ? reply({ results: { successful: [{ id: 'witt-reveal', name: 'What Is This Thing? reveal', archiveId: 'new-p' }], failed: [], totalRequested: 1 } })
+      : reply({ results: { successful: [{ id: 'techworld', name: 'T', archiveId: 'new-s', media: { copied: 2, missing: [], skipped: [], external: ['https://commons.wikimedia.org/x.jpg'] } }], failed: [], totalRequested: 1 } }))],
+  ]);
+  render(<ArchivePanel environment={DEV} />);
+  await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(screen.getByRole('button', { name: /export from dev…/i }));
+  fireEvent.click(await within(dialog()).findByLabelText('Select lessons from the Tech World'));
+  fireEvent.click(within(dialog()).getByLabelText('Select What Is This Thing? reveal'));
+  // Ticking the prompt keeps the set: both lists are one batch.
+  expect(within(dialog()).getByLabelText('Select lessons from the Tech World')).toBeChecked();
+  // One pair of actions, at the foot, naming the whole batch.
+  expect(within(dialog()).getAllByRole('button', { name: /^promote/i })).toHaveLength(1);
+  expect(within(dialog()).getByRole('button', { name: /^export 1 set and 1 prompt$/i })).toBeEnabled();
+  fireEvent.click(within(dialog()).getByRole('button', { name: /^promote 1 set and 1 prompt to test…$/i }));
+  const result = await screen.findByTestId('archive-export-result');
+  const exports = callsTo('POST', /admin\/export-to-archive$/).map(bodyOf);
+  expect(exports.map((b) => b.exportType)).toEqual(['prompts', 'questionsets']);
+  expect(exports[0].selectedItems).toEqual([{ scope: 'platform', id: 'witt-reveal' }]);
+  expect(result).toHaveTextContent('2 items ready for test');
+  expect(within(result).getByRole('link', { name: /open test’s archive/i }))
+    .toHaveAttribute('href', 'https://engage.test.seibtribe.us/admin?section=archive&promote=new-p,new-s&from=dev');
+  expect(screen.getByTestId('archive-report')).toHaveTextContent('1 image stays on another site, not copied: https://commons.wikimedia.org/x.jpg.');
+});
+
+test('a restore sends prompts before sets, lists what stays on another site, and reads the prompt back', async () => {
+  const PROMPT_TEST = { ...PROMPT, Tags: ['dev', ...PROMPT.Tags.slice(1)] };
+  route([
+    ['GET', /admin\/archive\/items(\?|$)/, () => reply({ items: [EARLIER, LEGACY, LATEST, PROMPT_TEST] })],
+    IMPORT({
+      dryRun: true,
+      plan: [
+        { archiveId: 'arc-p', kind: 'prompt', id: 'consultant', name: 'Consultant voice', mode: 'created', status: 'active' },
+        { ...PLAN_ARC2.plan[0], externalImages: ['https://commons.wikimedia.org/a.jpg', 'https://commons.wikimedia.org/b.jpg'] },
+      ],
+      failed: [],
+    }, {
+      results: { successful: [
+        { archiveId: 'arc-p', kind: 'prompt', id: 'consultant', name: 'Consultant voice', mode: 'created', version: 2, status: 'active',
+          check: { version: 2, status: 'active', active: true, name: 'Consultant voice', hasBody: true, matches: true } },
+        RESTORED_ARC2.results.successful[0],
+      ], failed: [] },
+      becameActive: [],
+      media: { copied: 0, kept: 0, missing: [], skipped: [], external: ['https://commons.wikimedia.org/a.jpg'] },
+    }),
+  ]);
+  render(<ArchivePanel environment={TEST} />);
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+  fireEvent.click(within(row('arc-p')).getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /import 2 selected/i }));
+  await waitFor(() => expect(dryRuns()).toHaveLength(1));
+  expect(bodyOf(dryRuns()[0]).selectedItems).toEqual(['arc-p', 'arc-2']);
+  const setPlan = await within(dialog()).findByTestId('archive-plan-arc-2');
+  expect(within(setPlan).getByTestId('archive-plan-sub')).toHaveTextContent('2 images stay on another site');
+  fireEvent.click(within(dialog()).getByRole('button', { name: /^restore 2$/i }));
+  await waitFor(() => expect(restores()).toHaveLength(1));
+  expect(bodyOf(restores()[0]).selectedItems).toEqual(['arc-p', 'arc-2']);
+  const check = await screen.findByTestId('archive-check-prompt-consultant');
+  expect(check).toHaveTextContent('Consultant voice');
+  expect(check).toHaveTextContent('v2');
+  expect(check).toHaveTextContent('Active');
+  expect(check).toHaveTextContent('Matches');
+  expect(screen.getByTestId('archive-report')).toHaveTextContent('1 image stays on another site, not copied: https://commons.wikimedia.org/a.jpg.');
+});
+
+test('a prompt-only restore still shows the read-back, not only the way on', async () => {
+  route([
+    LIST_WITH_PROMPT,
+    IMPORT({ dryRun: true, plan: [{ archiveId: 'arc-p', kind: 'prompt', id: 'consultant', name: 'Consultant voice', mode: 'new-version', currentVersion: 3, status: 'draft' }], failed: [] }, {
+      results: { successful: [{ archiveId: 'arc-p', kind: 'prompt', id: 'consultant', name: 'Consultant voice', mode: 'new-version', version: 4, status: 'draft',
+        check: { version: 4, status: 'draft', active: false, name: 'Consultant voice', hasBody: true, matches: true } }], failed: [] },
+      becameActive: [],
+      media: { copied: 0, kept: 0, missing: [], skipped: [], external: [] },
+    }),
+  ]);
+  render(<ArchivePanel environment={TEST} />);
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-p')).getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /import 1 selected/i }));
+  const restore = within(dialog()).getByRole('button', { name: /^restore 1$/i });
+  await waitFor(() => expect(restore).toBeEnabled());
+  fireEvent.click(restore);
+  const section = await screen.findByTestId('archive-restore-check');
+  expect(within(section).getByRole('heading', { name: 'Checked after the restore' })).toBeInTheDocument();
+  const check = within(section).getByTestId('archive-check-prompt-consultant');
+  expect(check).toHaveTextContent('v4');
+  expect(check).toHaveTextContent('draft');
+  expect(within(section).getByRole('link', { name: /promote these to prod/i })).toBeInTheDocument();
 });

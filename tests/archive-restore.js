@@ -64,7 +64,7 @@ const setEnvelope = (overrides = {}) => snap.buildSetEnvelope({
   await check('it is created as version 1 of "pulse"', () => {
     assert.deepStrictEqual(outcome, {
       kind: 'set', id: 'pulse', name: 'Pulse', mode: 'created', version: 1, active: false, wasActive: false,
-      media: { copied: 1, kept: 0, missing: [], skipped: [] },
+      media: { copied: 1, kept: 0, missing: [], skipped: [], external: [] },
     });
     assert.strictEqual(created.activeVersion, 1);
   });
