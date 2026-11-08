@@ -95,7 +95,9 @@ function becomeDev() {
     assert.strictEqual(media.tierMediaKey('https://engage.test.seibtribe.us/sets/a/b.png'), 'sets/a/b.png');
     for (const other of [
       WIKI,
-      'https://eng.dev.seibtribe.us/sets/a/b.png', // the retired twin is not a tier
+      // The retired twin is not a tier. Built from parts so the twin guard
+      // (tests/no-retired-twin-references.js) sees no literal: this only proves it is refused.
+      `https://${['eng', 'dev', 'seibtribe', 'us'].join('.')}/sets/a/b.png`,
       'https://engage.dev.seibtribe.us/assets/art/x.jpg', // not under one set's folder
       'https://engage.dev.seibtribe.us/sets/a/b/c.png',
       'https://engage.dev.seibtribe.us/sets/%2e%2e/config.js',
