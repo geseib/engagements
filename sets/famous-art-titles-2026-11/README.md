@@ -85,6 +85,89 @@ on every row. Its round-2 CSV gives every row the same neutral image as the matc
 on test (matched on the teaser Title, which is identical on both tiers), served from
 `engage.seibtribe.us`. Nothing else on those rows changes.
 
+## Round 3 (8 Nov 2026): dev's Titles become teasers
+
+On dev, the Title players see while they answer was the artist and date ("Leonardo da
+Vinci, c. 1503"), which is a strong hint. The owner asked for teasers instead: "we dont
+want to give too much away or ruin creativity, so the less the better".
+
+**Rules for the new Titles:**
+- 1 to 3 words, in capitals, as the test and prod teasers are.
+- Evocative, but not describing the subject or the real title.
+- No artist, date or place, and never a pun that points at the answer. Where in doubt, blander.
+
+A script check (not committed) tested each one against its row. A Title fails if any
+word shares its first five letters with a word in that row's reveal: the real title, artist,
+date and place in AnswerDetails before "Trivia:", or in the old Title. All 60 passed, all
+are unique, and none contains a digit.
+
+The artist and date stay in the reveal: AnswerDetails, which only Workie reads at RESULTS.
+School is empty on dev, and `game/get-question.js` now sends School only at RESULTS. Test
+and prod already had teasers, so they are unchanged.
+
+| Question | Before | After | Real title (revealed at RESULTS) |
+|---|---|---|---|
+| `c001#001` | Leonardo da Vinci, c. 1503 | **A LONG PAUSE** | Mona Lisa (La Gioconda) |
+| `c001#002` | Sandro Botticelli, c. 1485 | **OPEN AIR** | The Birth of Venus |
+| `c001#003` | Michelangelo, 1508-1512 | **BIG MOMENT** | The Creation of Adam |
+| `c001#004` | Leonardo da Vinci, c. 1495-1498 | **GRAVITY** | The Last Supper |
+| `c001#005` | Raphael, 1509-1511 | **BUSY DAY** | The School of Athens |
+| `c001#006` | Jan van Eyck, 1434 | **PRIVATE MATTERS** | The Arnolfini Portrait |
+| `c001#007` | Hieronymus Bosch, c. 1490-1510 | **TOO MUCH** | The Garden of Earthly Delights |
+| `c001#008` | Hans Holbein the Younger, 1533 | **CLOSE LOOK** | The Ambassadors |
+| `c001#009` | Sandro Botticelli, c. 1480 | **FINE COMPANY** | Primavera (Spring) |
+| `c002#001` | Vincent van Gogh, 1889 | **RESTLESS** | The Starry Night |
+| `c002#002` | Georges Seurat, 1884 | **AT EASE** | A Sunday Afternoon on the Island of La Grande Jatte |
+| `c002#003` | Claude Monet, 1872 | **QUIET HOURS** | Impression |
+| `c002#004` | Pierre-Auguste Renoir, 1876 | **GOOD TIMES** | Dance at Le Moulin de la Galette |
+| `c002#005` | Édouard Manet, 1882 | **ELSEWHERE** | A Bar at the Folies-Bergère |
+| `c002#006` | Edgar Degas, c. 1874 | **PATIENCE** | The Ballet Class |
+| `c002#007` | Claude Monet, 1875 | **A FINE DAY** | Woman with a Parasol – Madame Monet and Her Son |
+| `c002#008` | Vincent van Gogh, 1888 | **LINGER** | Café Terrace at Night |
+| `c002#009` | Vincent van Gogh, 1888 | **OLD FRIENDS** | Sunflowers |
+| `c002#010` | Paul Cézanne, c. 1890-1895 | **NO HURRY** | The Card Players |
+| `c002#011` | Gustave Caillebotte, 1877 | **IN PASSING** | Paris Street; Rainy Day (Rue de Paris |
+| `c003#001` | Hasegawa Tōhaku, c. 1595 | **SILENCE** | Pine Trees (Shōrin-zu byōbu) |
+| `c004#001` | Johannes Vermeer, c. 1665 | **UNSPOKEN** | Girl with a Pearl Earring |
+| `c004#002` | Rembrandt van Rijn, 1642 | **PRIDE** | The Night Watch (Militia Company of District II under the Command of Captain Frans Banninck Cocq) |
+| `c004#003` | Caravaggio, 1599-1600 | **SUDDENLY** | The Calling of Saint Matthew |
+| `c004#004` | Artemisia Gentileschi, c. 1612-1613 | **RESOLVE** | Judith Slaying Holofernes |
+| `c004#005` | Diego Velázquez, 1656 | **A LONG STORY** | Las Meninas |
+| `c004#006` | Rembrandt van Rijn, 1632 | **SERIOUS** | The Anatomy Lesson of Dr. Nicolaes Tulp |
+| `c004#007` | Johannes Vermeer, c. 1658-1660 | **CALM** | The Milkmaid |
+| `c004#008` | Johannes Vermeer, c. 1660 | **FAR SIDE** | View of Delft |
+| `c004#009` | Jean-Honoré Fragonard, 1767 | **CAREFREE** | The Swing |
+| `c004#010` | Jacques-Louis David, 1784 | **BEFORE** | The Oath of the Horatii |
+| `c004#011` | Thomas Gainsborough, c. 1770 | **POISE** | The Blue Boy |
+| `c005#001` | Edvard Munch, 1893 | **BAD DAY** | The Scream |
+| `c005#002` | Gustav Klimt, 1908 | **ALWAYS** | The Kiss (Der Kuss) |
+| `c005#003` | Arnold Böcklin, 1883 | **HUSH** | Isle of the Dead |
+| `c005#004` | Wassily Kandinsky, 1913 | **UPROAR** | Composition VII |
+| `c005#005` | Franz Marc, 1911 | **DAYDREAM** | Blue Horse I |
+| `c005#006` | Wassily Kandinsky, 1923 | **BALANCE** | Composition 8 |
+| `c005#007` | Gustav Klimt, 1907 | **PRESENCE** | Portrait of Adele Bloch-Bauer I |
+| `c005#008` | Egon Schiele, 1912 | **DIRECT** | Self-Portrait with Physalis |
+| `c005#009` | Henri Rousseau, 1891 | **UNEASE** | Tiger in a Tropical Storm (Surprised!) |
+| `c005#010` | Piet Mondrian, 1930 | **TIDY** | Composition II in Red |
+| `c006#001` | Caspar David Friedrich, c. 1818 | **SOLITUDE** | Wanderer above the Sea of Fog |
+| `c006#002` | Eugène Delacroix, 1830 | **TURNING POINT** | Liberty Leading the People |
+| `c006#003` | Théodore Géricault, 1818-1819 | **ENDURANCE** | The Raft of the Medusa |
+| `c006#004` | J. M. W. Turner, 1844 | **TURMOIL** | Snow Storm: Steam-Boat off a Harbour’s Mouth |
+| `c006#005` | Gustave Courbet, 1849-1850 | **SOLEMN** | A Burial at Ornans |
+| `c006#006` | Jean-François Millet, 1857 | **STEADY** | The Gleaners |
+| `c007#001` | James McNeill Whistler, 1871 | **STERN** | Arrangement in Grey and Black No. 1 |
+| `c007#002` | Grant Wood, 1930 | **UNMOVED** | American Gothic |
+| `c007#003` | Edward Hopper, 1942 | **LONELY** | Nighthawks |
+| `c007#004` | Emanuel Leutze, 1851 | **BOLD MOVE** | Washington Crossing the Delaware |
+| `c007#005` | Frederic Edwin Church, 1859 | **WIDE OPEN** | The Heart of the Andes |
+| `c007#006` | Winslow Homer, 1876 | **FREEDOM** | Breezing Up (A Fair Wind) |
+| `c007#007` | Mary Cassatt, 1893 | **TENDER** | The Child's Bath |
+| `c007#008` | John Singer Sargent, 1884 | **COOL** | Madame X (Madame Pierre Gautreau) |
+| `c008#001` | Henry Fuseli, 1781 | **UNWELCOME** | The Nightmare |
+| `c008#002` | Henri Rousseau, 1910 | **SECRET** | The Dream |
+| `c008#003` | Francisco de Goya, c. 1820 | **DARKNESS** | Saturn Devouring His Son |
+| `c008#004` | William Blake, c. 1805 | **UPHEAVAL** | The Great Red Dragon and the Woman Clothed in Sun |
+
 ## Licence
 
 Every file used is marked **Public domain** on its Commons page; that marking is recorded
@@ -164,7 +247,7 @@ US-specific grounds, so read each Commons page's tag before reusing them outside
    - `fat-28.jpg` (David): the crate reads "À MARAT / DAVID", which names the subject.
    - `fat-17.jpg` (Hokusai): the cartouche at top left gives the series and print title in Japanese.
    Round 2 swaps all three out. The files stay in the buckets for the old versions.
-2. **Dev's Title column is the artist and date** ("Leonardo da Vinci, c. 1503"), and Title is
+2. **(Fixed in round 3, dev v7.) Dev's Title column was the artist and date** ("Leonardo da Vinci, c. 1503"), and Title is
    shown during ASK. It is not the title, but it is a strong hint. Test's Title is a teaser
    ("THE ENIGMATIC SMILE") with the artist in School, which players do not see until after
    the reveal. Left as it is: changing content was out of scope.

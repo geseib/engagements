@@ -1,5 +1,20 @@
 # Installed: Famous Art Titles, neutral-named images
 
+## Round 3 (8 Nov 2026): dev v6 → v7, teaser Titles
+
+Dev only. The 60 Titles changed from artist and date to short teasers (README, "Round 3").
+Test and prod were not touched.
+
+1. Re-read the live dev set (v6) and wrote `famous-art-titles-dev-v7.csv` from it. Every
+   column is as stored except Title.
+2. Ran `node scripts/replace-question-set.js engagedev famousarttitles --csv
+   sets/famous-art-titles-2026-11/famous-art-titles-dev-v7.csv --note "..."`, first as a dry
+   run (60 questions, 8 categories, 0 skipped), then with `--apply`. The live version is
+   now **v7**, and v6 is kept.
+3. **Read-back, v7 against v6, all 68 rows on every attribute:** exactly 60 differences,
+   all of them Title, one per question. Image is unchanged on every row. On the SETS row only
+   `activeVersion`, `versions`, `updatedAt` and `sourceFile` changed.
+
 ## Round 2 (8 Nov 2026): installed on dev, test and prod
 
 The owner approved the three swaps, prod's images, the category rename on test and prod
