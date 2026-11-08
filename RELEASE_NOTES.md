@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 8 Nov 2026 (the bluff round, promoting sets through the Archive, the question picker, Auto that never stalls)
 
-**Test:** merge of dev `d432727c9`. Everything below this entry is already on test.
+**Test:** merge of dev at `d708952db` plus these notes. Everything below this entry is already on test.
 
 **Content is data, not code.** The new question sets below are on **dev**. They reach test by promoting them through the Archive after this push (step 1 of What to look at), not with the deploy.
 
@@ -35,6 +35,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 - **The room's screen: a bigger question.** The enlarge button and its white overlay are gone, and so are the "Your turn" band and the how-to line (phones still say "Your task"). The question is drawn larger. On one screen, "Show the question" (phone remote, Session menu) puts the question card up in place of the answers.
 - **Presence on the rail.** A player whose phone drops shows **away** on the host's People rail straight away, with no reload.
 - **Workie knows the session so far in trivia.** It is given each earlier round's results, so "the first time everyone got it" or "three in a row" is only said when true; a claim the earlier rounds do not show is flagged to the host like any other unsupported claim.
+- **A Workie can choose its own model.** A prompt may name its model (`summaryModel`); it goes through the Claude models switch like every other call (Sonnet 5.5 on the Anthropic API when the switch is on, Bedrock Sonnet 4.6 when off or on any failure). *What Is This Thing?*'s prompt is the first to use Sonnet; every other prompt is unchanged.
 - **New content, on dev:** trivia *80s Movies: Be Kind, Rewind*, *Greatest Books: Page Turners* and *Florence: Ciao, Firenze!*; Call & Answer *What Is This Thing?* (patent drawings, bluff round on, its own Workie prompt) and *Uffizi Art Titles* (60 paintings). The four trivia sets *Around the World*, *Space*, *Tech, Toys & Tomorrow* and *Music & Pop Culture* have been on test and prod since 5 Nov. Every set on all three tiers now has a topic and tags. *Famous Art Titles* images are now served from each tier under neutral names, so the image address no longer gives the title away (dev and test).
 
 ### Fixed
