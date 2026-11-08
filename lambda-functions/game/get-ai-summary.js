@@ -40,6 +40,8 @@ const { consensusLabel } = require('./consensus');
 // Workie's after-writing check (read-check.js; workie-grounding STEP0): numbers,
 // room-level claims and decided-sounding next steps the material does not support.
 const { checkRead, collectMaterial, revisionNote, issueKinds } = require('./read-check');
+// The earlier rounds of a trivia session, as facts (session 8741's "first time").
+const { sessionSoFar } = require('./session-so-far');
 // buildWavelengthProse lives in wavelength.js WITH the engine, not here.
 // promptPreflight.test.js extracts "the hardcoded fallback" by slicing from
 // this file's FIRST backtick character, so nothing above the real fallback
@@ -707,6 +709,34 @@ const sessionOnFinalRound = async (gameId) => {
   } catch (error) {
     console.warn(`⚠️ ROUND ANGLE: could not read the session's categories: ${error.message}`);
     return false;
+  }
+};
+
+/**
+ * The earlier rounds of a trivia session (session-so-far.js), or null. Reads
+ * the answer rows' SK and IsCorrect only — both plaintext, so no key is
+ * needed and no answer is decrypted. Unreadable means no block: the read then
+ * has no history to claim, and the read check treats any claim as unsupported.
+ */
+const triviaSessionSoFar = async (gameId, paddedQuestionNumber, current) => {
+  try {
+    const rows = [];
+    let start;
+    do {
+      const page = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'QUESTION#' },
+        ProjectionExpression: 'SK, IsCorrect',
+        ExclusiveStartKey: start,
+      }));
+      rows.push(...(page.Items || []));
+      start = page.LastEvaluatedKey;
+    } while (start);
+    return sessionSoFar(rows, { round: parseInt(paddedQuestionNumber, 10), ...current });
+  } catch (error) {
+    console.warn(`⚠️ SESSION SO FAR: could not read the earlier rounds: ${error.message}`);
+    return null;
   }
 };
 
@@ -2382,6 +2412,10 @@ exports.describeCorrectAnswer = describeCorrectAnswer;
  * total. Both this and `triviaResultsSummary` below now say "this round".
  */
 function triviaWinnerInfo(winners) {
+  // A round nobody got right ties everyone at 0, and "Winner this round: Ges
+  // (0 points)" is how session 8741's round 20 read came to say "Ges took the
+  // round's one point-scoring call" when all four were wrong.
+  winners = (winners || []).filter((w) => Number(w.score) > 0);
   if (!winners.length) return 'No clear winner';
   return `Winner this round: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} points)`;
 }
@@ -2391,6 +2425,7 @@ exports.triviaWinnerInfo = triviaWinnerInfo;
  *  cases never said "winner" ambiguously, so only the single-winner line
  *  changes. */
 function triviaResultsSummary(winners) {
+  winners = (winners || []).filter((w) => Number(w.score) > 0); // see triviaWinnerInfo
   if (winners.length === 1) return `Clear winner this round with ${winners[0].score} points`;
   if (winners.length > 1) return `${winners.length}-way tie for first place with ${winners[0].score} points each`;
   return 'No correct answers';
@@ -3661,7 +3696,28 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       + `${lastAngle ? `; last round ${lastAngle}` : ''}${isFinalRound ? '; final round' : ''})`);
   }
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${angleLayer}${voiceLayer}${hostLayer}`;
+  /*
+    THE SESSION SO FAR (session-so-far.js). A trivia read used to be handed
+    THIS round's count and the running totals only, and in session 8741 it
+    called round 14 "the first time the four of them agreed" when seven
+    earlier rounds had everyone right. The earlier rounds, as copyable facts,
+    beside the angle; the read check holds a history claim to them. Hidden
+    rounds get none: per-round counts are no attribution, but a hidden round
+    keeps its read on the round.
+  */
+  let historyLayer = '';
+  let history = null;
+  if (normalizeGameType(gameType) === 'trivia' && !hidden) {
+    history = await triviaSessionSoFar(gameId, paddedQuestionNumber, {
+      correct: correctCount, answered: totalParticipants,
+    });
+    historyLayer = history ? `\n\n${history.block}` : '';
+    if (history) {
+      console.log(`📜 SESSION SO FAR: ${history.rounds.length} round(s), everyone right in ${history.allRight.length}, streak ${history.streak}`);
+    }
+  }
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${angleLayer}${historyLayer}${voiceLayer}${hostLayer}`;
 
   /*
     WHICH VARIABLES ARE EMPTY, NOT WHAT THE FULL ONES SAY.
@@ -3748,7 +3804,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     values that went into the prompt; never logged.
   */
   const readMaterial = collectMaterial(templateVars, [
-    eventDetails, gameAiContext, questionSetAiContext, customInstruction, briefing, angleLayer, hostLayer,
+    eventDetails, gameAiContext, questionSetAiContext, customInstruction, briefing, angleLayer, historyLayer, hostLayer,
     (Array.isArray(lateAnswers) ? lateAnswers : []).map((a) => (a && a.answer) || ''),
   ]);
   // The prompt's OWN words — the template before its variables are filled, the
@@ -3772,6 +3828,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     unanimous: gameType === 'trivia'
       ? (totalParticipants > 0 && correctCount === totalParticipants)
       : (gameType === 'wavelength' ? commonWords.length > 0 : undefined),
+
+    // What the read may say about earlier rounds (read-check.js historyIssues):
+    // absent, any "first time this session" / "in a row" claim is unsupported.
+    history: history ? { priorAllRight: history.priorAllRight, streak: history.streak } : null,
   };
   const readVoice = `${persona.voice || ''}\n${voiceLayer}`;
 

@@ -256,6 +256,17 @@ check('nobody correct is unchanged', () => {
   assert.strictEqual(triviaResultsSummary([]), 'No correct answers');
 });
 
+// Session 8741, round 20: all four wrong, so all four "won" on 0 points, and
+// the read said "Ges took the round's one point-scoring call".
+check('a round where everyone scored 0 names no winner and no tie', () => {
+  const allZero = [
+    { playerName: 'Ges', answerText: 'B', score: 0 },
+    { playerName: 'Ada', answerText: 'B', score: 0 },
+  ];
+  assert.strictEqual(triviaWinnerInfo(allZero), 'No clear winner');
+  assert.strictEqual(triviaResultsSummary(allZero), 'No correct answers');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 

@@ -72,7 +72,7 @@ import {
 } from './config/stagePaging';
 import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
-import { autoDecision } from './config/autoMode';
+import { autoDecision, walksResponses } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import ConfirmDialog, { useConfirm } from './components/ConfirmDialog';
 import { DialogHead, DialogFoot } from './components/ui/DialogParts';
@@ -992,6 +992,10 @@ function GameHostPage() {
   const autoActRef = useRef(null);
   // When the response Auto is cycling during voting went up (its round#index).
   const autoShownRef = useRef(null);
+  // When this round's read beat began waiting on Workie (its round#), so the
+  // bounded wait (autoMode.js NOTES_WAIT_MAX_MS) is measured from the beat,
+  // not from the last re-render.
+  const autoNotesWaitRef = useRef(null);
 
   /*
     A SURVEY'S PER-GAME FACTS (surveys phase 2). `surveyNames` is the session's
@@ -7246,13 +7250,17 @@ Focus on actionable business strategy insights.`;
     let pages = 1;
     let pageText = '';
     let notesReady = false;
+    let notesFailed = false;
     if (phase === 'RESULTS') {
       const slice = pageSlice(answers, rawIndex, stagePageSizeFor('RESULTS', profile, answers));
       page = slice.page;
       pages = slice.pages;
     } else if (phase === 'FIELD_NOTES') {
-      const md = currentAIInsights && currentAIInsights.markdownResponse;
+      // A read with no markdown still has its summary to show (a fallback).
+      const md = currentAIInsights && (currentAIInsights.markdownResponse || currentAIInsights.summary);
       notesReady = Boolean(md) && !loadingAIInsights;
+      // The read failed: nothing is coming, so Auto does not wait for it.
+      notesFailed = !notesReady && !loadingAIInsights && Boolean(aiSummaryFailure);
       if (notesReady) {
         const slice = prosePageSlice(md, rawIndex, proseBudgetFor(profile));
         page = slice.page;
@@ -7267,8 +7275,9 @@ Focus on actionable business strategy insights.`;
       playerCount: players.length,
       answeredCount,
       votedCount: playersWhoVoted.length,
-      page, pages, pageText, notesReady,
-      walkResponses: twoSurfaces,
+      page, pages, pageText, notesReady, notesFailed,
+      // Never for Trivia or Poll: their RESULTS has no response to walk.
+      walkResponses: walksResponses(twoSurfaces, normalizeGameType(currentGameType)),
       responseCount: answers.length,
       responseText: shownAnswer ? answerText(shownAnswer.answer) : '',
     });
@@ -7281,6 +7290,13 @@ Focus on actionable business strategy insights.`;
       const key = `${lessonNumber}#${votingKey}`;
       if (!autoShownRef.current || autoShownRef.current.key !== key) autoShownRef.current = { key, at: Date.now() };
       delayMs = Math.max(500, decision.delayMs - (Date.now() - autoShownRef.current.at));
+    }
+    // The wait on Workie keeps its own clock too: the insights, the players
+    // and the answers all re-run this effect while the read is being written.
+    if (decision.kind === 'leave') {
+      const key = `${lessonNumber}#notes`;
+      if (!autoNotesWaitRef.current || autoNotesWaitRef.current.key !== key) autoNotesWaitRef.current = { key, at: Date.now() };
+      delayMs = Math.max(500, decision.delayMs - (Date.now() - autoNotesWaitRef.current.at));
     }
 
     const timer = setTimeout(() => {
@@ -7296,7 +7312,22 @@ Focus on actionable business strategy insights.`;
         const walkable = [HOST_INTENTS.SHOW_RESPONSE, HOST_INTENTS.NEXT_RESPONSE, HOST_INTENTS.NEXT_PART];
         if (hands.secondary && !hands.secondary.disabled && walkable.includes(hands.secondary.intent)) {
           hands.run(hands.secondary);
+          return;
         }
+        // No response to walk at RESULTS (session 8741, round 22: a trivia
+        // round sat on its tally for eight minutes because this returned
+        // here). The tally has had its moment; the primary moves on.
+        if (phase !== 'RESULTS') return;
+        if (hands.primary && !hands.primary.disabled && hands.primary.intent !== HOST_INTENTS.END_SURVEY) hands.run(hands.primary);
+        return;
+      }
+      // Workie's read still not written: leave by the dock's own secondary
+      // ("Start round N"), and only when it asks no confirmation — unsent
+      // asks are the host's call, never Auto's. If the read lands at the last
+      // moment the primary is "Next page" and Auto simply keeps reading.
+      if (decision.kind === 'leave') {
+        const leave = hands.secondary;
+        if (leave && !leave.disabled && !leave.arm && leave.intent === HOST_INTENTS.NEXT) hands.run(leave);
         return;
       }
       // The dock's own primary, through the dock's own runner — disabled means
@@ -7309,7 +7340,7 @@ Focus on actionable business strategy insights.`;
     }, delayMs);
     return () => clearTimeout(timer);
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
-    currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
+    currentAIInsights, loadingAIInsights, aiSummaryFailure, currentGameType, profile, players.length, answeredCount,
     playersWhoVoted.length, createdSetup, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, questionHeld, isLoadingData, qrMode,

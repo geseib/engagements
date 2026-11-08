@@ -69,6 +69,12 @@ const ASSEMBLY_LAYERS = Object.freeze([
       + 'one well-known fact — drawn by the prompt\'s angle weights, never the same angle twice in a row.',
   }),
   Object.freeze({
+    source: 'historyLayer',
+    name: 'The session so far',
+    text: 'Trivia only, from round 2: each earlier round\'s correct count, the rounds everyone got right, whether this '
+      + 'is the first such round, and any run, so a claim about earlier rounds is copied, not invented.',
+  }),
+  Object.freeze({
     source: 'voiceLayer',
     name: 'The voice\'s required addition',
     text: 'If the voice requires something in every reply, it is restated here, with permission to use '
@@ -136,6 +142,11 @@ const READ_CHECK = Object.freeze({
       kind: 'practice',
       rule: 'Never say what the organisation currently, habitually or already does unless an answer says so; what '
         + 'the answers propose is their proposal.',
+    }),
+    Object.freeze({
+      kind: 'history',
+      rule: 'Never claim something about the session\'s earlier rounds ("the first time the room agreed", "three in '
+        + 'a row") that THE SESSION SO FAR does not show; with no such list, make no such claim.',
     }),
     Object.freeze({
       kind: 'filler',
