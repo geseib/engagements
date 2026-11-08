@@ -227,11 +227,12 @@ function normalizeAngleWeights(raw) {
   points and broke its own naming rule on Haiku. Absent, null or '' means the
   house default, which is every Workie written before this field existed.
 
-  BEDROCK ONLY, IN THIS ACCOUNT: the owner's condition. These are the Bedrock
-  rows of game/summary-models.js's catalogue (tests/prompt-summary-model.js
-  holds the two lists equal), and the read is sent to Bedrock directly, never
-  through claude-route.js's Anthropic switch. A staff member's picker choice on
-  a regeneration still wins over this.
+  BEDROCK IDS ONLY: the Bedrock rows of game/summary-models.js's catalogue
+  (tests/prompt-summary-model.js holds the two lists equal). The read goes
+  through claude-route.js like every other call, so while the Engage-wide
+  Claude models switch is on Sonnet 4.6 is sent as Sonnet 5.5 on the Anthropic
+  API, falling back to Bedrock Sonnet 4.6. A staff member's picker choice on a
+  regeneration still wins over this.
 */
 const SUMMARY_MODEL_IDS = Object.freeze(['bedrock-haiku-4-5', 'bedrock-sonnet-4-6', 'bedrock-opus-4-6']);
 

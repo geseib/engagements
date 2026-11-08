@@ -11,15 +11,18 @@
  *   2. The handlers: create stores it on the row; update sets it, leaves it
  *      alone when not mentioned, clears it, refuses a bad id; a model-only
  *      update mints no new version.
- *   3. The read: a Workie naming bedrock-sonnet-4-6 is written by Sonnet 4.6 on
- *      Bedrock (heading asked for in words, no prefill), from the S3 body path
- *      and the row fallback alike, and NEVER through the Engage-wide Anthropic
- *      switch even when that switch is on. A Workie naming nothing, or naming
- *      an Anthropic-API or unknown model, is written exactly as before.
+ *   3. The read goes through the Engage-wide Claude models switch like every
+ *      other call (owner, 2026-11-08: "use the workie model external"). With
+ *      the switch on, a Workie naming bedrock-sonnet-4-6 is written by Sonnet
+ *      5.5 on the Anthropic API; if that call fails, by Bedrock Sonnet 4.6.
+ *      With the switch off, by Bedrock Sonnet 4.6 (heading asked for in words,
+ *      no prefill), from the S3 body and the row fallback alike. A Workie
+ *      naming nothing, or a stored id that is not a Bedrock model, is written
+ *      by Haiku as before.
  *
  * rejects: the field dropped by create or update; an Anthropic API model
- *          accepted; the read still going to Haiku; the read leaving the
- *          account through claude-route.js; a bad id failing the read.
+ *          accepted; the read still going to Haiku; the Workie's model
+ *          bypassing the switch; no Bedrock fallback; a bad id failing the read.
  */
 const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
@@ -193,8 +196,31 @@ const { handler } = game('get-ai-summary.js');
 const createPrompt = admin('create-ai-prompt.js');
 const updatePrompt = admin('update-ai-prompt.js');
 
-let anthropicCalls = 0;
-anthropic._setTransport(async (req) => { anthropicCalls++; throw new Error(`left the account: ${req.host}${req.path}`); });
+// The fake transport: STS, the token exchange and Messages, the only way out
+// of anthropic-messages.js. `apiDown` makes Messages fail (a 529 overload).
+let apiCalls = [];
+let apiDown = false;
+anthropic._setTransport(async (req) => {
+  if (req.host === 'sts.us-east-1.amazonaws.com') {
+    return { status: 200, body: '<GetWebIdentityTokenResponse><GetWebIdentityTokenResult>'
+      + '<WebIdentityToken>eyJ.test.jwt</WebIdentityToken><Expiration>2026-11-08T12:00:00Z</Expiration>'
+      + '</GetWebIdentityTokenResult></GetWebIdentityTokenResponse>' };
+  }
+  if (req.host === 'api.anthropic.com' && req.path === '/v1/oauth/token') {
+    return { status: 200, body: JSON.stringify({ access_token: 'sk-ant-oat01-test', token_type: 'Bearer', expires_in: 600 }) };
+  }
+  if (req.host === 'api.anthropic.com' && req.path === '/v1/messages') {
+    const body = JSON.parse(req.body);
+    apiCalls.push(body);
+    if (apiDown) return { status: 529, body: JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'busy' } }) };
+    return { status: 200, body: JSON.stringify({
+      id: 'msg_1', type: 'message', role: 'assistant', model: body.model,
+      content: [{ type: 'text', text: HEADING + BODY }], stop_reason: 'end_turn',
+      usage: { input_tokens: 100, output_tokens: 50 },
+    }) };
+  }
+  throw new Error('unexpected host ' + req.host + req.path);
+});
 const switchOn = (on) => claudeRoute._setSettingReader(async () => ({ PK: 'PLATFORM#SETTINGS', SK: 'CLAUDE_MODELS', Anthropic55: on }));
 
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -235,7 +261,7 @@ function seedRound(gameId, promptId) {
 
 async function readWith(gameId, promptId) {
   bedrockCalls = [];
-  anthropicCalls = 0;
+  apiCalls = [];
   seedRound(gameId, promptId);
   let res;
   try { res = await handler({ __workerMode: true, gameId, questionId: '001' }); } catch (e) { res = { error: e.message }; }
@@ -304,17 +330,34 @@ const HAIKU_ARN = 'arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.a
   await check('clearing it returns the Workie to the house default', () =>
     assert.strictEqual(models.promptSummaryModel(promptRow(plainId)), null));
 
-  say('\n3. the read');
-  switchOn(true); // the Engage-wide Anthropic switch ON: a Workie's own model must ignore it
+  say('\n3. the read, through the Engage-wide switch');
+  switchOn(true);
+  const external = await readWith('g-on', id);
+  await check('switch on: a Workie naming Sonnet 4.6 is written by Sonnet 5.5 on the Anthropic API', () => {
+    assert.ok(!external.error, external.error);
+    assert.strictEqual(apiCalls.length >= 1, true, 'the Anthropic API was not called');
+    assert.strictEqual(apiCalls[0].model, 'claude-sonnet-5-5');
+    assert.strictEqual(bedrockCalls.length, 0, 'Bedrock was called as well');
+  });
+
+  apiDown = true;
+  const fellBack = await readWith('g-down', id);
+  await check('switch on, API failing: it falls back to Bedrock Sonnet 4.6, not Haiku', () => {
+    assert.ok(!fellBack.error, fellBack.error);
+    assert.ok(apiCalls.length >= 1, 'the API was not tried');
+    assert.strictEqual(bedrockCalls[0] && bedrockCalls[0].modelId, SONNET_ARN);
+  });
+  apiDown = false;
+
+  switchOn(false);
   const viaS3 = await readWith('g-s3', id);
-  await check('a Workie naming Sonnet 4.6 (body in S3) is written by Sonnet 4.6 on Bedrock', () => {
+  await check('switch off: written by Bedrock Sonnet 4.6, heading asked for in words', () => {
     assert.ok(!viaS3.error, viaS3.error);
-    assert.ok(bedrockCalls.length >= 1, 'Bedrock was not called');
-    assert.strictEqual(bedrockCalls[0].modelId, SONNET_ARN);
+    assert.strictEqual(apiCalls.length, 0);
+    assert.strictEqual(bedrockCalls[0] && bedrockCalls[0].modelId, SONNET_ARN);
     assert.strictEqual(bedrockCalls[0].body.messages.length, 1, 'Sonnet 4.6 refuses a prefill');
     assert.match(bedrockCalls[0].body.messages[0].content, /Begin your reply with this exact line/);
   });
-  await check('...and never through the Anthropic switch, though it is on', () => assert.strictEqual(anthropicCalls, 0));
 
   put({ PK: 'AIPROMPTS', SK: 'AIPROMPT#row-only', promptId: 'row-only', name: 'Row only', s3Key: 'missing.json',
     gameType: 'call-and-answer', promptType: 'analysis', status: 'active', summaryModel: 'bedrock-sonnet-4-6',
@@ -323,10 +366,8 @@ const HAIKU_ARN = 'arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.a
   await check('the row fallback (no S3 body) honours it too', () => {
     assert.ok(!viaRow.error, viaRow.error);
     assert.strictEqual(bedrockCalls[0] && bedrockCalls[0].modelId, SONNET_ARN);
-    assert.strictEqual(anthropicCalls, 0);
   });
 
-  switchOn(false);
   await patch(plainId, { summaryModel: '' });
   await readWith('g-plain', plainId);
   await check('a Workie naming nothing is written as before: Haiku 4.5, heading prefilled', () => {
@@ -335,11 +376,16 @@ const HAIKU_ARN = 'arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.a
   });
   put({ ...promptRow('row-only'), SK: 'AIPROMPT#bad-model', promptId: 'bad-model', summaryModel: 'claude-sonnet-5-5' });
   const badRead = await readWith('g-bad', 'bad-model');
-  await check('a stored id that is not a Bedrock model degrades to the house default, never fails the read', () => {
+  await check('a stored id that is not a Bedrock model degrades to Haiku, never fails the read', () => {
     assert.ok(!badRead.error, badRead.error);
     assert.strictEqual(bedrockCalls[0] && bedrockCalls[0].modelId, HAIKU_ARN);
-    assert.strictEqual(anthropicCalls, 0);
   });
+  switchOn(true);
+  await readWith('g-bad-on', 'bad-model');
+  await check('...and with the switch on it is the default read, Haiku 5.5, as before', () => {
+    assert.strictEqual(apiCalls[0] && apiCalls[0].model, 'claude-haiku-5-5');
+  });
+  switchOn(false);
 
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
