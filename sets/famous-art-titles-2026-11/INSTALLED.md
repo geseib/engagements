@@ -1,5 +1,45 @@
 # Installed: Famous Art Titles, neutral-named images
 
+## Round 2 (8 Nov 2026): installed on dev, test and prod
+
+The owner approved the three swaps, prod's images, the category rename on test and prod
+(Ukiyo-e → Asian Art) and prod's new hint and reveal for the Tōhaku row. See README,
+"Round 2". The tiers were done in order, each verified before the next.
+
+| Tier | Set | Old → new | Images in the CSV (uploaded to `<stack>-media/sets/famousarttitles/`) | CSV |
+|---|---|---|---|---|
+| dev | `famousarttitles` | v5 → **v6** | 60, including new `fat-61`, `fat-62`, `fat-63` | `famous-art-titles-dev-v6.csv` |
+| test | `famousarttitles` | v2 → **v3** | 10, including new `fat-62` | `famous-art-titles-test-v3.csv` |
+| prod | `famousarttitlesimported20260815` | unversioned → **v2** (the script first snapshotted the 18 legacy rows to v1) | 10, served from `https://engage.seibtribe.us/sets/famousarttitles/` | `famous-art-titles-prod-v2.csv` |
+
+For each tier:
+1. Re-read the live active version and rebuild the CSV from it. All three rebuilt CSVs
+   matched the committed ones byte for byte.
+2. Upload, then fetch each URL in the CSV. Every one returned 200 `image/jpeg`, and the
+   served bytes equal the file (`image-check-*.json`).
+3. Run `replace-question-set.js` as a dry run, then with `--apply`. 0 rows were skipped on
+   any tier.
+4. Read back, comparing the new version with the old one on every attribute of every row.
+
+### Read-back
+
+| Tier | Image changed | Other differences (all intended) |
+|---|---|---|
+| dev v6 vs v5 | 3 rows (the swaps) | Title and AnswerDetails on `c002#011` (Caillebotte), `c003#001` (Tōhaku) and `c004#011` (Gainsborough). Nothing else. |
+| test v3 vs v2 | 1 row | On `c003#001`: Title, School, AnswerDetails, Category. On the `CATEGORY#c003` row: Name and Description (Ukiyo-e → Asian Art). Nothing else. |
+| prod v2 vs legacy | 10 rows (blank → image) | On `c003#001`: Title, CustomInstructions, Category, and AnswerDetails (added). On `CATEGORY#c003`: Name and Description. Nothing else. |
+
+- **SETS rows:** besides `activeVersion`, `versions`, `updatedAt` and `sourceFile`, the only
+  change is prod's `hasImages`, which went from false to true. Name, description, persona,
+  prompt, topic, tags, active and the instructions are unchanged on all three tiers.
+- **Live Images:** every one is a neutral `fat-NN.jpg` on the tier's own site and serves
+  image/jpeg. Dev has 60 distinct, test 10 and prod 10.
+
+To undo round 2: make dev v5, test v2 or prod v1 live again from the set's Versions. Prod
+v1 has no images.
+
+## Round 1 (7 Nov 2026)
+
 7 Nov 2026. Platform Engage library (`SETS` partition), set id `famousarttitles` on dev and
 test. Each tier got a new version from `scripts/replace-question-set.js`. The old version
 is kept in the set's Versions. Nothing was pushed or deployed.
@@ -24,10 +64,10 @@ the superseded version of the What Is This Thing? set. They were left alone.
 
 ```bash
 node scripts/replace-question-set.js engagedev famousarttitles \
-  --csv sets/famous-art-titles-2026-11/famous-art-titles-dev.csv \
+  --csv sets/famous-art-titles-2026-11/famous-art-titles-dev-v5.csv \
   --note "Images re-hosted under neutral names (the Commons filenames named the paintings); The Nightmare now shows Fuseli's painting. No other field changed."
 node scripts/replace-question-set.js engagetest famousarttitles \
-  --csv sets/famous-art-titles-2026-11/famous-art-titles-test.csv \
+  --csv sets/famous-art-titles-2026-11/famous-art-titles-test-v2.csv \
   --note "Images re-hosted under neutral names (the Commons filenames named the paintings). No other field changed."
 ```
 
