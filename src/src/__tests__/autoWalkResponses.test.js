@@ -54,7 +54,7 @@ test('voting cycles the responses until everyone has voted, then shows results',
 
 test('the host page wires it: walk under two surfaces, the secondary through the dock, a spotlight no pause', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-  expect(src).toMatch(/walkResponses: twoSurfaces/);
+  expect(src).toMatch(/walkResponses: walksResponses\(twoSurfaces, normalizeGameType\(currentGameType\)\)/);
   expect(src).toMatch(/decision\.kind === 'secondary'/);
   expect(src).toMatch(/secondary: hostControls\.secondary/);
   expect(src).toMatch(/spotlightOpen: !twoSurfaces && spotlightIndex !== null/);

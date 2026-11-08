@@ -608,7 +608,7 @@ const sessionPanel = {
             { title: '**Screens**', text: 'One screen or two and the room\'s window (see Two screens and your phone), **Your phone as a remote** with **Connect your phone**, and the scoreboard\'s button (Trivia and Call & Answer). More options: room screen size, **Scoreboard look**, **Show how this works on the room\'s screen →**, and the keys.' },
             { title: '**Joining**', text: 'The join address, its QR and the code, **Copy join link** and **Show join code**. More options: **Invite…**, a calendar invite.' },
             { title: '**How it runs**: Names', text: '**Show who wrote each response from the start** (Call & Answer). Off (the default), answers are numbered until voting closes, then show their writers. Turning it on cannot be taken back.' },
-            { title: '**How it runs**: Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. Opening anything pauses it.' },
+            { title: '**How it runs**: Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. It never waits long on Workie: a read that fails, or is not written within about 25 seconds, is skipped. Opening anything pauses it.' },
             { title: '**How it runs**: More options', text: '**Name who is still waiting** (the room meter can list who has not answered), whether comments show on the room\'s screen as they arrive, and Workie\'s voice and approach for the next round. While a read is on screen, **Redo the read on screen** is here too; on two screens it is also beside the read itself, as **Redo Workie\'s read**.' },
           ],
         },

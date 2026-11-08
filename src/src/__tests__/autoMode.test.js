@@ -23,6 +23,9 @@ const {
   NOTES_MS_PER_WORD,
   notesDwellMs,
   autoDecision,
+  walksResponses,
+  NOTES_WAIT_MAX_MS,
+  NOTES_FAILED_MS,
 } = require('../config/autoMode');
 
 const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
@@ -87,9 +90,38 @@ describe('autoDecision — when a patient host would move, and when they would s
       .toMatchObject({ kind: 'primary', delayMs: RESULTS_PAGE_MS });
   });
 
-  // rejects: a countdown over a spinner advancing past a summary nobody saw.
-  test('FIELD_NOTES sits still until Workie has actually written', () => {
-    expect(autoDecision({ ...base, phase: 'FIELD_NOTES', notesReady: false, pages: 3 })).toBeNull();
+  // Session 8741 (owner: "in auto mode it should not get hung up on the
+  // workie"). rejects: a slow, failed or never-requested read holding the
+  // room forever — and a read being skipped the moment it is late.
+  test('FIELD_NOTES waits for Workie, but only so long, then leaves by the dock\'s secondary', () => {
+    expect(autoDecision({ ...base, phase: 'FIELD_NOTES', notesReady: false, pages: 3 }))
+      .toEqual({ kind: 'leave', delayMs: NOTES_WAIT_MAX_MS, why: expect.any(String) });
+    // Long enough for a read that is merely slow (8741's slowest: 5.2 s after
+    // the reveal, which itself comes 12 s before this beat), and never longer
+    // than the room would sit on one dense page.
+    expect(NOTES_WAIT_MAX_MS).toBeGreaterThanOrEqual(20000);
+    expect(NOTES_WAIT_MAX_MS).toBeLessThanOrEqual(NOTES_MAX_MS);
+  });
+
+  // rejects: waiting out the clock on a read that has already failed.
+  test('a failed read is not waited for: a short beat, then the primary', () => {
+    expect(autoDecision({ ...base, phase: 'FIELD_NOTES', notesReady: false, notesFailed: true }))
+      .toEqual({ kind: 'primary', delayMs: NOTES_FAILED_MS, why: expect.any(String) });
+    expect(NOTES_FAILED_MS).toBeLessThan(NOTES_WAIT_MAX_MS);
+    // A read that IS here is read, failure flag or not.
+    expect(autoDecision({ ...base, phase: 'FIELD_NOTES', notesReady: true, notesFailed: true, page: 0, pages: 2 }).kind).toBe('page');
+  });
+
+  // Session 8741, round 22: trivia on two screens sat on its tally — the walk
+  // decision fired at a "Show response" trivia does not have. rejects: Trivia
+  // or Poll walking responses; Call & Answer losing its walk.
+  test('only Call & Answer walks responses on two surfaces', () => {
+    expect(walksResponses(true, 'trivia')).toBe(false);
+    expect(walksResponses(true, 'poll')).toBe(false);
+    expect(walksResponses(true, 'call-and-answer')).toBe(true);
+    expect(walksResponses(false, 'call-and-answer')).toBe(false);
+    const trivia = { ...base, phase: 'RESULTS', walkResponses: walksResponses(true, 'trivia'), responseCount: 4 };
+    expect(autoDecision(trivia)).toMatchObject({ kind: 'primary', delayMs: RESULTS_PAGE_MS });
   });
 
   // rejects: prose pages all getting one flat dwell regardless of density.
@@ -129,6 +161,28 @@ describe('the wiring — source contracts on what jsdom cannot mount', () => {
     expect(host).toMatch(/autoActRef\.current = \{\s*primary: hostControls\.primary,\s*secondary: hostControls\.secondary,\s*run: runHostAction,\s*turnTo: setStagePageIndex,\s*\}/);
     expect(host).toMatch(/autoDecision\(\{/);
     expect(host).toMatch(/hands\.primary\.disabled\) return/);
+  });
+
+  // rejects: the bounded wait restarting on every re-render (the insights,
+  //          players and answers all re-run the effect), a 'leave' pressing
+  //          anything but the dock's own unconfirmed "Start round N", the
+  //          failure never reaching the decision, and a RESULTS walk with no
+  //          response to walk returning without moving (8741 round 22).
+  test('the Workie wait has its own clock and leaves only through the dock', () => {
+    expect(host).toMatch(/notesFailed = !notesReady && !loadingAIInsights && Boolean\(aiSummaryFailure\)/);
+    expect(host).toMatch(/autoNotesWaitRef\.current = \{ key, at: Date\.now\(\) \}/);
+    expect(host).toMatch(/!leave\.arm && leave\.intent === HOST_INTENTS\.NEXT\) hands\.run\(leave\)/);
+    expect(host).toMatch(/if \(phase !== 'RESULTS'\) return;/);
+    // The effect's deps: a failure or a game-type change re-decides.
+    expect(host).toMatch(/currentAIInsights, loadingAIInsights, aiSummaryFailure, currentGameType, profile/);
+  });
+
+  // rejects: a read that lands after Auto moved on pulling the stage back —
+  //          applying it must only set the insights.
+  test('a late read only fills in state', () => {
+    const apply = host.slice(host.indexOf('const applyAISummary = (summary) => {'));
+    const body = apply.slice(0, apply.indexOf('return true;'));
+    expect(body).not.toMatch(/setResultsBeat|setGameState|setStagePageIndex|runHostAction/);
   });
 
   // rejects: auto-mode firing under a pinned QR or an open spotlight — it must
