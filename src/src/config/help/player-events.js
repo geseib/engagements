@@ -151,6 +151,7 @@ const playerEvents = {
         {
           t: 'list',
           items: [
+            { title: 'In a new tab', text: 'The same tab picks up where you were. A new tab on the same phone asks "Are you Sam?" first: Continue as Sam, or **I\'m someone else** to join with your own name, so two people sharing a browser never end up as one.' },
             { title: 'On a different phone', text: 'Join again with the code and your name. When an item starts, your phone sees your name is already in it and asks first, rather than making you "Sam 2": **That\'s me: use my name on this device** asks the host to move your name, answers and score here (the old device is told), and **I\'m someone else: add a number to my name** joins you as a second Sam.' },
             { title: '**Not you?**', text: 'At the foot of the agenda. Forgets the name on this phone so someone else can join with their own.' },
             { title: 'Offline', text: 'The page keeps what it has and catches up when the connection comes back: see When something goes wrong.' },

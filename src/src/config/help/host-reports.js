@@ -64,6 +64,10 @@ const heard = {
         },
         {
           t: 'p',
+          text: 'In trivia the check also covers the session so far: a "first time" or "in a row" about the room that the earlier rounds do not show is flagged the same way. A round where nobody scored has no winner.',
+        },
+        {
+          t: 'p',
           text: 'On rounds that hold something back (the real title, the actual number, what happened next), Workie is given the held-back detail so it can compare the room\'s answers with it and reveal it in the read. That only works if the question set filled the detail in; a reveal that never comes is the set to fix, not the session.',
         },
       ],

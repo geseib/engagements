@@ -447,6 +447,10 @@ const playing = {
         },
         {
           t: 'p',
+          text: 'On a laptop or a tablet held sideways, the question sits on the left and your answer box on the right, with **Send my answer** under it, so you can read and write without scrolling.',
+        },
+        {
+          t: 'p',
           text: 'Then the room votes on the answers (see Voting). At results your phone says which response was yours, for example "You wrote response 3", and shows the points it earned this round, your total and your standing. Who wrote what, and the room\'s top answers, are on the room’s screen.',
         },
       ],

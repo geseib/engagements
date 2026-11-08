@@ -522,6 +522,8 @@ const workie = {
             ['Event details', 'The event\'s details, when the session is part of an event.'],
             ['Host instructions', '**Instructions for Workie**, in the session\'s Advanced options.'],
             ['Briefing', 'The briefing made from a document, for Call & Answer.'],
+            ['The session so far', 'Trivia only: how many got each earlier round right, so "the first time" or "in a row" is only said when it is true. Engage adds it; nothing to write.'],
+            ['The bluff round', 'In a bluff round, after results: who had the real answer and who it fooled. Engage adds it; nothing to write.'],
           ],
         },
         {
