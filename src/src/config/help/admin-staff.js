@@ -668,16 +668,20 @@ const platform = {
       ("Engage and public content only…"); "Search name or id", "Sort: Name /
       Last backed up / Type"; each row: id, topic, type, Active/Inactive,
       "Last backed up <when>" or "Never backed up here" (from THIS tier);
-      "Select all" takes the rows shown; "Export N sets/prompts" and, on dev
-      and test, "Promote to <next>…" → "N items ready for <next>", "Open
+      "Select all" takes the rows shown; sets and prompts are one selection,
+      and the dialog foot carries "Close", "Export N sets and N prompts" and,
+      on dev and test, "Promote … to <next>…" (since 2026-11-08; before, each
+      list had its own pair) → "N items ready for <next>", "Open
       <next>'s Archive", "Copy archive ids". A promotion link opens the
       target in Engage → Archive with banner "N items promoted from <tier> —
       review and restore". The restore dialog opens on a preview per item
       ("New set" / "New version of vN (currently live|inactive)", counts,
-      "Active|Inactive on arrival"); on prod "Restore N backups into PROD?",
+      "Active|Inactive on arrival", "N images stay on another site"); prompts
+      are listed and restored before sets; on prod "Restore N backups into PROD?",
       "This writes to PROD.", "Type prod to confirm", "Restore N into PROD".
       After a restore: "Checked after the restore" (found of expected,
-      Matches / Does not match, "Open the set"), and on test "Promote these
+      Matches / Does not match, "Open the set"; a prompts table: Version,
+      Status, Read back, "Open prompts"), and on test "Promote these
       to prod".
       Filters Environment / Content type / Engagement type, search; columns
       Item / From / Type / Size / Exported (day and hh:mm); row "Download", "Delete" →
@@ -700,7 +704,7 @@ const platform = {
         {
           t: 'list',
           items: [
-            { title: 'Back up', text: 'Press Export from, followed by this environment\'s name, pick the sets and prompts, and export them. Search by name or id, and sort by name, by when each was last backed up from here, or by type. Select all takes the rows the search shows. Each row says whether the set is active, its topic, and when it was last backed up from this environment.' },
+            { title: 'Back up', text: 'Press Export from, followed by this environment\'s name, tick the sets and prompts you want (both lists are one batch), and press Export at the foot of the dialog. Search by name or id, and sort by name, by when each was last backed up from here, or by type. Select all takes the rows the search shows. Each row says whether the set is active, its topic, and when it was last backed up from this environment.' },
             { title: 'Restore', text: 'Tick rows, press Import … selected, and confirm. See Restoring from the archive below.' },
             { title: '**Download** and **Delete**', text: 'Download saves a backup as a file. Delete asks first (**Delete the backup**) and removes it for every environment; the set it was made from is not touched.' },
           ],
@@ -721,8 +725,8 @@ const platform = {
         {
           t: 'list',
           items: [
-            { title: 'Before', text: 'The restore dialog first shows, for each backup, whether it is a new set or a new version of the one here (and whether that one is live now), its question and category counts, and whether it will be active on arrival. A set that already exists gets a new version and switches to it; the old version stays in its history. An active Engage set is live for every organisation the moment it is restored.' },
-            { title: 'After', text: 'Each restored set is read back: its questions and categories are shown beside the backup\'s, marked Matches or Does not match, with a link to open the set. Shared library is refreshed, so the sets are there without signing in again.' },
+            { title: 'Before', text: 'The restore dialog first shows, for each backup, whether it is a new set or a new version of the one here (and whether that one is live now), its question and category counts, whether it will be active on arrival, and how many of its images stay on another site (pictures linked from elsewhere, which are not copied). Prompts are listed, and restored, before sets. A set that already exists gets a new version and switches to it; the old version stays in its history. An active Engage set is live for every organisation the moment it is restored.' },
+            { title: 'After', text: 'Each restored set is read back: its questions and categories are shown beside the backup\'s, marked Matches or Does not match, with a link to open the set. Each restored prompt is read back too: its version, whether it is active, and its name. Images uploaded to the set travel with it, including ones linked from another Engage environment\'s site; the report lists any that stay on another site. Shared library is refreshed, so the sets are there without signing in again.' },
             { title: 'On prod', text: 'The restore dialog is marked in red, names PROD, and its button waits until you type prod.' },
           ],
         },
@@ -748,7 +752,7 @@ const platform = {
         {
           t: 'list',
           items: [
-            { title: 'Promote to test… (on dev), Promote to prod… (on test)', text: 'In the export dialog, pick the sets and press Promote. They are backed up, and you get a link that opens the next environment\'s Archive in Engage with exactly those backups selected and the restore preview open. Sign in there if asked; the link survives the sign-in. Nothing changes there until you confirm.' },
+            { title: 'Promote to test… (on dev), Promote to prod… (on test)', text: 'In the export dialog, tick the sets and the prompts they use, and press Promote at the foot. Everything ticked goes as one batch in one link. They are backed up, and you get a link that opens the next environment\'s Archive in Engage with exactly those backups selected and the restore preview open. Sign in there if asked; the link survives the sign-in. Nothing changes there until you confirm.' },
             { title: 'Copy archive ids', text: 'Every export offers the ids of the backups it made, to paste wherever you need to name the batch.' },
             { title: 'Promote these to prod', text: 'After a restore on test, this link takes the same backups on to prod\'s Archive.' },
           ],
@@ -756,8 +760,8 @@ const platform = {
         {
           t: 'note',
           tone: 'warn',
-          title: 'A set carries its prompt by name',
-          text: 'A prompt is known by a different id in each environment, so the link between a set and its Workie prompt travels by the prompt\'s name. Import the prompt before the set, or the set arrives with no prompt linked and Workie uses the default for its type.',
+          title: 'Send a set with its prompt',
+          text: 'A set links to its Workie prompt only if that prompt is already where it arrives. Tick the prompt in the same batch: prompts are restored first, so the set links to the copy that just arrived. Otherwise the prompt is looked for by name; with no match Workie uses the default for its type.',
         },
       ],
     },

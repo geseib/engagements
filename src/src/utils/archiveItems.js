@@ -64,6 +64,46 @@ export function exportSelection(keys) {
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
+/** "1 set", "2 prompts", "2 sets and 1 prompt" — what one batch holds; '' when it holds nothing. */
+export function batchNoun(sets, prompts) {
+  return [sets ? plural(sets, 'set') : '', prompts ? plural(prompts, 'prompt') : ''].filter(Boolean).join(' and ');
+}
+
+/**
+ * ONE BATCH, PROMPTS FIRST. A set can name a prompt, and the receiving tier links it to that
+ * prompt only if the prompt is already there, so a batch restores prompts before sets. The
+ * import route sorts too (import-from-archive.js batchInOrder); the screen keeps the same order
+ * in the link, the preview and the request so what the admin reads is what happens. `items` is
+ * the archive list, used to tell a prompt from a set; an id it does not hold keeps its place
+ * among the sets. Order within each kind is kept.
+ */
+export function promptsFirst(ids, items) {
+  const prompts = new Set((items || []).filter((item) => item.ContentType === 'prompt').map((item) => item.ArchiveId));
+  const all = [...(ids || [])];
+  return [...all.filter((id) => prompts.has(id)), ...all.filter((id) => !prompts.has(id))];
+}
+
+/**
+ * The two export responses of one batch (prompts, then sets) as one: their results joined in
+ * that order. Either may be null when the batch held none of that kind.
+ */
+export function mergeExports(...responses) {
+  const merged = { successful: [], failed: [], totalRequested: 0 };
+  for (const response of responses) {
+    const results = (response && response.results) || {};
+    merged.successful.push(...(results.successful || []));
+    merged.failed.push(...(results.failed || []));
+    merged.totalRequested += Number(results.totalRequested) || 0;
+  }
+  return { results: merged };
+}
+
+/** "1 image stays on another site: …" — absolute URLs that are not Engage's to copy. */
+const externalLine = (urls) => {
+  const n = urls.length;
+  return `${plural(n, 'image')} ${n === 1 ? 'stays' : 'stay'} on another site, not copied: ${urls.join(', ')}.`;
+};
+
 export function describeExport(response) {
   const results = (response && response.results) || {};
   const done = results.successful || [];
@@ -80,6 +120,8 @@ export function describeExport(response) {
       const n = skipped.length;
       lines.push(`${d.name || d.id}: ${plural(n, 'image')} ${n === 1 ? 'is' : 'are'} not stored under sets/, so ${n === 1 ? 'it is' : 'they are'} not in the backup: ${skipped.join(', ')}.`);
     }
+    const external = (d.media && d.media.external) || [];
+    if (external.length) lines.push(`${d.name || d.id}: ${externalLine(external)}`);
   }
   for (const f of failed) lines.push(`${f.refused ? 'Not archived' : 'Failed'}: ${f.name || f.id} — ${f.error}`);
   if (!done.length && !failed.length) lines.push('The export reported no backup and no error.');
@@ -98,6 +140,7 @@ export function describeRestore(response) {
   const live = (response && response.becameActive) || [];
   const missing = (response && response.media && response.media.missing) || [];
   const skipped = (response && response.media && response.media.skipped) || [];
+  const external = [...new Set((response && response.media && response.media.external) || [])];
   const lines = [];
   if (live.length) lines.push(`Now live for every organisation: ${live.map((s) => s.name || s.id).join(', ')}.`);
   if (restored.length) {
@@ -108,6 +151,7 @@ export function describeRestore(response) {
     const n = skipped.length;
     lines.push(`${plural(n, 'image')} ${n === 1 ? 'was' : 'were'} not restored because ${n === 1 ? 'it is' : 'they are'} not stored under sets/: ${skipped.join(', ')}.`);
   }
+  if (external.length) lines.push(externalLine(external));
   for (const f of failed) lines.push(`${f.refused ? 'Not restored' : 'Failed'}: ${f.archiveId} — ${f.error}`);
   if (!restored.length && !failed.length) lines.push('The import reported nothing restored and no error.');
   return lines;
@@ -214,7 +258,11 @@ export function describePlanEntry(entry) {
   let arrival;
   if (entry.kind === 'set') arrival = entry.active ? 'Active on arrival' : 'Inactive on arrival';
   else arrival = entry.status === 'active' ? 'Active on arrival' : `Arrives as ${entry.status || 'draft'}`;
-  return { verdict: verdictOf(entry), counts, arrival, live: entry.kind === 'set' && entry.active === true };
+  const externalCount = Array.isArray(entry.externalImages) ? entry.externalImages.length : 0;
+  const external = externalCount
+    ? `${plural(externalCount, 'image')} ${externalCount === 1 ? 'stays' : 'stay'} on another site`
+    : '';
+  return { verdict: verdictOf(entry), counts, arrival, live: entry.kind === 'set' && entry.active === true, external };
 }
 
 /** The restored sets with their read-back, for the check table. */
@@ -222,6 +270,14 @@ export function restoreChecks(response) {
   const restored = (response && response.results && response.results.successful) || [];
   return restored
     .filter((entry) => entry.kind === 'set' && entry.check)
+    .map((entry) => ({ archiveId: entry.archiveId, id: entry.id, name: entry.name || entry.id, check: entry.check }));
+}
+
+/** The restored prompts with their read-back (version, status, name), for the prompt check table. */
+export function promptChecks(response) {
+  const restored = (response && response.results && response.results.successful) || [];
+  return restored
+    .filter((entry) => entry.kind === 'prompt' && entry.check)
     .map((entry) => ({ archiveId: entry.archiveId, id: entry.id, name: entry.name || entry.id, check: entry.check }));
 }
 

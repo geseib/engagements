@@ -138,12 +138,12 @@ const ROWS = [
     const out = await media.copyMediaOut(s3, {
       mediaBucket: '', archiveBucket: '', snapshotId: 's', rows: [{ SK: 'QUESTION#1', Image: '/assets/a.jpg' }],
     });
-    assert.deepStrictEqual(out, { media: [], missing: [], skipped: [] });
+    assert.deepStrictEqual(out, { media: [], missing: [], skipped: [], external: [] });
     // Nor does a set whose only key is outside sets/: nothing would be copied, so nothing is asked of a bucket.
     const stray = await media.copyMediaOut(s3, {
       mediaBucket: '', archiveBucket: '', snapshotId: 's', rows: [{ SK: 'QUESTION#1', Image: 'images/legacy.png' }],
     });
-    assert.deepStrictEqual(stray, { media: [], missing: [], skipped: ['images/legacy.png'] });
+    assert.deepStrictEqual(stray, { media: [], missing: [], skipped: ['images/legacy.png'], external: [] });
   });
 
   console.log('\n3. back onto a tier');

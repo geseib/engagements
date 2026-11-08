@@ -1,7 +1,34 @@
 # Installed: Uffizi Art Titles
 
-**Dev only** (`engagedev`), in the platform Engage library (`SETS` partition). Nothing was
-installed on test or prod, and nothing was pushed or deployed.
+## Test (8 Nov 2026): Image URLs moved to engage.test
+
+The set was promoted to **test** (`engagetest`, platform `SETS`) through the Archive
+(archive `0363c9a8-e34e-4a49-87f7-24d25544fef1`, exported from dev at 2026-11-08T11:17:22.471Z). The restore
+created v1, but every Image still pointed at `https://engage.dev.seibtribe.us/sets/uffiziarttitles/`,
+because the restore copied no media.
+
+1. Copied all 60 images from `s3://engagedev-media/sets/uffiziarttitles/` to
+   `s3://engagetest-media/sets/uffiziarttitles/`, keeping the same neutral names, with
+   `Content-Type: image/jpeg`.
+2. Fetched each `https://engage.test.seibtribe.us/sets/uffiziarttitles/<file>`. All 60 returned 200
+   `image/jpeg`, with the same bytes as the dev copy (`image-check-test.json`).
+3. Wrote `uffizi-art-titles-test-v2.csv` from the **live test v1** rows. Every column (RealAnswer included) is
+   as stored. Only the Image host changes.
+4. Ran `node scripts/replace-question-set.js engagetest uffiziarttitles --csv sets/uffizi-2026-11/uffizi-art-titles-test-v2.csv
+   --note "Image URLs moved from engage.dev to engage.test ..."`: first as a dry run
+   (60 questions, 6 categories, 0 skipped), then with `--apply`. The live version is now **v2**,
+   and v1 is kept.
+
+**Read-back:**
+- v2 was compared with v1 on every attribute of all 66 rows. **0 mismatches** apart from
+  Image, which changed on all 60 questions.
+- On the SETS row only `activeVersion`, `versions`, `updatedAt` and `sourceFile` changed.
+  `promptId` `mupjs2kx1yhsr6kgenz`, `bluffRound: false`, `personaId` `comedian`, topic, tags, instructions and `active` are as restored.
+- Every live Image is on engage.test and serves image/jpeg.
+
+Dev and prod were not touched. Nothing was pushed or deployed.
+
+**Dev** (`engagedev`), in the platform Engage library (`SETS` partition). (This section was written on 7 Nov, when the set existed only on dev. For test, see above.)
 
 | | |
 |---|---|

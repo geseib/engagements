@@ -397,7 +397,9 @@
   "savedSize": [
    1235,
    1600
-  ]
+  ],
+  "retiredBy": "fat-63.jpg",
+  "retiredBecause": "the title or subject is painted into the work"
  },
  {
   "image": "fat-17.jpg",
@@ -417,7 +419,9 @@
   "savedSize": [
    1600,
    1103
-  ]
+  ],
+  "retiredBy": "fat-62.jpg",
+  "retiredBecause": "the title or subject is painted into the work"
  },
  {
   "image": "fat-57.jpg",
@@ -637,7 +641,9 @@
   "savedSize": [
    1243,
    1600
-  ]
+  ],
+  "retiredBy": "fat-61.jpg",
+  "retiredBecause": "the title or subject is painted into the work"
  },
  {
   "image": "fat-38.jpg",
@@ -1199,5 +1205,71 @@
    1280,
    1574
   ]
+ },
+ {
+  "image": "fat-61.jpg",
+  "devQuestion": "c004#011",
+  "category": "Baroque, Rococo & Neoclassicism",
+  "work": "The Blue Boy",
+  "artist": "Thomas Gainsborough, c. 1770",
+  "tiers": "dev",
+  "replacesImage": "fat-28.jpg",
+  "commonsFile": "File:The Blue Boy.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:The_Blue_Boy.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=The_Blue_Boy.jpg&w=872",
+  "sourceSize": [
+   872,
+   1289
+  ],
+  "savedSize": [
+   872,
+   1289
+  ],
+  "factsCheckedAgainst": "https://en.wikipedia.org/wiki/The_Blue_Boy"
+ },
+ {
+  "image": "fat-62.jpg",
+  "devQuestion": "c003#001",
+  "category": "Asian Art",
+  "work": "Pine Trees (Shōrin-zu byōbu), left-hand screen",
+  "artist": "Hasegawa Tōhaku, c. 1595",
+  "tiers": "dev, test, prod",
+  "replacesImage": "fat-17.jpg",
+  "commonsFile": "File:Hasegawa Tohaku - Pine Trees (Shōrin-zu byōbu) - left hand screen.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Hasegawa_Tohaku_-_Pine_Trees_(Sh%C5%8Drin-zu_by%C5%8Dbu)_-_left_hand_screen.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Hasegawa_Tohaku_-_Pine_Trees_(Shōrin-zu_byōbu)_-_left_hand_screen.jpg&w=1920",
+  "sourceSize": [
+   16729,
+   7817
+  ],
+  "savedSize": [
+   1600,
+   748
+  ],
+  "factsCheckedAgainst": "https://en.wikipedia.org/wiki/Sh%C5%8Drin-zu_by%C5%8Dbu"
+ },
+ {
+  "image": "fat-63.jpg",
+  "devQuestion": "c002#011",
+  "category": "Impressionism & Post-Impressionism",
+  "work": "Paris Street; Rainy Day",
+  "artist": "Gustave Caillebotte, 1877",
+  "tiers": "dev",
+  "replacesImage": "fat-60.jpg",
+  "commonsFile": "File:Gustave Caillebotte - Paris Street; Rainy Day - Google Art Project.jpg",
+  "commonsPage": "https://commons.wikimedia.org/wiki/File:Gustave_Caillebotte_-_Paris_Street;_Rainy_Day_-_Google_Art_Project.jpg",
+  "licence": "Public domain",
+  "fetched": "https://commons.wikimedia.org/w/thumb.php?f=Gustave_Caillebotte_-_Paris_Street;_Rainy_Day_-_Google_Art_Project.jpg&w=1920",
+  "sourceSize": [
+   5982,
+   4531
+  ],
+  "savedSize": [
+   1600,
+   1212
+  ],
+  "factsCheckedAgainst": "https://en.wikipedia.org/wiki/Paris_Street;_Rainy_Day"
  }
 ]

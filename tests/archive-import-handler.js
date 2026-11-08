@@ -179,7 +179,7 @@ const LEGACY_CSV = '"Category","Title","Detail","OptionA","OptionB","OptionC","O
     assert.strictEqual(res.body.dryRun, true);
     assert.deepStrictEqual(res.body.plan[0], {
       archiveId: fresh, kind: 'set', id: 'freshquiz', name: 'freshquiz', mode: 'created',
-      currentVersion: null, currentlyActive: null, active: true, questionCount: 1, categoryCount: 1,
+      currentVersion: null, currentlyActive: null, active: true, questionCount: 1, categoryCount: 1, externalImages: [],
     });
   });
   await check('an existing set is a new version of the one that is live now', () => {

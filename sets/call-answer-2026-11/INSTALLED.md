@@ -1,7 +1,35 @@
 # Installed: What Is This Thing?
 
+## Test (8 Nov 2026): Image URLs moved to engage.test
+
+The set was promoted to **test** (`engagetest`, platform `SETS`) through the Archive
+(archive `2a3cdb83-5ef7-4f00-8c32-e8ef25b85e06`, exported from dev at 2026-11-08T11:17:22.251Z). The restore
+created v1, but every Image still pointed at `https://engage.dev.seibtribe.us/sets/whatisthisthing/`,
+because the restore copied no media.
+
+1. Copied all 24 images from `s3://engagedev-media/sets/whatisthisthing/` to
+   `s3://engagetest-media/sets/whatisthisthing/`, keeping the same neutral names, with
+   `Content-Type: image/jpeg`.
+2. Fetched each `https://engage.test.seibtribe.us/sets/whatisthisthing/<file>`. All 24 returned 200
+   `image/jpeg`, with the same bytes as the dev copy (`image-check-test.json`).
+3. Wrote `what-is-this-thing-test-v2.csv` from the **live test v1** rows. Every column (RealAnswer included) is
+   as stored. Only the Image host changes.
+4. Ran `node scripts/replace-question-set.js engagetest whatisthisthing --csv sets/call-answer-2026-11/what-is-this-thing-test-v2.csv
+   --note "Image URLs moved from engage.dev to engage.test ..."`: first as a dry run
+   (24 questions, 6 categories, 0 skipped), then with `--apply`. The live version is now **v2**,
+   and v1 is kept.
+
+**Read-back:**
+- v2 was compared with v1 on every attribute of all 30 rows. **0 mismatches** apart from
+  Image, which changed on all 24 questions.
+- On the SETS row only `activeVersion`, `versions`, `updatedAt` and `sourceFile` changed.
+  `promptId` `mw6p9gjq5wzczhymlke`, `bluffRound: true`, `roundNoun` `Invention`, `personaId` `comedian`, topic, tags, instructions and `active` are as restored.
+- Every live Image is on engage.test and serves image/jpeg.
+
+Dev and prod were not touched. Nothing was pushed or deployed.
+
 **Dev only** (`engagedev`), in the platform Engage library (`SETS` partition).
-Nothing was installed on test or prod, and nothing was pushed or deployed.
+(This section was written on 7 Nov, when the set existed only on dev. For test, see above.)
 
 | | |
 |---|---|
