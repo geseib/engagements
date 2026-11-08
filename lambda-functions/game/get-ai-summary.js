@@ -40,6 +40,8 @@ const { consensusLabel } = require('./consensus');
 // Workie's after-writing check (read-check.js; workie-grounding STEP0): numbers,
 // room-level claims and decided-sounding next steps the material does not support.
 const { checkRead, collectMaterial, revisionNote, issueKinds } = require('./read-check');
+// The earlier rounds of a trivia session, as facts (session 8741's "first time").
+const { sessionSoFar } = require('./session-so-far');
 // buildWavelengthProse lives in wavelength.js WITH the engine, not here.
 // promptPreflight.test.js extracts "the hardcoded fallback" by slicing from
 // this file's FIRST backtick character, so nothing above the real fallback
@@ -51,7 +53,7 @@ const { ORG, promptsMetadataPk, callerMayDriveSession, isPlatformAdmin } = requi
 // Dev's model picker (AI_MODEL_PICKER): the catalogue, and the one call to the
 // Anthropic Messages API. Off on test and prod, where neither is consulted.
 const {
-  DEFAULT_MODEL, findModel, modelByProviderId, modelPickerOn, pickerCatalogue,
+  DEFAULT_MODEL, findModel, modelByProviderId, modelPickerOn, pickerCatalogue, promptSummaryModel,
   estimateCostUsd, variantSk, variantSkPrefix,
 } = require('./summary-models');
 const anthropicMessages = require('./anthropic-messages');
@@ -71,6 +73,7 @@ const { describeSurveyResults } = require('./survey-digest');
 const { resolveTask, authoredTaskOf } = require('./task-instruction');
 const { displayOrder } = require('./answer-order');
 const { authorTallyLines, findTallyMismatches, tallyRows } = require('./author-tally');
+const { scoreBluff, bluffPromptLines } = require('./bluff-round');
 // Call & Answer follow-up asks (docs/design/ca-followup-asks): suggestions
 // made after the read is stored, never in its way. Off unless
 // FOLLOWUP_ASKS_ENABLED is 'on' (dev only).
@@ -580,7 +583,10 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
     // describes the name. tests/ai-summary-prompt-name-not-logged.js.
     console.log(`✅ Successfully fetched prompt ${promptId}: name ${shapeForLog(promptData.name)}`);
 
-    return promptData;
+    // The row's settings that are not in the body: which model writes this
+    // Workie's reads (summary-models.js promptSummaryModel). A setting, never
+    // prose, so it is plaintext on every row.
+    return promptRecord.summaryModel ? { ...promptData, summaryModel: promptRecord.summaryModel } : promptData;
   } catch (error) {
     console.error(`❌ Error fetching prompt ${promptId}:`, error);
     
@@ -706,6 +712,34 @@ const sessionOnFinalRound = async (gameId) => {
   } catch (error) {
     console.warn(`⚠️ ROUND ANGLE: could not read the session's categories: ${error.message}`);
     return false;
+  }
+};
+
+/**
+ * The earlier rounds of a trivia session (session-so-far.js), or null. Reads
+ * the answer rows' SK and IsCorrect only — both plaintext, so no key is
+ * needed and no answer is decrypted. Unreadable means no block: the read then
+ * has no history to claim, and the read check treats any claim as unsupported.
+ */
+const triviaSessionSoFar = async (gameId, paddedQuestionNumber, current) => {
+  try {
+    const rows = [];
+    let start;
+    do {
+      const page = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'QUESTION#' },
+        ProjectionExpression: 'SK, IsCorrect',
+        ExclusiveStartKey: start,
+      }));
+      rows.push(...(page.Items || []));
+      start = page.LastEvaluatedKey;
+    } while (start);
+    return sessionSoFar(rows, { round: parseInt(paddedQuestionNumber, 10), ...current });
+  } catch (error) {
+    console.warn(`⚠️ SESSION SO FAR: could not read the earlier rounds: ${error.message}`);
+    return null;
   }
 };
 
@@ -1714,6 +1748,22 @@ const handle = async (event, context) => {
       });
     }
 
+    // A BLUFF ROUND'S POINTS (bluff-round.js), as get-results.js paid them,
+    // so {voteTallyByAuthor} and the check of the reply's numbers agree with
+    // the scoreboard rather than with a ranked count nobody was paid.
+    const storedBluff = storedResults && storedResults.Bluff && storedResults.Bluff.holderName
+      ? storedResults.Bluff : null;
+    if (storedBluff && gameType !== 'trivia' && gameType !== 'wavelength') {
+      const bluffScore = scoreBluff({ answers, votes: votes || [], holderName: storedBluff.holderName });
+      Object.keys(voteTallies).forEach((idx) => {
+        voteTallies[idx].firstPlace = bluffScore.votesFor[idx] || 0;
+        voteTallies[idx].secondPlace = 0;
+        voteTallies[idx].thirdPlace = 0;
+        voteTallies[idx].totalScore = bluffScore.points[voteTallies[idx].playerName] || 0;
+        answerScores[idx] = voteTallies[idx].totalScore;
+      });
+    }
+
     // Find winners (highest score) - using same logic as get-results.js
     const maxScore = Math.max(...Object.values(answerScores));
     const winners = [];
@@ -2365,6 +2415,10 @@ exports.describeCorrectAnswer = describeCorrectAnswer;
  * total. Both this and `triviaResultsSummary` below now say "this round".
  */
 function triviaWinnerInfo(winners) {
+  // A round nobody got right ties everyone at 0, and "Winner this round: Ges
+  // (0 points)" is how session 8741's round 20 read came to say "Ges took the
+  // round's one point-scoring call" when all four were wrong.
+  winners = (winners || []).filter((w) => Number(w.score) > 0);
   if (!winners.length) return 'No clear winner';
   return `Winner this round: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} points)`;
 }
@@ -2374,6 +2428,7 @@ exports.triviaWinnerInfo = triviaWinnerInfo;
  *  cases never said "winner" ambiguously, so only the single-winner line
  *  changes. */
 function triviaResultsSummary(winners) {
+  winners = (winners || []).filter((w) => Number(w.score) > 0); // see triviaWinnerInfo
   if (winners.length === 1) return `Clear winner this round with ${winners[0].score} points`;
   if (winners.length > 1) return `${winners.length}-way tie for first place with ${winners[0].score} points each`;
   return 'No correct answers';
@@ -3416,6 +3471,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       a confident wrong sentence is not.
     */
     reveal: question.answerDetails || '',
+    // A bluff round's reveal and outcome (bluff-round.js), '' on every other
+    // round. Appended after the template when the template does not place it.
+    bluffRound: (storedResults && storedResults.Bluff && storedResults.Bluff.holderName)
+      ? bluffPromptLines(storedResults.Bluff, { story: question.answerDetails || '', hidden })
+      : '',
     // The question's Background, for a prompt that wants to place it itself
     // (question-background spec §3). Any other prompt gets it in the context
     // block or in {contextSections} — never both (see templateNamesBackground).
@@ -3639,7 +3699,28 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       + `${lastAngle ? `; last round ${lastAngle}` : ''}${isFinalRound ? '; final round' : ''})`);
   }
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${angleLayer}${voiceLayer}${hostLayer}`;
+  /*
+    THE SESSION SO FAR (session-so-far.js). A trivia read used to be handed
+    THIS round's count and the running totals only, and in session 8741 it
+    called round 14 "the first time the four of them agreed" when seven
+    earlier rounds had everyone right. The earlier rounds, as copyable facts,
+    beside the angle; the read check holds a history claim to them. Hidden
+    rounds get none: per-round counts are no attribution, but a hidden round
+    keeps its read on the round.
+  */
+  let historyLayer = '';
+  let history = null;
+  if (normalizeGameType(gameType) === 'trivia' && !hidden) {
+    history = await triviaSessionSoFar(gameId, paddedQuestionNumber, {
+      correct: correctCount, answered: totalParticipants,
+    });
+    historyLayer = history ? `\n\n${history.block}` : '';
+    if (history) {
+      console.log(`📜 SESSION SO FAR: ${history.rounds.length} round(s), everyone right in ${history.allRight.length}, streak ${history.streak}`);
+    }
+  }
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${angleLayer}${historyLayer}${voiceLayer}${hostLayer}`;
 
   /*
     WHICH VARIABLES ARE EMPTY, NOT WHAT THE FULL ONES SAY.
@@ -3695,6 +3776,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     prompt += `\n\n${lateAnswersLayer(lateAnswers, { hidden })}`;
   }
 
+  // A BLUFF ROUND (bluff-round.js): the real answer, its story and how the
+  // bluff went, so Workie can reveal it. Its own block after the template,
+  // unless the template placed {bluffRound} itself.
+  if (templateVars.bluffRound && !templateBody.includes('{bluffRound}')) {
+    prompt += `\n\n${templateVars.bluffRound}`;
+  }
+
   prompt += `\n\n${HONESTY_RULE}`;
 
   /*
@@ -3719,7 +3807,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     values that went into the prompt; never logged.
   */
   const readMaterial = collectMaterial(templateVars, [
-    eventDetails, gameAiContext, questionSetAiContext, customInstruction, briefing, angleLayer, hostLayer,
+    eventDetails, gameAiContext, questionSetAiContext, customInstruction, briefing, angleLayer, historyLayer, hostLayer,
     (Array.isArray(lateAnswers) ? lateAnswers : []).map((a) => (a && a.answer) || ''),
   ]);
   // The prompt's OWN words — the template before its variables are filled, the
@@ -3743,6 +3831,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     unanimous: gameType === 'trivia'
       ? (totalParticipants > 0 && correctCount === totalParticipants)
       : (gameType === 'wavelength' ? commonWords.length > 0 : undefined),
+
+    // What the read may say about earlier rounds (read-check.js historyIssues):
+    // absent, any "first time this session" / "in a row" claim is unsupported.
+    history: history ? { priorAllRight: history.priorAllRight, streak: history.streak } : null,
   };
   const readVoice = `${persona.voice || ''}\n${voiceLayer}`;
 
@@ -3788,11 +3880,19 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Dev's model picker: the model asked for (the default unless a staff member
   // chose another on dev), and the one actually answering — the default once
   // the chosen one has failed.
-  const requestedModel = modelChoice || DEFAULT_MODEL;
+  // A staff member's pick first, then the model this Workie names for its own
+  // reads (Bedrock only), then the house default.
+  const promptModel = modelChoice ? null : promptSummaryModel(promptData);
+  const requestedModel = modelChoice || promptModel || DEFAULT_MODEL;
   let activeModel = requestedModel;
   let modelFallbackReason = null;
   // Only the default read goes through the switch; a model a staff member
   // chose is a comparison and is asked for as chosen.
+  // A Workie's own model goes through the Engage-wide Claude models switch
+  // exactly as the default does (owner, 2026-11-08: "use the workie model
+  // external"): Sonnet 4.6 is sent as Sonnet 5.5 on the Anthropic API while
+  // the switch is on, falling back to Bedrock Sonnet 4.6. Only a staff
+  // member's picker choice is asked for as picked.
   const routeDefault = !modelChoice;
   // Who actually wrote the last reply used: set by askOnce. The switch may
   // have sent the default read to Haiku 5.5 (claude-route.js).
@@ -3837,8 +3937,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   */
   const headingInstruction = '\n\nBegin your reply with this exact line, and write nothing before it:\n' + prefill;
 
-  // The default read goes through the switch; a picked model goes as picked.
-  const sendModel = (model, cmd) => (routeDefault && model === DEFAULT_MODEL
+  // The default read and a Workie's own model go through the switch; a picked
+  // model goes as picked.
+  const sendModel = (model, cmd) => (routeDefault && (model === DEFAULT_MODEL || model === promptModel)
     ? claudeRoute.send(bedrock, cmd, { site: 'ai-summary', timeoutMs: anthropicMessages.TIMEOUT_MS })
     : bedrock.send(cmd));
   const invokeBedrock = async (model, promptText) => sendModel(model, new InvokeModelCommand({

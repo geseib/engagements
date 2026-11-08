@@ -1,0 +1,2189 @@
+{
+ "title": "Uffizi Art Titles",
+ "setId": "uffiziarttitles",
+ "imageBase": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/",
+ "imageNote": "Images are self-hosted under neutral, shuffled names; the numbers do not follow question order.",
+ "questions": [
+  {
+   "question": 1,
+   "category": "Gothic & Early Renaissance",
+   "title": "FOUR OLD MEN IN THE BASEMENT",
+   "realAnswer": "Santa Trinita Maestà (Virgin and Child Enthroned, and Prophets)",
+   "artist": "Cimabue",
+   "date": "c. 1290–1300",
+   "school": "Florentine, late 13th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-31.jpg",
+   "localImage": "images/uffizi-31.jpg",
+   "commonsFile": "File:Cimabue - Maestà di Santa Trinita - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Cimabue_-_Maest%C3%A0_di_Santa_Trinita_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — uQHfVH5CnUNhxA",
+   "sourceSize": [
+    2008,
+    3596
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Cimabue_-_Maest%C3%A0_di_Santa_Trinita_-_Google_Art_Project.jpg/1280px-Cimabue_-_Maest%C3%A0_di_Santa_Trinita_-_Google_Art_Project.jpg",
+   "outputSize": [
+    894,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/virgin-and-child-enthroned-and-prophets-santa-trinita-maesta",
+    "museum": "The Uffizi",
+    "room": "A4. Giotto - Cimabue",
+    "inventory": "1890 no. 8343",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 2,
+   "category": "Gothic & Early Renaissance",
+   "title": "SHE HAS ACTUAL KNEES",
+   "realAnswer": "Ognissanti Madonna (Virgin and Child Enthroned, Surrounded by Angels and Saints)",
+   "artist": "Giotto",
+   "date": "c. 1300–1305",
+   "school": "Florentine, early 14th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-06.jpg",
+   "localImage": "images/uffizi-06.jpg",
+   "commonsFile": "File:Giotto, 1267 Around-1337 - Maestà - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Giotto,_1267_Around-1337_-_Maest%C3%A0_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — OgE-RDjvff-y6g",
+   "sourceSize": [
+    2056,
+    3272
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Giotto%2C_1267_Around-1337_-_Maest%C3%A0_-_Google_Art_Project.jpg/1280px-Giotto%2C_1267_Around-1337_-_Maest%C3%A0_-_Google_Art_Project.jpg",
+   "outputSize": [
+    1005,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/virgin-and-child-enthroned-surrounded-by-angels-and-saints-ognissanti-maesta",
+    "museum": "The Uffizi",
+    "room": "A4. Giotto - Cimabue",
+    "inventory": "1890 no. 8344",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 3,
+   "category": "Gothic & Early Renaissance",
+   "title": "SIX ANGELS, ONE ENORMOUS CHAIR",
+   "realAnswer": "Rucellai Madonna",
+   "artist": "Duccio di Buoninsegna",
+   "date": "1285",
+   "school": "Sienese, late 13th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-13.jpg",
+   "localImage": "images/uffizi-13.jpg",
+   "commonsFile": "File:Duccio - Rucellai Madonna.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Duccio_-_Rucellai_Madonna.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Own work",
+   "sourceSize": [
+    3772,
+    5385
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Duccio_-_Rucellai_Madonna.jpg/1280px-Duccio_-_Rucellai_Madonna.jpg",
+   "outputSize": [
+    1121,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/virgin-and-child-enthroned-surrounded-by-angels-known-as-the-rucellai-madonna",
+    "museum": "The Uffizi",
+    "room": "A4. Giotto - Cimabue",
+    "inventory": "(not given on the page)",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 4,
+   "category": "Gothic & Early Renaissance",
+   "title": "SHE WAS IN THE MIDDLE OF A BOOK",
+   "realAnswer": "Annunciation with St. Margaret and St. Ansanus",
+   "artist": "Simone Martini and Lippo Memmi",
+   "date": "1333",
+   "school": "Sienese, 14th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-07.jpg",
+   "localImage": "images/uffizi-07.jpg",
+   "commonsFile": "File:Simone Martini — Annunciation with St. Margaret and St. Ansanus.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Simone_Martini_%E2%80%94_Annunciation_with_St._Margaret_and_St._Ansanus.jpg",
+   "licence": "CC0",
+   "licenceUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "photoCredit": "Gleb Simonov (CC0)",
+   "commonsCredit": "Own work",
+   "sourceSize": [
+    10416,
+    9044
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/Simone_Martini_%E2%80%94_Annunciation_with_St._Margaret_and_St._Ansanus.jpg/1920px-Simone_Martini_%E2%80%94_Annunciation_with_St._Margaret_and_St._Ansanus.jpg",
+   "outputSize": [
+    1600,
+    1394
+   ],
+   "crop": {
+    "box": [
+     0.0439,
+     0.0465,
+     0.9623,
+     0.9679
+    ],
+    "why": "gallery photograph: cropped to the work, removing wall and plinth"
+   },
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/annunciation-with-st-margaret-and-st-ansanus",
+    "museum": "The Uffizi",
+    "room": "A5. Lorenzetti - Simone Martini",
+    "inventory": "1890 nos. 451, 452, 453",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 5,
+   "category": "Gothic & Early Renaissance",
+   "title": "HANDING OVER THE BABY",
+   "realAnswer": "Presentation in the Temple",
+   "artist": "Ambrogio Lorenzetti",
+   "date": "1342",
+   "school": "Sienese, 14th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-04.jpg",
+   "localImage": "images/uffizi-04.jpg",
+   "commonsFile": "File:Ambrogio Lorenzetti - Presentazione di Gesù al tempio - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Ambrogio_Lorenzetti_-_Presentazione_di_Ges%C3%B9_al_tempio_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — 0gFEBgbfCMyrvA",
+   "sourceSize": [
+    8387,
+    12003
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Ambrogio_Lorenzetti_-_Presentazione_di_Ges%C3%B9_al_tempio_-_Google_Art_Project.jpg/1280px-Ambrogio_Lorenzetti_-_Presentazione_di_Ges%C3%B9_al_tempio_-_Google_Art_Project.jpg",
+   "outputSize": [
+    1118,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/presentation-at-the-temple",
+    "museum": "The Uffizi",
+    "room": "A5. Lorenzetti - Simone Martini",
+    "inventory": "1890 no. 8346",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 6,
+   "category": "Gothic & Early Renaissance",
+   "title": "A NUN IN A SHEEPSKIN HOOD",
+   "realAnswer": "Saint Humility and Scenes from Her Life (the Blessed Humility Altarpiece)",
+   "artist": "Pietro Lorenzetti",
+   "date": "c. 1335–1340",
+   "school": "Sienese, 14th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-35.jpg",
+   "localImage": "images/uffizi-35.jpg",
+   "commonsFile": "File:Lorenzetti, Pietro - Beata Umiltà Altarpiece.jpeg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Lorenzetti,_Pietro_-_Beata_Umilt%C3%A0_Altarpiece.jpeg",
+   "licence": "CC0",
+   "licenceUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "photoCredit": "Oursana (CC0)",
+   "commonsCredit": "Own work",
+   "sourceSize": [
+    4032,
+    3024
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/Lorenzetti%2C_Pietro_-_Beata_Umilt%C3%A0_Altarpiece.jpeg/1920px-Lorenzetti%2C_Pietro_-_Beata_Umilt%C3%A0_Altarpiece.jpeg",
+   "outputSize": [
+    1600,
+    1398
+   ],
+   "crop": {
+    "box": [
+     0.075,
+     0.01,
+     0.925,
+     1
+    ],
+    "why": "gallery photograph: cropped to the work, removing wall and plinth"
+   },
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/saint-humility-and-scenes-from-her-life",
+    "museum": "The Uffizi",
+    "room": "A6. 14th Century",
+    "inventory": "1890 nn. 6120-6126, 6129-6131, 8347",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 7,
+   "category": "Gothic & Early Renaissance",
+   "title": "THREE ARCHES OF GOLD",
+   "realAnswer": "Triptych with the Virgin and Child between St Matthew and St Nicholas of Bari",
+   "artist": "Bernardo Daddi",
+   "date": "1328",
+   "school": "Florentine, 14th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-66.jpg",
+   "localImage": "images/uffizi-66.jpg",
+   "commonsFile": "File:Bernardo daddi, trittico di ognissanti.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Bernardo_daddi,_trittico_di_ognissanti.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Web Gallery of Art: Image Info about artworkwga QS:P11807,\"d/daddi/mad_chil\"",
+   "sourceSize": [
+    895,
+    490
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Bernardo+daddi%2C+trittico+di+ognissanti.jpg&w=894",
+   "outputSize": [
+    894,
+    489
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/daddi-triptych-en",
+    "museum": "The Uffizi",
+    "room": "A6. 14th Century",
+    "inventory": "1890 n. 3073",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 8,
+   "category": "Gothic & Early Renaissance",
+   "title": "DOWN AT THE HARBOUR",
+   "realAnswer": "The Miracle of the Grain Ships and St Nicholas Reviving a Boy (Stories of St Nicholas)",
+   "artist": "Ambrogio Lorenzetti",
+   "date": "c. 1330–1335",
+   "school": "Sienese, 14th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-67.jpg",
+   "localImage": "images/uffizi-67.jpg",
+   "commonsFile": "File:Ambrogio lorenzetti, storie di san nicola 01 1332.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Ambrogio_lorenzetti,_storie_di_san_nicola_01_1332.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "photograph of 1332 painting",
+   "sourceSize": [
+    586,
+    1100
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Ambrogio+lorenzetti%2C+storie+di+san+nicola+01+1332.jpg&w=585",
+   "outputSize": [
+    585,
+    1098
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/lorenzetti-saint-nicholas-stories",
+    "museum": "The Uffizi",
+    "room": "A6. 14th Century",
+    "inventory": "1890 n. 8349",
+    "checked": "2026-11-07"
+   },
+   "replaces": "Giottino, Pietà of San Remigio (in restoration, Uffizi list of 3 Nov 2026)"
+  },
+  {
+   "question": 9,
+   "category": "Gothic & Early Renaissance",
+   "title": "THE ROYAL ROAD TRIP",
+   "realAnswer": "Adoration of the Magi (the Strozzi Altarpiece)",
+   "artist": "Gentile da Fabriano",
+   "date": "1423",
+   "school": "Marchigian, International Gothic, early 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-46.jpg",
+   "localImage": "images/uffizi-46.jpg",
+   "commonsFile": "File:Gentile da Fabriano - Adorazione dei Magi - Google Art ProjectFXD.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Gentile_da_Fabriano_-_Adorazione_dei_Magi_-_Google_Art_ProjectFXD.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "This file was derived from: Gentile da Fabriano - Adorazione dei Magi - Google Art Project.jpg:",
+   "sourceSize": [
+    3356,
+    3669
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Gentile_da_Fabriano_-_Adorazione_dei_Magi_-_Google_Art_ProjectFXD.jpg/1280px-Gentile_da_Fabriano_-_Adorazione_dei_Magi_-_Google_Art_ProjectFXD.jpg",
+   "outputSize": [
+    1280,
+    1399
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/adoration-of-the-magi",
+    "museum": "The Uffizi",
+    "room": "A7. Lorenzo Monaco - Gentile da Fabriano",
+    "inventory": "1890 n. 8364",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 10,
+   "category": "Gothic & Early Renaissance",
+   "title": "STANDING ON A STRIPED SKY",
+   "realAnswer": "Coronation of the Virgin",
+   "artist": "Lorenzo Monaco",
+   "date": "1414",
+   "school": "Florentine, early 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-63.jpg",
+   "localImage": "images/uffizi-63.jpg",
+   "commonsFile": "File:Lorenzo Monaco - Incoronazione della Vergine - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Lorenzo_Monaco_-_Incoronazione_della_Vergine_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — 4wGwIhQqTqCArw",
+   "sourceSize": [
+    2893,
+    3000
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Lorenzo_Monaco_-_Incoronazione_della_Vergine_-_Google_Art_Project.jpg/1280px-Lorenzo_Monaco_-_Incoronazione_della_Vergine_-_Google_Art_Project.jpg",
+   "outputSize": [
+    1145,
+    1308
+   ],
+   "crop": {
+    "box": [
+     0.05,
+     0.015,
+     0.945,
+     1
+    ],
+    "why": "gallery photograph: cropped to the work, removing wall and plinth"
+   },
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/coronation-of-the-virgin",
+    "museum": "The Uffizi",
+    "room": "A7. Lorenzo Monaco - Gentile da Fabriano",
+    "inventory": "1890 n. 885",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 11,
+   "category": "Early Renaissance Florence",
+   "title": "THREE GENERATIONS, ONE THRONE",
+   "realAnswer": "Virgin and Child with Saint Anne (Sant'Anna Metterza)",
+   "artist": "Masolino and Masaccio",
+   "date": "c. 1424–1425",
+   "school": "Florentine, early 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-23.jpg",
+   "localImage": "images/uffizi-23.jpg",
+   "commonsFile": "File:Masaccio. The Madonna and Child with st. Anna. ca. 1424. Uffizi, Florence.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Masaccio._The_Madonna_and_Child_with_st._Anna._ca._1424._Uffizi,_Florence.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Self-scanned",
+   "sourceSize": [
+    1514,
+    2500
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Masaccio._The_Madonna_and_Child_with_st._Anna._ca._1424._Uffizi%2C_Florence.jpg/1280px-Masaccio._The_Madonna_and_Child_with_st._Anna._ca._1424._Uffizi%2C_Florence.jpg",
+   "outputSize": [
+    969,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/opere/santa-anna-masaccio",
+    "museum": "Gli Uffizi",
+    "room": "A8. Masaccio - Beato Angelico - Paolo Uccello",
+    "inventory": "1890 n. 8386",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 12,
+   "category": "Early Renaissance Florence",
+   "title": "THE CROWN NEEDS ONE MORE JEWEL",
+   "realAnswer": "Coronation of the Virgin",
+   "artist": "Fra Angelico",
+   "date": "1431–1435",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-15.jpg",
+   "localImage": "images/uffizi-15.jpg",
+   "commonsFile": "File:Fra Angelico — Coronation of the Virgin.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Fra_Angelico_%E2%80%94_Coronation_of_the_Virgin.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Own work",
+   "sourceSize": [
+    3863,
+    3871
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Fra_Angelico_%E2%80%94_Coronation_of_the_Virgin.jpg/1280px-Fra_Angelico_%E2%80%94_Coronation_of_the_Virgin.jpg",
+   "outputSize": [
+    1280,
+    1283
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/angelico-glorification",
+    "museum": "The Uffizi",
+    "room": "A8. Masaccio - Beato Angelico - Paolo Uccello",
+    "inventory": "1890 no.1612",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 13,
+   "category": "Early Renaissance Florence",
+   "title": "LANCES UP, PERSPECTIVE ON",
+   "realAnswer": "The Battle of San Romano (the Uffizi panel)",
+   "artist": "Paolo Uccello",
+   "date": "c. 1435–1440",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-18.jpg",
+   "localImage": "images/uffizi-18.jpg",
+   "commonsFile": "File:Battle of San Romano, by Paolo Uccello (Uffizi Gallery, Florence).jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Battle_of_San_Romano,_by_Paolo_Uccello_(Uffizi_Gallery,_Florence).jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "[1]; direct link to the image: [2]",
+   "sourceSize": [
+    2947,
+    1669
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Battle_of_San_Romano%2C_by_Paolo_Uccello_%28Uffizi_Gallery%2C_Florence%29.jpg/1920px-Battle_of_San_Romano%2C_by_Paolo_Uccello_%28Uffizi_Gallery%2C_Florence%29.jpg",
+   "outputSize": [
+    1600,
+    906
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/battle-of-san-romano",
+    "museum": "The Uffizi",
+    "room": "A8. Masaccio - Beato Angelico - Paolo Uccello",
+    "inventory": "1890 n. 479",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 14,
+   "category": "Early Renaissance Florence",
+   "title": "ORANGE TREES OVER THE PORCH",
+   "realAnswer": "Santa Lucia de' Magnoli Altarpiece (Madonna and Child with Saints Francis, John the Baptist, Zenobius and Lucy)",
+   "artist": "Domenico Veneziano",
+   "date": "c. 1445",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-24.jpg",
+   "localImage": "images/uffizi-24.jpg",
+   "commonsFile": "File:Domenico Veneziano 002.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Domenico_Veneziano_002.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "The Yorck Project (2002) 10.000 Meisterwerke der Malerei (DVD-ROM), distributed by DIRECTMEDIA Publishing GmbH. ISBN: 3936122202.",
+   "sourceSize": [
+    2147,
+    2132
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Domenico_Veneziano_002.jpg/1920px-Domenico_Veneziano_002.jpg",
+   "outputSize": [
+    1600,
+    1589
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/veneziano-madonna-and-child-enthroned",
+    "museum": "The Uffizi",
+    "room": "A25. Domenico Veneziano - Piero della Francesca",
+    "inventory": "1890 n. 884",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 15,
+   "category": "Early Renaissance Florence",
+   "title": "ARMS CROSSED, GARDEN WALLED",
+   "realAnswer": "Annunciation",
+   "artist": "Alesso Baldovinetti",
+   "date": "c. 1457",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-09.jpg",
+   "localImage": "images/uffizi-09.jpg",
+   "commonsFile": "File:Alessio Baldovinetti, Annunciazione,1457 circa -FG.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Alessio_Baldovinetti,_Annunciazione,1457_circa_-FG.jpg",
+   "licence": "CC0",
+   "licenceUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "photoCredit": "Fabrizio Garrisi (CC0)",
+   "commonsCredit": "Own work",
+   "sourceSize": [
+    4219,
+    4219
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Alessio_Baldovinetti%2C_Annunciazione%2C1457_circa_-FG.jpg/1920px-Alessio_Baldovinetti%2C_Annunciazione%2C1457_circa_-FG.jpg",
+   "outputSize": [
+    1286,
+    1600
+   ],
+   "crop": {
+    "box": [
+     0.1022,
+     0,
+     0.9061,
+     1
+    ],
+    "why": "gallery photograph: cropped to the work, removing wall and plinth"
+   },
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/annunciazione-baldovinetti",
+    "museum": "The Uffizi",
+    "room": "A10. Pollaiolo e Botticelli",
+    "inventory": "1890 n.483",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 16,
+   "category": "Early Renaissance Florence",
+   "title": "THE ANGEL IS GRINNING AT YOU",
+   "realAnswer": "Madonna and Child with Two Angels (the Lippina)",
+   "artist": "Filippo Lippi",
+   "date": "c. 1460–1465",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-42.jpg",
+   "localImage": "images/uffizi-42.jpg",
+   "commonsFile": "File:Madonna and Child with two Angels (by Filippo Lippi) – Galleria degli Uffizi, Florence.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Madonna_and_Child_with_two_Angels_(by_Filippo_Lippi)_%E2%80%93_Galleria_degli_Uffizi,_Florence.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "https://images.uffizi.it/production/attachments/1506342325696695-Lippi-Madonna-col-Bambino-e-due-angeli-principale.jpg?ixlib=rails-2.1.3&amp;fit=max&amp;fm=pjpg",
+   "sourceSize": [
+    2045,
+    3000
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Madonna_and_Child_with_two_Angels_%28by_Filippo_Lippi%29_%E2%80%93_Galleria_degli_Uffizi%2C_Florence.jpg/1280px-Madonna_and_Child_with_two_Angels_%28by_Filippo_Lippi%29_%E2%80%93_Galleria_degli_Uffizi%2C_Florence.jpg",
+   "outputSize": [
+    1091,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/lippi-madonna-and-child-with-two-angels",
+    "museum": "The Uffizi",
+    "room": "C6",
+    "inventory": "1890 n. 1598",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 17,
+   "category": "Early Renaissance Florence",
+   "title": "THEY ONLY SHOW ONE SIDE",
+   "realAnswer": "Diptych of the Duke and Duchess of Urbino (Federico da Montefeltro and Battista Sforza)",
+   "artist": "Piero della Francesca",
+   "date": "c. 1473–1475",
+   "school": "Central Italian, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-02.jpg",
+   "localImage": "images/uffizi-02.jpg",
+   "commonsFile": "File:Piero della Francesca - Ritratti dei Duchi di Urbino Federico da Montefeltro e Battista Sforza - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Piero_della_Francesca_-_Ritratti_dei_Duchi_di_Urbino_Federico_da_Montefeltro_e_Battista_Sforza_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — gwEjS68UHaNN4A",
+   "sourceSize": [
+    2426,
+    3490
+   ],
+   "downloadedFrom": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Piero_della_Francesca_-_Ritratti_dei_Duchi_di_Urbino_Federico_da_Montefeltro_e_Battista_Sforza_-_Google_Art_Project.jpg/1280px-Piero_della_Francesca_-_Ritratti_dei_Duchi_di_Urbino_Federico_da_Montefeltro_e_Battista_Sforza_-_Google_Art_Project.jpg",
+    "https://commons.wikimedia.org/w/thumb.php?f=Piero_della_Francesca_-_Portraits_of_the_Duke_and_Duchess_of_Urbino,_Federico_da_Montefeltro_and_Battista_Sforza_-_Google_Art_Project.jpg&w=1280"
+   ],
+   "outputSize": [
+    1600,
+    1131
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/the-duke-and-duchess-of-urbino-federico-da-montefeltro-and-battista-sforza",
+    "museum": "The Uffizi",
+    "room": "A25. Domenico Veneziano, Piero della Francesca",
+    "inventory": "1890 nn. 1615, 3342",
+    "checked": "2026-11-07"
+   },
+   "composite": "Two Commons files, one per panel, set side by side as the diptych hangs (Battista left, Federico right).",
+   "commonsFile2": "File:Piero della Francesca - Portraits of the Duke and Duchess of Urbino, Federico da Montefeltro and Battista Sforza - Google Art Project.jpg",
+   "commonsPage2": "https://commons.wikimedia.org/wiki/File:Piero_della_Francesca_-_Portraits_of_the_Duke_and_Duchess_of_Urbino,_Federico_da_Montefeltro_and_Battista_Sforza_-_Google_Art_Project.jpg",
+   "licence2": "Public domain"
+  },
+  {
+   "question": 18,
+   "category": "Early Renaissance Florence",
+   "title": "THE FIRST OF SEVEN",
+   "realAnswer": "Charity",
+   "artist": "Piero del Pollaiolo",
+   "date": "1469–1470",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-34.jpg",
+   "localImage": "images/uffizi-34.jpg",
+   "commonsFile": "File:Pollaiolo, Piero del - Charity - Uffizi.jpeg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Pollaiolo,_Piero_del_-_Charity_-_Uffizi.jpeg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "scan from Alison Wright, The Pollaiolo Brothers, p. 236",
+   "sourceSize": [
+    2892,
+    5677
+   ],
+   "downloadedFrom": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Pollaiolo%2C_Piero_del_-_Charity_-_Uffizi.jpeg/1280px-Pollaiolo%2C_Piero_del_-_Charity_-_Uffizi.jpeg",
+   "outputSize": [
+    815,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/charity-piero-pollaiolo",
+    "museum": "The Uffizi",
+    "room": "A10. Pollaiolo e Botticelli",
+    "inventory": "1890 no. 499",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 19,
+   "category": "Early Renaissance Florence",
+   "title": "THE STABLE IS A ROMAN RUIN",
+   "realAnswer": "Adoration of the Magi (tondo)",
+   "artist": "Domenico Ghirlandaio",
+   "date": "1487",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-08.jpg",
+   "localImage": "images/uffizi-08.jpg",
+   "commonsFile": "File:Domenico ghirlandaio, tondo con l'adorazione dei magi.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Domenico_ghirlandaio,_tondo_con_l%27adorazione_dei_magi.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Web Gallery of Art: Image Info about artworkwga QS:P11807,\"g/ghirland/domenico/7panel/06tondo\"",
+   "sourceSize": [
+    949,
+    950
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Domenico+ghirlandaio%2C+tondo+con+l%27adorazione+dei+magi.jpg&w=948",
+   "outputSize": [
+    948,
+    949
+   ],
+   "crop": {
+    "blank": [
+     [
+      0.955,
+      0.955,
+      1,
+      1
+     ]
+    ],
+    "why": "printed page number in the corner blanked"
+   },
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/adoration-of-the-magi-ghirlandaio",
+    "museum": "The Uffizi",
+    "room": "A13.",
+    "inventory": "1890 n. 1619",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 20,
+   "category": "Early Renaissance Florence",
+   "title": "THE PAINTER SNUCK IN",
+   "realAnswer": "Coronation of the Virgin (the Maringhi Coronation)",
+   "artist": "Filippo Lippi",
+   "date": "c. 1439–1447",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-60.jpg",
+   "localImage": "images/uffizi-60.jpg",
+   "commonsFile": "File:Filippo Lippi - Incoronazione della Vergine - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Filippo_Lippi_-_Incoronazione_della_Vergine_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — FQHAX2kUpkEteg",
+   "sourceSize": [
+    3308,
+    2340
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Filippo+Lippi+-+Incoronazione+della+Vergine+-+Google+Art+Project.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1132
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/lippi-coronation-virgin",
+    "museum": "The Uffizi",
+    "room": "A9. Paolo Uccello - Filippo Lippi - Piero della Francesca",
+    "inventory": "1890 no. 8352",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 21,
+   "category": "Florence, 1470–1500",
+   "title": "SPOT THE BANKERS",
+   "realAnswer": "Adoration of the Magi",
+   "artist": "Sandro Botticelli",
+   "date": "1470–1475",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-17.jpg",
+   "localImage": "images/uffizi-17.jpg",
+   "commonsFile": "File:Botticelli - Adoration of the Magi (Zanobi Altar) - Uffizi.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Botticelli_-_Adoration_of_the_Magi_(Zanobi_Altar)_-_Uffizi.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "not provided by the last uploader: Eugene a (talk)",
+   "sourceSize": [
+    5535,
+    4511
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Botticelli+-+Adoration+of+the+Magi+%28Zanobi+Altar%29+-+Uffizi.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1304
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/boticelli-adoration-lami",
+    "museum": "The Uffizi",
+    "room": "A11. Botticelli - Spring",
+    "inventory": "1890 no.882",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 22,
+   "category": "Florence, 1470–1500",
+   "title": "NOT IN THE MOOD",
+   "realAnswer": "Fortitude",
+   "artist": "Sandro Botticelli",
+   "date": "1470",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-57.jpg",
+   "localImage": "images/uffizi-57.jpg",
+   "commonsFile": "File:Sandro Botticelli - Fortitudo - Uffizi.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Sandro_Botticelli_-_Fortitudo_-_Uffizi.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "This file was derived from: Sandro Botticelli - Fortitude - Uffizi.jpg",
+   "sourceSize": [
+    2322,
+    4464
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Sandro+Botticelli+-+Fortitudo+-+Uffizi.jpg&w=1280",
+   "outputSize": [
+    832,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/fortitude",
+    "museum": "The Uffizi",
+    "room": "A10. Pollaiolo e Botticelli",
+    "inventory": "1890 n. 1606",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 23,
+   "category": "Florence, 1470–1500",
+   "title": "NINE GUESTS IN AN ORANGE GROVE",
+   "realAnswer": "Primavera (Spring)",
+   "artist": "Sandro Botticelli",
+   "date": "c. 1480",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-55.jpg",
+   "localImage": "images/uffizi-55.jpg",
+   "commonsFile": "File:Botticelli-primavera.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Botticelli-primavera.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "http://www.googleartproject.com/collection/uffizi-gallery/artwork/la-primavera-spring-botticelli-filipepi/331460/",
+   "sourceSize": [
+    4926,
+    3236
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Botticelli-primavera.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1051
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/botticelli-spring",
+    "museum": "The Uffizi",
+    "room": "A11. Botticelli, La Primavera",
+    "inventory": "1890 n. 8360",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 24,
+   "category": "Florence, 1470–1500",
+   "title": "BEACH ARRIVAL, NO LUGGAGE",
+   "realAnswer": "The Birth of Venus",
+   "artist": "Sandro Botticelli",
+   "date": "c. 1485",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-01.jpg",
+   "localImage": "images/uffizi-01.jpg",
+   "commonsFile": "File:Sandro Botticelli - La nascita di Venere - Google Art Project - edited.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Adjusted levels from File:Sandro Botticelli - La nascita di Venere - Google Art Project.jpg, originally from Google Art Project. Compression Photoshop level 9.",
+   "sourceSize": [
+    30000,
+    18840
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Sandro+Botticelli+-+La+nascita+di+Venere+-+Google+Art+Project+-+edited.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1005
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/birth-of-venus",
+    "museum": "The Uffizi",
+    "room": "A12. Botticelli, La Venere",
+    "inventory": "1890 n. 878",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 25,
+   "category": "Florence, 1470–1500",
+   "title": "SHE IS TAKING NOTES",
+   "realAnswer": "Madonna of the Magnificat",
+   "artist": "Sandro Botticelli",
+   "date": "c. 1483",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-58.jpg",
+   "localImage": "images/uffizi-58.jpg",
+   "commonsFile": "File:Magnificat Madonna - Botticelli (uffici) b.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Magnificat_Madonna_-_Botticelli_(uffici)_b.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "GalleriX",
+   "sourceSize": [
+    3090,
+    3070
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Magnificat+Madonna+-+Botticelli+%28uffici%29+b.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1590
+   ],
+   "crop": {
+    "blank": [
+     [
+      0.84,
+      0.92,
+      0.97,
+      0.975
+     ]
+    ],
+    "fill": [
+     255,
+     255,
+     255
+    ],
+    "why": "faint watermark text in the white margin blanked"
+   },
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/botticelli-madonna-of-the-magnificat",
+    "museum": "The Uffizi",
+    "room": "A12. Botticelli, La Venere",
+    "inventory": "1890 n. 1609",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 26,
+   "category": "Florence, 1470–1500",
+   "title": "A RING OF ANGELS",
+   "realAnswer": "Madonna of the Pomegranate",
+   "artist": "Sandro Botticelli",
+   "date": "c. 1487",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-48.jpg",
+   "localImage": "images/uffizi-48.jpg",
+   "commonsFile": "File:Botticelli, madonna della melagrana 01.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Botticelli,_madonna_della_melagrana_01.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Web Gallery of Art: Image Info about artworkwga QS:P11807,\"b/botticel/22/40pomegr\"",
+   "sourceSize": [
+    1098,
+    1101
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Botticelli,_madonna_della_melagrana_01.jpg&w=1097",
+   "outputSize": [
+    1097,
+    1100
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/pomegrante_madonna_botticelli",
+    "museum": "The Uffizi",
+    "room": "A12. Botticelli, La Venere",
+    "inventory": "1890/1607",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 27,
+   "category": "Florence, 1470–1500",
+   "title": "HAIR-PULLING CONTEST",
+   "realAnswer": "Pallas and the Centaur",
+   "artist": "Sandro Botticelli",
+   "date": "c. 1480–1485",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-32.jpg",
+   "localImage": "images/uffizi-32.jpg",
+   "commonsFile": "File:Pallade col Centauro, Sandro Botticelli (1482).jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Pallade_col_Centauro,_Sandro_Botticelli_(1482).jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Own work",
+   "sourceSize": [
+    10598,
+    14960
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Pallade+col+Centauro%2C+Sandro+Botticelli+%281482%29.jpg&w=1280",
+   "outputSize": [
+    1133,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/pallas-and-the-centaur",
+    "museum": "The Uffizi",
+    "room": "A11. Botticelli - Spring",
+    "inventory": "Pitti Objects of Art 1911 n. 752; Deposits n. 29",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 28,
+   "category": "Florence, 1470–1500",
+   "title": "HE ARRIVES, SHE BENDS",
+   "realAnswer": "Cestello Annunciation",
+   "artist": "Sandro Botticelli",
+   "date": "1489–1490",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-61.jpg",
+   "localImage": "images/uffizi-61.jpg",
+   "commonsFile": "File:Sandro Botticelli - Cestello Verkündigung.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Sandro_Botticelli_-_Cestello_Verk%C3%BCndigung.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Barbara Deimling: Botticelli. Taschen Verlag, Köln 1993; ISBN 9783836542715, S. 67.",
+   "sourceSize": [
+    2068,
+    2012
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Sandro+Botticelli+-+Cestello+Verk%C3%BCndigung.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1557
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/annunciation-d9604d56-89bb-414c-ba3c-fd71f4d28eec",
+    "museum": "The Uffizi",
+    "room": "A12. Botticelli, La Venere",
+    "inventory": "1890 no. 1608",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 29,
+   "category": "Florence, 1470–1500",
+   "title": "THE KING HAS DONKEY EARS",
+   "realAnswer": "Calumny of Apelles",
+   "artist": "Sandro Botticelli",
+   "date": "c. 1495",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-30.jpg",
+   "localImage": "images/uffizi-30.jpg",
+   "commonsFile": "File:Sandro Botticelli La calumnia de Apeles.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Sandro_Botticelli_La_calumnia_de_Apeles.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "The Yorck Project (2002) 10.000 Meisterwerke der Malerei (DVD-ROM), distributed by DIRECTMEDIA Publishing GmbH. ISBN: 3936122202.",
+   "sourceSize": [
+    3000,
+    2009
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Sandro+Botticelli+La+calumnia+de+Apeles.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1072
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/calumny-botticelli",
+    "museum": "The Uffizi",
+    "room": "A12. Botticelli, La Venere",
+    "inventory": "1890 no. 1496",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 30,
+   "category": "Florence, 1470–1500",
+   "title": "EVERYONE WANTS A LOOK",
+   "realAnswer": "Adoration of the Magi",
+   "artist": "Filippino Lippi",
+   "date": "1496",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-21.jpg",
+   "localImage": "images/uffizi-21.jpg",
+   "commonsFile": "File:Filippino Lippi - Adorazione dei Magi - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Filippino_Lippi_-_Adorazione_dei_Magi_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — -QFNUqt9evHu8A",
+   "sourceSize": [
+    2894,
+    3000
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Filippino+Lippi+-+Adorazione+dei+Magi+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1280,
+    1327
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/adoration-of-the-magi-filippino-lippi",
+    "museum": "The Uffizi",
+    "room": "A28 - Filippino Lippi, Piero di Cosimo",
+    "inventory": "1890 n. 1566",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 31,
+   "category": "High Renaissance",
+   "title": "WHO PAINTED THE ANGEL?",
+   "realAnswer": "The Baptism of Christ",
+   "artist": "Andrea del Verrocchio and Leonardo da Vinci",
+   "date": "c. 1470–1475",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-65.jpg",
+   "localImage": "images/uffizi-65.jpg",
+   "commonsFile": "File:Verrocchio and Leonardo, Baptism of Christ, c1470-75, Uffizi.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Verrocchio_and_Leonardo,_Baptism_of_Christ,_c1470-75,_Uffizi.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Own work. Taken on 14 September 2021, 15:29:06.",
+   "sourceSize": [
+    3760,
+    4520
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Verrocchio+and+Leonardo%2C+Baptism+of+Christ%2C+c1470-75%2C+Uffizi.jpg&w=1600",
+   "outputSize": [
+    1331,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/verrocchio-leonardo-baptism-of-christ",
+    "museum": "The Uffizi",
+    "room": "A35. Leonardo da Vinci",
+    "inventory": "1890 n. 8358",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 32,
+   "category": "High Renaissance",
+   "title": "A GARDEN DELIVERY",
+   "realAnswer": "Annunciation",
+   "artist": "Leonardo da Vinci",
+   "date": "c. 1472",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-28.jpg",
+   "localImage": "images/uffizi-28.jpg",
+   "commonsFile": "File:Annunciation (Leonardo c. 1472–1476).jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Annunciation_(Leonardo_c._1472%E2%80%931476).jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Own work Justin Benttinen Taken on 13 September 2023",
+   "sourceSize": [
+    7776,
+    3569
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Annunciation+%28Leonardo+c.+1472%E2%80%931476%29.jpg&w=1920",
+   "outputSize": [
+    1600,
+    734
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/annunciation",
+    "museum": "The Uffizi",
+    "room": "A35. Leonardo da Vinci",
+    "inventory": "1890 n. 1618",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 33,
+   "category": "High Renaissance",
+   "title": "A CROWD IN BROWN",
+   "realAnswer": "Adoration of the Magi",
+   "artist": "Leonardo da Vinci",
+   "date": "c. 1481–1482",
+   "school": "Florentine, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-38.jpg",
+   "localImage": "images/uffizi-38.jpg",
+   "commonsFile": "File:Leonardo da Vinci - Adorazione dei Magi - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Leonardo_da_Vinci_-_Adorazione_dei_Magi_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — RQFL5tibYCPGOg",
+   "sourceSize": [
+    3856,
+    3656
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Leonardo+da+Vinci+-+Adorazione+dei+Magi+-+Google+Art+Project.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1517
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/leonardo-adoration-of-the-magi",
+    "museum": "The Uffizi",
+    "room": "A35. Leonardo da Vinci",
+    "inventory": "1890 n. 1594",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 34,
+   "category": "High Renaissance",
+   "title": "UNDER THE PORCH, IN SILENCE",
+   "realAnswer": "Pietà",
+   "artist": "Perugino",
+   "date": "c. 1493–1496",
+   "school": "Umbrian, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-56.jpg",
+   "localImage": "images/uffizi-56.jpg",
+   "commonsFile": "File:Pietro Perugino cat19.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Pietro_Perugino_cat19.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Vittoria Garibaldi: Perugino. Silvana, Milano 2004, ISBN 88-8215-813-6",
+   "sourceSize": [
+    2351,
+    2283
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Pietro+Perugino+cat19.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1553
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/pieta-perugino-uffizi-en",
+    "museum": "The Uffizi",
+    "room": "A27. Pietro Perugino",
+    "inventory": "1890 no 8365",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 35,
+   "category": "High Renaissance",
+   "title": "A ROUND PICTURE, MUSCLES INCLUDED",
+   "realAnswer": "Doni Tondo (Holy Family)",
+   "artist": "Michelangelo",
+   "date": "1505–1506",
+   "school": "Florentine, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-50.jpg",
+   "localImage": "images/uffizi-50.jpg",
+   "commonsFile": "File:Tondo Doni 2015.png",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Tondo_Doni_2015.png",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Own work Livioandronico2013 Taken on 6 December 2015",
+   "sourceSize": [
+    2318,
+    2387
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Tondo+Doni+2015.png&w=1280",
+   "outputSize": [
+    1280,
+    1318
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/holy-family-known-as-the-doni-tondo",
+    "museum": "The Uffizi",
+    "room": "A38. Raphael and Michelangelo",
+    "inventory": "1890 n. 1456",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 36,
+   "category": "High Renaissance",
+   "title": "TWO BOYS AND A BIRD",
+   "realAnswer": "Madonna of the Goldfinch (Madonna del Cardellino)",
+   "artist": "Raphael",
+   "date": "c. 1505–1506",
+   "school": "Central Italian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-11.jpg",
+   "localImage": "images/uffizi-11.jpg",
+   "commonsFile": "File:Raffaello Sanzio - Madonna del Cardellino - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Raffaello_Sanzio_-_Madonna_del_Cardellino_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — oAFhnMjj7HippQ",
+   "sourceSize": [
+    5152,
+    7200
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Raffaello+Sanzio+-+Madonna+del+Cardellino+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1145,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/mary-christ-and-the-young-john-the-baptist-known-as-the-madonna-of-the-goldfinch",
+    "museum": "The Uffizi",
+    "room": "A38. Raphael and Michelangelo Room",
+    "inventory": "1890 n. 1447",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 37,
+   "category": "High Renaissance",
+   "title": "PAGEBOY HAIR, PAINTER'S CAP",
+   "realAnswer": "Self-portrait",
+   "artist": "Raphael",
+   "date": "c. 1506",
+   "school": "Central Italian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-22.jpg",
+   "localImage": "images/uffizi-22.jpg",
+   "commonsFile": "File:Raffaello Sanzio.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Raffaello_Sanzio.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "http://nevsepic.com.ua/art-i-risovanaya-grafika/2409-raffaello-sanzio-rafael-santi-37-rabot.html image",
+   "sourceSize": [
+    3898,
+    5315
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Raffaello+Sanzio.jpg&w=1280",
+   "outputSize": [
+    1174,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/raphael-self-portrait",
+    "museum": "The Uffizi",
+    "room": "C1. Self-portraits -",
+    "inventory": "1890 n. 1706",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 38,
+   "category": "High Renaissance",
+   "title": "MORNING HUG",
+   "realAnswer": "Visitation",
+   "artist": "Mariotto Albertinelli",
+   "date": "1503",
+   "school": "Florentine, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-12.jpg",
+   "localImage": "images/uffizi-12.jpg",
+   "commonsFile": "File:Albertinelli Visitation.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Albertinelli_Visitation.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "http://gallery.euroweb.hu/html/a/albertin/index.html ; english Wikipedia, http://en.wikipedia.org/wiki/Image:Albertinelli_Visitation.jpg",
+   "sourceSize": [
+    816,
+    1248
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Albertinelli+Visitation.jpg&w=815",
+   "outputSize": [
+    815,
+    1246
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/albertinelli-visitation",
+    "museum": "The Uffizi",
+    "room": "A40. Fra Bartolomeo and School",
+    "inventory": "1890 no. 1587",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 39,
+   "category": "High Renaissance",
+   "title": "MONSTERS ON THE PEDESTAL",
+   "realAnswer": "Madonna of the Harpies",
+   "artist": "Andrea del Sarto",
+   "date": "1517",
+   "school": "Florentine, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-19.jpg",
+   "localImage": "images/uffizi-19.jpg",
+   "commonsFile": "File:Andrea del Sarto - Virgin and Child between St Francis of Assisi and St John the Evangelist ('Madonna of the Harpies'), 1517, 1890 no.1577.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Andrea_del_Sarto_-_Virgin_and_Child_between_St_Francis_of_Assisi_and_St_John_the_Evangelist_(%27Madonna_of_the_Harpies%27),_1517,_1890_no.1577.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "https://www.uffizi.it/en/artworks/search?query%5Bmatching_text%5D=sarto",
+   "sourceSize": [
+    2228,
+    2500
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Andrea+del+Sarto+-+Virgin+and+Child+between+St+Francis+of+Assisi+and+St+John+the+Evangelist+%28%27Madonna+of+the+Harpies%27%29%2C+1517%2C+1890+no.1577.jpg&w=1280",
+   "outputSize": [
+    1280,
+    1436
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/andrea-del-sarto-harpies",
+    "museum": "The Uffizi",
+    "room": "A41. Andrea del Sarto",
+    "inventory": "1890 no. 1577",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 40,
+   "category": "High Renaissance",
+   "title": "MONSTER DAY AT THE BEACH",
+   "realAnswer": "Perseus Freeing Andromeda",
+   "artist": "Piero di Cosimo",
+   "date": "c. 1510–1515",
+   "school": "Florentine, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-44.jpg",
+   "localImage": "images/uffizi-44.jpg",
+   "commonsFile": "File:Piero di Cosimo - Liberazione di Andromeda - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Piero_di_Cosimo_-_Liberazione_di_Andromeda_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — 0gGaSvnZqCaHrA",
+   "sourceSize": [
+    9704,
+    5520
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Piero+di+Cosimo+-+Liberazione+di+Andromeda+-+Google+Art+Project.jpg&w=1920",
+   "outputSize": [
+    1600,
+    910
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/perseus-frees-andromeda",
+    "museum": "The Uffizi",
+    "room": "A28. Filippino Lippi - Piero di Cosimo",
+    "inventory": "1890 no. 1536",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 41,
+   "category": "Venice & the North",
+   "title": "VERY LARGE SHEPHERDS",
+   "realAnswer": "Portinari Altarpiece (Portinari Triptych)",
+   "artist": "Hugo van der Goes",
+   "date": "c. 1475–1476",
+   "school": "Netherlandish, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-26.jpg",
+   "localImage": "images/uffizi-26.jpg",
+   "commonsFile": "File:Hugo van der Goes - Portinari Triptych (c. 1477).jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Hugo_van_der_Goes_-_Portinari_Triptych_(c._1477).jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Uffizi Gallery",
+   "sourceSize": [
+    3928,
+    1630
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Hugo+van+der+Goes+-+Portinari+Triptych+%28c.+1477%29.jpg&w=1920",
+   "outputSize": [
+    1600,
+    664
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "English Wikipedia infobox + Commons categories (no uffizi.it artwork page exists for this work)",
+    "url": "https://en.wikipedia.org/wiki/Portinari_Altarpiece",
+    "checked": "2026-11-07",
+    "wikipediaMuseum": "Uffizi Gallery",
+    "wikipediaDate": "1475–1476",
+    "commonsCategory": "Google Art Project works in Uffizi Gallery / Portinari Triptych",
+    "pittiMentioned": false
+   }
+  },
+  {
+   "question": 42,
+   "category": "Venice & the North",
+   "title": "THREE LITTLE SCENES",
+   "realAnswer": "The Uffizi Triptych (Ascension, Adoration of the Magi, Circumcision)",
+   "artist": "Andrea Mantegna",
+   "date": "c. 1460–1465",
+   "school": "Paduan / Mantuan, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-49.jpg",
+   "localImage": "images/uffizi-49.jpg",
+   "commonsFile": "File:Andrea Mantegna - Trittico - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Andrea_Mantegna_-_Trittico_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — NwEiAcetxjfhlA",
+   "sourceSize": [
+    8382,
+    4116
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Andrea+Mantegna+-+Trittico+-+Google+Art+Project.jpg&w=1920",
+   "outputSize": [
+    1600,
+    726
+   ],
+   "crop": {
+    "box": [
+     0.0356,
+     0.0556,
+     0.979,
+     0.9274
+    ],
+    "why": "black scan margin trimmed"
+   },
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/three-panels-mantegna",
+    "museum": "The Uffizi",
+    "room": "D20. Cappellina veneziana",
+    "inventory": "1890 no. 910",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 43,
+   "category": "Venice & the North",
+   "title": "A TERRACE FULL OF RIDDLES",
+   "realAnswer": "Sacred Allegory (Holy Allegory)",
+   "artist": "Giovanni Bellini",
+   "date": "c. 1490–1500",
+   "school": "Venetian, 15th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-54.jpg",
+   "localImage": "images/uffizi-54.jpg",
+   "commonsFile": "File:Giovanni Bellini o Giambellino - Allegoria sacra - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Giovanni_Bellini_o_Giambellino_-_Allegoria_sacra_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — PwG9Ogj_NinyZw",
+   "sourceSize": [
+    3200,
+    1956
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Giovanni+Bellini+o+Giambellino+-+Allegoria+sacra+-+Google+Art+Project.jpg&w=1920",
+   "outputSize": [
+    1600,
+    978
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/holy-allegory",
+    "museum": "The Uffizi",
+    "room": "D20. Allegoria sacra",
+    "inventory": "1890 no. 903",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 44,
+   "category": "Venice & the North",
+   "title": "A TEST AT THE ROYAL PICNIC",
+   "realAnswer": "Moses Undergoing Trial by Fire",
+   "artist": "Giorgione (attributed)",
+   "date": "c. 1502–1505",
+   "school": "Venetian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-53.jpg",
+   "localImage": "images/uffizi-53.jpg",
+   "commonsFile": "File:Giorgione - Mosè alla prova del fuoco - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Giorgione_-_Mos%C3%A8_alla_prova_del_fuoco_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — CwG19wfLreZrlw",
+   "sourceSize": [
+    7328,
+    9272
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Giorgione+-+Mos%C3%A8+alla+prova+del+fuoco+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1264,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "English Wikipedia infobox + Commons categories (no uffizi.it artwork page exists for this work)",
+    "url": "https://en.wikipedia.org/wiki/The_Test_of_Fire_of_Moses_(Giorgione)",
+    "checked": "2026-11-07",
+    "wikipediaMuseum": "Uffizi",
+    "wikipediaDate": "c. 1502–1505",
+    "commonsCategory": "Google Art Project works in Uffizi Gallery",
+    "pittiMentioned": false
+   }
+  },
+  {
+   "question": 45,
+   "category": "Venice & the North",
+   "title": "KINGS AMONG THE RUINS",
+   "realAnswer": "Adoration of the Magi",
+   "artist": "Albrecht Dürer",
+   "date": "1504",
+   "school": "German, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-51.jpg",
+   "localImage": "images/uffizi-51.jpg",
+   "commonsFile": "File:Albrecht Dürer - L'Adoration des mages.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Albrecht_D%C3%BCrer_-_L%27Adoration_des_mages.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Livre de Manuel Jover Le Christ dans l'Art, Monaco : Éditions Sauret 1994. ISBN 978-28-5051-014-4",
+   "sourceSize": [
+    2294,
+    2020
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Albrecht+D%C3%BCrer+-+L%27Adoration+des+mages.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1409
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/adoration-of-the-magi-durer",
+    "museum": "The Uffizi",
+    "room": "A20.",
+    "inventory": "1890 n. 1434",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 46,
+   "category": "Venice & the North",
+   "title": "SNACK TIME IN THE GARDEN",
+   "realAnswer": "Adam and Eve",
+   "artist": "Lucas Cranach the Elder",
+   "date": "1528",
+   "school": "German, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-36.jpg",
+   "localImage": "images/uffizi-36.jpg",
+   "commonsFile": "File:Cranach, adamo ed eva, uffizi.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Cranach,_adamo_ed_eva,_uffizi.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Web Gallery of Art: Image Info about artworkwga QS:P11807,\"c/cranach/lucas_e/07/adamev05\"",
+   "sourceSize": [
+    1100,
+    1525
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Cranach%2C+adamo+ed+eva%2C+uffizi.jpg&w=1099",
+   "outputSize": [
+    1099,
+    1524
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "English Wikipedia infobox + Commons categories (no uffizi.it artwork page exists for this work)",
+    "url": "https://en.wikipedia.org/wiki/Adam_and_Eve_(Cranach,_Florence)",
+    "checked": "2026-11-07",
+    "wikipediaMuseum": "Uffizi",
+    "wikipediaDate": "1528",
+    "note": "Wikipedia: in the Tuscan Grand Dukes' collections by 1688, in the Uffizi since the early 18th century",
+    "commonsCategory": "Adam and Eve by Lucas Cranach (I) in the Uffizi Galleries, Florence",
+    "pittiMentioned": false
+   }
+  },
+  {
+   "question": 47,
+   "category": "Venice & the North",
+   "title": "THE KING'S MAN",
+   "realAnswer": "Portrait of Sir Richard Southwell",
+   "artist": "Hans Holbein the Younger",
+   "date": "1536",
+   "school": "German, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-05.jpg",
+   "localImage": "images/uffizi-05.jpg",
+   "commonsFile": "File:Hans Holbein d. J. 060.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Hans_Holbein_d._J._060.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "The Yorck Project (2002) 10.000 Meisterwerke der Malerei (DVD-ROM), distributed by DIRECTMEDIA Publishing GmbH. ISBN: 3936122202.",
+   "sourceSize": [
+    2024,
+    2538
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Hans+Holbein+d.+J.+060.jpg&w=1280",
+   "outputSize": [
+    1276,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "English Wikipedia infobox + Commons categories (no uffizi.it artwork page exists for this work)",
+    "url": "https://en.wikipedia.org/wiki/Portrait_of_Sir_Richard_Southwell",
+    "checked": "2026-11-07",
+    "wikipediaMuseum": "Uffizi",
+    "wikipediaDate": "1536",
+    "commonsCategory": "Sir Richard Southwell by Hans Holbein der Jüngere",
+    "pittiMentioned": false
+   }
+  },
+  {
+   "question": 48,
+   "category": "Venice & the North",
+   "title": "BLOSSOMS IN HAND",
+   "realAnswer": "Flora",
+   "artist": "Titian",
+   "date": "c. 1517",
+   "school": "Venetian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-45.jpg",
+   "localImage": "images/uffizi-45.jpg",
+   "commonsFile": "File:Tiziano - Flora - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Tiziano_-_Flora_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — RQF0sAhcSUiepw",
+   "sourceSize": [
+    3317,
+    4423
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Tiziano+-+Flora+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1200,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/titian-flora",
+    "museum": "The Uffizi",
+    "room": "D22. Tiziano - Venus of Urbino",
+    "inventory": "1890 n. 1462",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 49,
+   "category": "Venice & the North",
+   "title": "THE DOG IS ASLEEP",
+   "realAnswer": "Venus of Urbino",
+   "artist": "Titian",
+   "date": "1538",
+   "school": "Venetian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-14.jpg",
+   "localImage": "images/uffizi-14.jpg",
+   "commonsFile": "File:Tiziano - Venere di Urbino - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Tiziano_-_Venere_di_Urbino_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — bQGS8pnP5vr2Jg",
+   "sourceSize": [
+    3000,
+    2110
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Tiziano+-+Venere+di+Urbino+-+Google+Art+Project.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1125
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/venus-urbino-titian",
+    "museum": "The Uffizi",
+    "room": "D22. Tiziano and Venere di Urbino",
+    "inventory": "1890 no. 1437",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 50,
+   "category": "Venice & the North",
+   "title": "ARMOUR POLISHED, BATON READY",
+   "realAnswer": "Portrait of Francesco Maria della Rovere, Duke of Urbino",
+   "artist": "Titian",
+   "date": "c. 1536–1538",
+   "school": "Venetian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-16.jpg",
+   "localImage": "images/uffizi-16.jpg",
+   "commonsFile": "File:Portrait of Francesco Maria I della Rovere, Duke of Urbino (1490–1538), by Titian - Uffizi Gallery.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Portrait_of_Francesco_Maria_I_della_Rovere,_Duke_of_Urbino_(1490%E2%80%931538),_by_Titian_-_Uffizi_Gallery.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "[1]; direct link to the image: [2]",
+   "sourceSize": [
+    1920,
+    2195
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Portrait+of+Francesco+Maria+I+della+Rovere%2C+Duke+of+Urbino+%281490%E2%80%931538%29%2C+by+Titian+-+Uffizi+Gallery.jpg&w=1280",
+   "outputSize": [
+    1280,
+    1463
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/titian-portrait-of-francesco-maria-della-rovere",
+    "museum": "The Uffizi",
+    "room": "D15.",
+    "inventory": "1890 n. 926",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 51,
+   "category": "Mannerism & the Baroque",
+   "title": "HE HAS A NEW HAIRDRESSER",
+   "realAnswer": "Man with a Monkey",
+   "artist": "Annibale Carracci (attributed)",
+   "date": "c. 1590–1591",
+   "school": "Bolognese, late 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-62.jpg",
+   "localImage": "images/uffizi-62.jpg",
+   "commonsFile": "File:Annibale Carracci Uomo con scimmia Firenze.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Annibale_Carracci_Uomo_con_scimmia_Firenze.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "https://www.virtualuffizi.com/a-man-with-a-monkey.html",
+   "sourceSize": [
+    709,
+    835
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Annibale+Carracci+Uomo+con+scimmia+Firenze.jpg&w=708",
+   "outputSize": [
+    708,
+    834
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/man-monkey-carracci",
+    "museum": "The Uffizi",
+    "room": "E5.",
+    "inventory": "1890 no. 799",
+    "checked": "2026-11-07"
+   },
+   "replaces": "Pontormo, Supper at Emmaus (on loan to the Scuderie del Quirinale, Rome, to 7 Feb 2027)"
+  },
+  {
+   "question": 52,
+   "category": "Mannerism & the Baroque",
+   "title": "TINY HANDS, BIG INSTRUMENT",
+   "realAnswer": "Musician Angel (Angel Playing the Lute)",
+   "artist": "Rosso Fiorentino",
+   "date": "1521",
+   "school": "Florentine, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-39.jpg",
+   "localImage": "images/uffizi-39.jpg",
+   "commonsFile": "File:Rosso Fiorentino - Musician Angel - WGA20116.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Rosso_Fiorentino_-_Musician_Angel_-_WGA20116.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Web Gallery of Art: Image Info about artworkwga QS:P11807,\"r/rosso/1/4angel\"",
+   "sourceSize": [
+    1196,
+    1000
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Rosso_Fiorentino_-_Musician_Angel_-_WGA20116.jpg&w=1195",
+   "outputSize": [
+    1195,
+    999
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/angel-playing-the-lute",
+    "museum": "The Uffizi",
+    "room": "D12. Pontormo - Rosso Fiorentino",
+    "inventory": "1890 no. 1505",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 53,
+   "category": "Mannerism & the Baroque",
+   "title": "BLUE BACKGROUND, BEST DRESS",
+   "realAnswer": "Portrait of Eleonora di Toledo with her son Giovanni",
+   "artist": "Bronzino",
+   "date": "c. 1545",
+   "school": "Florentine, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-47.jpg",
+   "localImage": "images/uffizi-47.jpg",
+   "commonsFile": "File:Bronzino - Eleonora di Toledo col figlio Giovanni - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Bronzino_-_Eleonora_di_Toledo_col_figlio_Giovanni_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — QAEccCsLDtbB4A",
+   "sourceSize": [
+    2553,
+    3098
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Bronzino+-+Eleonora+di+Toledo+col+figlio+Giovanni+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1280,
+    1553
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/eleonora-di-toledo",
+    "museum": "The Uffizi",
+    "room": "D15.",
+    "inventory": "1890 no. 748",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 54,
+   "category": "Mannerism & the Baroque",
+   "title": "A BOOK, A CHAIN, A STEADY GAZE",
+   "realAnswer": "Portrait of Lucrezia Panciatichi",
+   "artist": "Bronzino",
+   "date": "1541–1545",
+   "school": "Florentine, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-10.jpg",
+   "localImage": "images/uffizi-10.jpg",
+   "commonsFile": "File:Agnolo di Cosimo Tori detto Bronzino (Firenze, 1503-1572) - Ritratto di Lucrezia Panciatichi - 736 - Uffizi Gallery.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Agnolo_di_Cosimo_Tori_detto_Bronzino_(Firenze,_1503-1572)_-_Ritratto_di_Lucrezia_Panciatichi_-_736_-_Uffizi_Gallery.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "uffizi.it",
+   "sourceSize": [
+    1839,
+    2300
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Agnolo+di+Cosimo+Tori+detto+Bronzino+%28Firenze%2C+1503-1572%29+-+Ritratto+di+Lucrezia+Panciatichi+-+736+-+Uffizi+Gallery.jpg&w=1280",
+   "outputSize": [
+    1279,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/opere/ritratto-di-lucrezia-panciatichi",
+    "museum": "Gli Uffizi",
+    "room": "D.14 Bronzino",
+    "inventory": "1890 n. 736",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 55,
+   "category": "Mannerism & the Baroque",
+   "title": "ELEGANCE, EXTENDED",
+   "realAnswer": "Madonna with the Long Neck",
+   "artist": "Parmigianino",
+   "date": "1534–1540",
+   "school": "Emilian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-03.jpg",
+   "localImage": "images/uffizi-03.jpg",
+   "commonsFile": "File:Parmigianino - Madonna and Child with Angels, known as the Madonna with the Long Neck.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Parmigianino_-_Madonna_and_Child_with_Angels,_known_as_the_Madonna_with_the_Long_Neck.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "https://www.uffizi.it/en/artworks/parmigianino-madonna-long-neck",
+   "sourceSize": [
+    1490,
+    2336
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Parmigianino+-+Madonna+and+Child+with+Angels%2C+known+as+the+Madonna+with+the+Long+Neck.jpg&w=1280",
+   "outputSize": [
+    1020,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/parmigianino-madonna-long-neck",
+    "museum": "The Uffizi",
+    "room": "D4. Correggio and Parmigianino",
+    "inventory": "Palatina n. 230",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 56,
+   "category": "Mannerism & the Baroque",
+   "title": "A GLASS FOR YOU?",
+   "realAnswer": "Bacchus",
+   "artist": "Caravaggio",
+   "date": "c. 1598",
+   "school": "Roman / Lombard, late 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-52.jpg",
+   "localImage": "images/uffizi-52.jpg",
+   "commonsFile": "File:Caravaggio - Bacco adolescente - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Caravaggio_-_Bacco_adolescente_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — dAEBrgRq5AvsQA",
+   "sourceSize": [
+    3315,
+    3912
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Caravaggio+-+Bacco+adolescente+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1280,
+    1511
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/caravaggio-bacchus",
+    "museum": "The Uffizi",
+    "room": "D32. Caravaggio - The Bacchus",
+    "inventory": "1890 n. 5312",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 57,
+   "category": "Mannerism & the Baroque",
+   "title": "A SHIELD WITH A SCREAM",
+   "realAnswer": "Medusa",
+   "artist": "Caravaggio",
+   "date": "c. 1597",
+   "school": "Roman / Lombard, late 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-29.jpg",
+   "localImage": "images/uffizi-29.jpg",
+   "commonsFile": "File:Caravaggio - Medusa - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Caravaggio_-_Medusa_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — FAFPqU12CekL8Q",
+   "sourceSize": [
+    3369,
+    3453
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Caravaggio+-+Medusa+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1280,
+    1312
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "English Wikipedia infobox + Commons categories (no uffizi.it artwork page exists for this work)",
+    "url": "https://en.wikipedia.org/wiki/Medusa_(Caravaggio)",
+    "checked": "2026-11-07",
+    "wikipediaMuseum": "Uffizi",
+    "wikipediaDate": "1597",
+    "alsoConfirmedBy": "uffizi.it names Uffizi room E4 'Caravaggio (The Medusa) e Artemisia' (room of the Sacrifice of Isaac page)",
+    "pittiMentioned": false
+   }
+  },
+  {
+   "question": 58,
+   "category": "Mannerism & the Baroque",
+   "title": "SAVED BY A FIRM GRIP",
+   "realAnswer": "Sacrifice of Isaac",
+   "artist": "Caravaggio",
+   "date": "c. 1603",
+   "school": "Roman / Lombard, 17th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-25.jpg",
+   "localImage": "images/uffizi-25.jpg",
+   "commonsFile": "File:Sacrifice of Isaac-Caravaggio (Uffizi).jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Sacrifice_of_Isaac-Caravaggio_(Uffizi).jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Self-scanned",
+   "sourceSize": [
+    7972,
+    6142
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Sacrifice+of+Isaac-Caravaggio+%28Uffizi%29.jpg&w=1920",
+   "outputSize": [
+    1600,
+    1232
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/sacrifice-of-isaac",
+    "museum": "The Uffizi",
+    "room": "E4. Caravaggio (The Medusa) e Artemisia",
+    "inventory": "1890 no. 4659",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 59,
+   "category": "Mannerism & the Baroque",
+   "title": "THE MAID HOLDS HIM DOWN",
+   "realAnswer": "Judith Slaying Holofernes",
+   "artist": "Artemisia Gentileschi",
+   "date": "c. 1620",
+   "school": "Roman / Florentine, 17th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-43.jpg",
+   "localImage": "images/uffizi-43.jpg",
+   "commonsFile": "File:Artemisia Gentileschi - Giuditta decapita Oloferne - Google Art Project.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Artemisia_Gentileschi_-_Giuditta_decapita_Oloferne_-_Google_Art_Project.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "Google Arts &amp; Culture — oQF3gDEYNkutBA",
+   "sourceSize": [
+    2670,
+    3296
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Artemisia+Gentileschi+-+Giuditta+decapita+Oloferne+-+Google+Art+Project.jpg&w=1280",
+   "outputSize": [
+    1280,
+    1580
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/judith-beheading-holofernes",
+    "museum": "The Uffizi",
+    "room": "D29. Caravaggio and Artemisia",
+    "inventory": "1890 n. 1567",
+    "checked": "2026-11-07"
+   }
+  },
+  {
+   "question": 60,
+   "category": "Mannerism & the Baroque",
+   "title": "FRUIT FROM A FRIENDLY TREE",
+   "realAnswer": "Rest on the Flight into Egypt with St Francis",
+   "artist": "Correggio",
+   "date": "c. 1520",
+   "school": "Emilian, 16th century",
+   "image": "https://engage.dev.seibtribe.us/sets/uffiziarttitles/uffizi-64.jpg",
+   "localImage": "images/uffizi-64.jpg",
+   "commonsFile": "File:Correggio 059.jpg",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Correggio_059.jpg",
+   "licence": "Public domain",
+   "licenceUrl": "",
+   "photoCredit": "",
+   "commonsCredit": "The Yorck Project (2002) 10.000 Meisterwerke der Malerei (DVD-ROM), distributed by DIRECTMEDIA Publishing GmbH. ISBN: 3936122202.",
+   "sourceSize": [
+    2024,
+    2371
+   ],
+   "downloadedFrom": "https://commons.wikimedia.org/w/thumb.php?f=Correggio+059.jpg&w=1600",
+   "outputSize": [
+    1366,
+    1600
+   ],
+   "crop": null,
+   "uffiziVerification": {
+    "source": "uffizi.it artwork page",
+    "url": "https://www.uffizi.it/en/artworks/correggio-rest-on-the-flight-into-egypt",
+    "museum": "The Uffizi",
+    "room": "D8. Correggio - Parmigianino",
+    "inventory": "1890 no. 1455",
+    "checked": "2026-11-07"
+   },
+   "replaces": "Honthorst, Adoration of the Child (on loan to Villa Manin, 14 Nov 2026 - 21 Feb 2027)"
+  }
+ ]
+}

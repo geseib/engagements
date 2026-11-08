@@ -375,7 +375,7 @@ const eventDay = {
       blocks: [
         {
           t: 'p',
-          text: 'A session item runs like any session: see Running the room. A Call & Answer, Trivia or Poll item on two screens gets the same console as a session on its own: the top bar, Your part now, the Needs-you line, the pulse and People. Other items run on their stage. In an event it differs in these ways.',
+          text: 'A session item runs like any session: see Running the room. A Call & Answer, Trivia or Poll item on two screens gets the same console as a session on its own: the top bar, Your part now, the Needs-you line, the room tile and People. Other items run on their stage. In an event it differs in these ways.',
         },
         {
           t: 'list',

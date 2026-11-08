@@ -17,9 +17,9 @@ const MIN = 60000;
 const timer = (extra = {}) => ({ phase: 'ASK#002', startedAt: iso(T0), limitMs: 2 * MIN, extendedMs: 0, ...extra });
 
 describe('the facts', () => {
-  test('no limit: today\'s elapsed time, unchanged', () => {
+  test('no limit: the elapsed time, and nothing to say about a limit (rejects "No limit set")', () => {
     const p = pulseFor({ moment: 'ANSWERING', players: 12, answered: 9, openedAt: iso(T0), now: T0 + 84000 });
-    expect(p.time).toMatchObject({ value: 'Open 1:24', sub: 'No limit set', state: 'none', ring: null });
+    expect(p.time).toMatchObject({ value: 'open 1:24', sub: '', state: 'none', ring: null });
   });
   test('running: time left of time given, with the ring', () => {
     const p = pulseFor({ moment: 'ANSWERING', players: 12, answered: 9, openedAt: iso(T0), now: T0 + 73000, timer: timer() });
@@ -38,10 +38,9 @@ describe('the facts', () => {
     const p = pulseFor({ moment: 'VOTING', now: T0 + 30000, timer: timer({ phase: 'VOTE#002', limitMs: MIN }) });
     expect(p.time).toMatchObject({ value: '0:30', sub: 'left of 1:00', state: 'running' });
   });
-  test('after the round: what it took, and the time given', () => {
+  test('after the round: no clock at all (the room tile is the round\'s record then)', () => {
     const p = pulseFor({ moment: 'RESULTS', openedAt: iso(T0), voteAt: iso(T0 + 134000), now: T0 + 200000, timer: timer() });
-    expect(p.time).toMatchObject({ value: 'Took 2:14', state: 'none' });
-    expect(p.time.sub).toMatch(/^2:00 given/);
+    expect(p.time).toBeNull();
   });
   test('reduced motion: the ring moves in 10 s steps', () => {
     const a = pulseFor({ moment: 'ANSWERING', now: T0 + 71000, timer: timer(), ringStepMs: 10000 });
@@ -75,9 +74,9 @@ describe('the tile', () => {
     expect(container.querySelector('[data-tile="time"]')).toHaveAttribute('data-time-state', 'extended');
     expect(screen.getByTestId('pulse-time-sub')).toHaveTextContent('1 min added');
   });
-  test('no limit: "Open 1:24", no ring, no +1 min', () => {
+  test('no limit: "open 1:24", no ring, no +1 min', () => {
     const { container } = render(<ConsolePulse moment="ANSWERING" openedAt={iso(T0)} now={T0 + 84000} onAddMinute={() => {}} />);
-    expect(screen.getByTestId('pulse-time')).toHaveTextContent('Open 1:24');
+    expect(screen.getByTestId('pulse-time')).toHaveTextContent('open 1:24');
     expect(container.querySelector('.cpulse-ring')).toBeNull();
     expect(screen.queryByRole('button', { name: '+1 min' })).toBeNull();
   });

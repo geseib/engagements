@@ -149,6 +149,9 @@ async function openQuestions() {
   await waitFor(() => expect(open).not.toBeDisabled());
   fireEvent.click(open);
   await screen.findByRole('tab', { name: /^up next$/i });
+  // The set is the picker sheet now, one door from Up next (question picker D10).
+  fireEvent.click(await screen.findByTestId('remote-choose'));
+  await screen.findByTestId('remote-choose-sheet');
 }
 
 beforeEach(() => {
@@ -212,7 +215,8 @@ describe('the Questions tab says which failure it had, and offers a way out', ()
     fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
 
     expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^up next$/i, selected: true })).toBeInTheDocument();
+    // still in the picker sheet: the retry did not send the host anywhere
+    expect(screen.getByTestId('remote-choose-sheet')).toBeInTheDocument();
   });
 
   it('does not blame the question set when the sign-in is what failed', async () => {

@@ -113,6 +113,12 @@ export default function RemoteSessionPanel({
      own words (config/hostControls.js endSessionConfirm). `onEndSession`
      resolves { ended, error }; null draws no foot. */
   onEndSession = null,
+  /* CHOOSE A QUESTION (docs/design/question-picker D10): Up next's door to
+     the phone's picker sheet, which HostRemote draws. With it, the set's
+     browser is no longer stacked under the running order. `knownQuestions`
+     is the set the sheet read, so a queued row keeps its title here. */
+  onChoose = null,
+  knownQuestions = [],
 }) {
   const [catsOpen, setCatsOpen] = useState(false);
   const [endAsk, setEndAsk] = useState(false);
@@ -159,7 +165,7 @@ export default function RemoteSessionPanel({
       const result = await fetchUpNext({ apiBase: apiBase(), gameId });
       // A failed read keeps the last plan — the queued half is drawn from the
       // state poll regardless, so what is lost is only the automatic tail.
-      if (!cancelled && result.ok) {
+      if (!cancelled && result && result.ok) {
         setPlan({ upNext: result.upNext, blocked: result.blocked, advisories: result.advisories });
       }
     })();
@@ -181,8 +187,8 @@ export default function RemoteSessionPanel({
         .map((b) => ({ id: b.key, title: b.title, category: b.categoryName })),
       ...plan.advisories.map((a) => ({ id: a.key, title: a.title, category: a.categoryName })),
     ].filter((q) => q.id && q.title);
-    return [...browsedQuestions, ...fromPlan];
-  }, [plan, browsedQuestions]);
+    return [...browsedQuestions, ...(knownQuestions || []), ...fromPlan];
+  }, [plan, browsedQuestions, knownQuestions]);
 
   /* QueueList raises a key and a title; HostRemote's asks take a row. */
   const asRow = (key, { title = '' } = {}) => ({ id: questionKey(String(key)), title });
@@ -460,6 +466,12 @@ export default function RemoteSessionPanel({
           {/* THE IMPROMPTU ASK'S PHONE DOOR (README D2), in Up next with the
               laptop's (session-menu D4): the same composer, as a full-height
               sheet. */}
+          {onChoose ? (
+            <Button variant="secondary" size={44} className="hrs-write" onClick={onChoose} data-testid="remote-choose">
+              <Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" />
+              Choose a question
+            </Button>
+          ) : null}
           {onWriteQuestion ? (
             <Button variant="secondary" size={44} className="hrs-write" onClick={onWriteQuestion} data-testid="remote-write">
               <Icon name="Plus" weight="bold" size={16} color="currentColor" />
@@ -481,7 +493,9 @@ export default function RemoteSessionPanel({
           {catsOpen && categoryPanel ? <div className="hr-card-panel">{categoryPanel}</div> : null}
 
           {/* CHOOSE FROM THE SET: the browser that already existed, not a
-              second question list (it heads itself "Question set"). */}
+              second question list (it heads itself "Question set"). With
+              `onChoose` it is the picker sheet instead (D10), one press away. */}
+          {onChoose ? null : (
           <RemoteQuestionBrowser
             setId={setId}
             /* The session reads its OWN set: which library the slug belongs to
@@ -496,6 +510,7 @@ export default function RemoteSessionPanel({
             onAskNext={onAskNext}
             onAskNow={onAskNow}
           />
+          )}
         </section>
       )}
 

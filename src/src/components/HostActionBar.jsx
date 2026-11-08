@@ -4,6 +4,8 @@ import Button from './ui/Button';
 import StatusMessage from './StatusMessage';
 import KeyCap from './stage/KeyCap';
 import { TIMER_WORDS } from '../config/roundTimer';
+import RW from '../config/roundWords';
+import './HostActionBarMore.css';
 
 /**
  * The host's one and only "move the room forward" control.
@@ -53,6 +55,26 @@ export function isTypingTarget(target) {
   not match :focus-visible and keeps Space = advance: hosts click a section,
   then press Space or the clicker to move on.
 */
+/*
+  A KEY THAT LANDED IN A HOST PANEL. The Session menu (`.setup-panel`) keeps
+  every key that lands in it. The question picker (`.qpk`, docs/design/
+  question-picker note 3) is not a dialog and does not trap focus, so only a
+  key that landed on one of its CONTROLS is the control's: Space presses the
+  focused Queue, and Space on its heading or a row still advances the room.
+  BOTH CLASS NAMES ARE LOAD-BEARING.
+*/
+const PANEL_CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"]';
+export function keyLandedInPanel(target) {
+  if (!target || typeof target.closest !== 'function') return false;
+  if (target.closest('.setup-panel')) return true;
+  if (!target.closest('.qpk')) return false;
+  try {
+    return Boolean(target.closest(PANEL_CONTROL));
+  } catch (e) {
+    return false;
+  }
+}
+
 export function isConsoleKeyboardTarget(target) {
   if (!target || typeof target.closest !== 'function') return false;
   if (!target.closest('.hc-rail, .hc-top, .hc-main')) return false;
@@ -62,6 +84,73 @@ export function isConsoleKeyboardTarget(target) {
     return false;
   }
 }
+
+/*
+  SKIP LEAVES THE MAIN LINE (owner, 5 Nov 2026, cut 8: "Skip this round"
+  beside Start voting was a second thing to aim at, in front of the room, that
+  throws a round away). It sits behind a ⋯ just left of the main button: one
+  press opens a small menu, the item does what the button did, through the
+  same `press` (so the page's own "Skip this round?" confirm still asks).
+  Escape or a press outside closes it and gives focus back to ⋯. An inline
+  popover, never a Modal (engage-design: the confirm is the dialog).
+*/
+function BarMore({ control, label, onPick }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const button = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+      if (button.current) button.current.focus();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+  return (
+    <span className="hab-more" ref={wrap}>
+      <Button
+        ref={button}
+        variant="secondary"
+        size={36}
+        className="hab-more-toggle"
+        aria-label={RW.moreRoundActions}
+        title={RW.moreRoundActions}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        data-testid="bar-more"
+      >
+        <Icon name="DotsThree" weight="bold" size={18} color="currentColor" />
+      </Button>
+      {open ? (
+        <span className="hab-more-menu" role="menu" aria-label={RW.moreRoundActions}>
+          <button
+            type="button"
+            role="menuitem"
+            className="hab-more-item"
+            disabled={Boolean(control.disabled)}
+            onClick={() => { setOpen(false); onPick(); }}
+            data-testid={`bar-more-${control.id}`}
+          >
+            <Icon name={control.icon} weight="bold" size={16} color="currentColor" />
+            <span>{label}</span>
+          </button>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** A control that goes behind the ⋯ rather than on the line (cut 8). */
+export const isTucked = (control) => Boolean(control && control.id === 'skip');
 
 export default function HostActionBar({
   controls,
@@ -117,13 +206,19 @@ export default function HostActionBar({
   /*
     +1 MIN AS A BUTTON, BESIDE THE MAIN ONE (dev QA 2 Nov: on one screen a
     timed round showed no way to add time, only the room's words). The
-    console's pulse tile carries its own, so only a bar with no pulse asks for
+    console's room tile carries its own, so only a bar with no room tile asks for
     it. Quiet, never orange: the main button keeps the one orange.
   */
   showAddTime = false,
+  /* Told true while a press is armed and false when it lets go, so the page
+     can hold its one-screen chrome up (Stage `chromeHold`) while it waits. */
+  onArmedChange = null,
 }) {
   const primary = controls?.primary || null;
-  const secondary = controls?.secondary || null;
+  const secondaryControl = controls?.secondary || null;
+  // Skip goes behind the ⋯ beside the main button (cut 8); every other second button stays on the line.
+  const tucked = isTucked(secondaryControl) ? secondaryControl : null;
+  const secondary = tucked ? null : secondaryControl;
   // Task 8, 2026-09-26 feature sweep: a THIRD, optional slot, beside
   // `secondary` — config/hostControls.js sets it only for the two survey
   // phases where a second button already exists and a room is not watching
@@ -140,18 +235,36 @@ export default function HostActionBar({
     does not act on its first press: the button turns to its warning look and
     its `confirmLabel` ("Start round 3 anyway"), the reason appears above the
     buttons ("3 questions not asked yet. Press again to move on."), and the
-    next press acts. It lets go after ARM_MS, on any other button, or when the
+    next press acts. It lets go on any other button, on Escape, or when the
     moment changes, so an armed button is never left waiting to surprise.
+
+    NO TIMEOUT (dev QA 5 Nov: "Start round 2" armed, and the warning vanished
+    within a few seconds, so a slow second click read as nothing happening).
+    It used to let go after 6s on its own; on one screen the auto-hiding
+    chrome then took the bar away after 3s as well. Now the armed state and
+    its words stay until the host decides: press again, press something
+    else, the room moves on, or Escape. `onArmedChange` tells the page, so
+    the one-screen chrome is held up while a press is pending.
   */
-  const ARM_MS = 6000;
   const [armedId, setArmedId] = useState(null);
-  const armTimer = useRef(null);
-  const disarm = () => {
-    if (armTimer.current) clearTimeout(armTimer.current);
-    armTimer.current = null;
-    setArmedId(null);
-  };
-  const controlIds = [primary?.id, secondary?.id, tertiary?.id].join('|');
+  const disarm = () => { setArmedId(null); };
+  useEffect(() => {
+    if (typeof onArmedChange === 'function') onArmedChange(Boolean(armedId));
+  }, [armedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    if (typeof onArmedChange === 'function') onArmedChange(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Escape lets go of an armed press (and only then is the key taken).
+  useEffect(() => {
+    if (!armedId) return undefined;
+    const onKey = (event) => {
+      if (event.key !== 'Escape' && event.key !== 'Esc') return;
+      setArmedId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [armedId]);
+  const controlIds = [primary?.id, secondaryControl?.id, tertiary?.id].join('|');
   useEffect(() => { disarm(); }, [controlIds]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE BUTTON STOPPED NEEDING A SECOND PRESS (review #38, 19 Oct 2026). Show
   // results pressed early arms it; the last ballots then land, the same button
@@ -159,13 +272,10 @@ export default function HostActionBar({
   // nothing: the host page went blank. An armed control without `arm` lets go.
   const armedStill = [primary, secondary, tertiary].some((c) => c && c.id === armedId && c.arm);
   useEffect(() => { if (armedId && !armedStill) disarm(); }, [armedId, armedStill]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { if (armTimer.current) clearTimeout(armTimer.current); }, []);
   const press = (control) => {
     if (!control) return;
     if (control.arm && control.arm.inPlace && armedId !== control.id) {
-      if (armTimer.current) clearTimeout(armTimer.current);
       setArmedId(control.id);
-      armTimer.current = setTimeout(() => setArmedId(null), ARM_MS);
       return;
     }
     disarm();
@@ -204,7 +314,7 @@ export default function HostActionBar({
       // host's eye), so the rule is scoped to where the key actually landed.
       // Mouse-driven use keeps its accelerator; the keyboard gets the button
       // it is pointing at.
-      if (event.target?.closest?.('.setup-panel')) return;
+      if (event.target?.closest?.('.setup-panel') || keyLandedInPanel(event.target)) return;
       // Space only: → and ← have no meaning on a focused button or summary,
       // and the clicker sends them, so they keep driving the room.
       if (event.key !== 'ArrowRight' && isConsoleKeyboardTarget(event.target)) return;
@@ -233,7 +343,7 @@ export default function HostActionBar({
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
       if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
-      if (event.target?.closest?.('.setup-panel')) return;
+      if (event.target?.closest?.('.setup-panel') || keyLandedInPanel(event.target)) return;
       // preventDefault only when the press was actually taken: an unconsumed
       // ← (nothing to go back to) must keep scrolling a scrollable rail.
       if (onBackKey()) event.preventDefault();
@@ -253,7 +363,7 @@ export default function HostActionBar({
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
       if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
-      if (event.target?.closest?.('.setup-panel')) return;
+      if (event.target?.closest?.('.setup-panel') || keyLandedInPanel(event.target)) return;
       event.preventDefault();
       onAddTime();
     };
@@ -283,9 +393,19 @@ export default function HostActionBar({
           {primary.disabled && primary.hint && (
             <span className="host-action-bar__hint">{primary.hint}</span>
           )}
-          {armedControl && (
-            <span className="host-action-bar__armed" role="alert">{armedControl.arm.text}</span>
-          )}
+          {/* THE REASON, BESIDE THE BUTTON, SAID POLITELY (dev QA 5 Nov). One
+              live region that is always mounted, so a screen reader hears the
+              words the moment they arrive (a region mounted with its text is
+              often not read), polite rather than an alert: the host asked for
+              this by pressing. Empty, it takes no room in the row. */}
+          <span
+            className={armedControl ? 'host-action-bar__armed' : 'host-action-bar__armed-slot'}
+            role="status"
+            aria-live="polite"
+            data-testid="bar-armed"
+          >
+            {armedControl ? armedControl.arm.text : ''}
+          </span>
           {/* ui/Button (experience plan §5.1, step 5a): the main move is the
               one primary, every other button secondary, 36px. The
               host-action-bar__* classes stay as hooks for the stage dock's
@@ -316,6 +436,7 @@ export default function HostActionBar({
               <span>{labelOf(tertiary)}</span>
             </Button>
           )}
+          {tucked ? <BarMore control={tucked} label={labelOf(tucked)} onPick={() => press(tucked)} /> : null}
           {timeChip}
           {showAddTime && typeof onAddTime === 'function' ? (
             <Button

@@ -172,7 +172,7 @@ body {
   border-color: var(--accent);
 }
 
-/* skin-allowance SC-01: colour=98 font=0 primary=25 */
+/* skin-allowance SC-01: colour=90 font=0 primary=22 */
 /* Game Host Page Styles */
 
 /* ---------------------------------------------------------------------------
@@ -318,6 +318,17 @@ body {
   line-height: 1.3;
   padding-left: 0.6em;
   border-left: 3px solid var(--warn);
+}
+/* The same live region while nothing is armed: mounted, empty, out of the
+   row (absolute, so the actions' gap does not count it), still in the
+   accessibility tree so its words are announced when they arrive. */
+.host-action-bar__armed-slot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 /* THE MAIN BUTTON STAYS ORANGE WHEN ARMED (PLAN principle 4; dev QA 2 Nov:
    it switched colour from state to state). An armed primary keeps its fill
@@ -749,7 +760,7 @@ body {
    attribute so this sheet declares nothing under the library's own class):
    the Session menu's actions are ui/Button (experience plan §5.1, step 5a),
    which paints itself from the roles. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn):not(.help-button):not([class~="prow-item"]):not(.smenu-more__toggle):not(.smenu-rowmenu__item):not([class~="ui-btn"]) {
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn):not(.help-button):not([class~="prow-item"]):not(.smenu-more__toggle):not(.smenu-rowmenu__item):not([class~="ui-btn"]) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
@@ -832,120 +843,6 @@ body {
   border-left: 2px solid var(--primary);
   padding-left: 9px;
 }
-
-/* --- Players ------------------------------------------------------------- */
-.setup-roster { list-style: none; margin: 0; padding: 0; }
-.setup-roster__row {
-  /* THREE LINES: (1) rank/dot, the name block, the side cluster (the caller's
-     column and the state tag); (2) the meta, inside the name block; (3) the
-     actions, spanning under the name. The name's track is `minmax(0, 1fr)` and
-     its text wraps with `overflow-wrap: anywhere`, so a long name wraps as
-     words and never collapses to one letter per line. */
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  column-gap: 10px;
-  row-gap: 6px;
-  align-items: start;
-  padding: 8px 6px;
-  border-bottom: 1px solid rgba(155, 168, 190, 0.22);
-  font-size: 14px;
-}
-.setup-roster__row--norank { grid-template-columns: minmax(0, 1fr) auto; }
-/* A pending request is the one thing in the list asking to be acted on. */
-.setup-roster__row--asking { background: rgba(246, 169, 76, 0.1); border-radius: 8px; }
-.setup-roster__row:last-child { border-bottom: 0; }
-.setup-roster__rank { color: #B6C2D4; font-weight: 700; }
-.setup-roster__name { min-width: 0; overflow-wrap: anywhere; }
-.setup-roster__score { color: #B6C2D4; font-weight: 600; white-space: nowrap; }
-
-/* THE HOST'S TWO DECISIONS ABOUT ONE PERSON: hand the name over, or take them
-   out of the counts.
-
-   `margin-left: auto` on the group and NEVER `justify-content: flex-end` on the
-   row — flex-end pushes an overflow towards the START of the line, which in a
-   clipped container is the unreachable end (the rule
-   `__tests__/rowActionsReachable.test.js` was written for, after
-   QuestionSetsPanel made the same mistake). `flex-wrap` so a long name and two
-   buttons stack instead of shearing.
-
-   The row grid gains a fifth track for this. `minmax(0, 1fr)` on the name is
-   what keeps the buttons on screen when somebody types their full name in. */
-.setup-roster__acts {
-  grid-column: 2 / -1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.setup-roster__row--norank .setup-roster__acts { grid-column: 1 / -1; }
-/* Remove sits alone on the right of its line. */
-.setup-roster__act--remove { margin-left: auto; }
-/* The caller's column and the state tag, top right of line one. */
-.setup-roster__side {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-}
-.setup-roster__side:empty { display: none; }
-
-/* SMALL, BECAUSE IT SITS IN A 36px ROW, and excluded from the panel's generic
-   button rule above so this is the whole declaration rather than an override
-   fighting it on specificity. Still at the 12px floor — never below. */
-.setup-roster__act {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid rgba(155, 168, 190, 0.3);
-  color: #B6C2D4;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.setup-roster__act:hover { border-color: var(--primary); color: var(--primary); }
-.setup-roster__act:disabled { opacity: 0.5; cursor: default; }
-
-/* THE STATE, SPELLED OUT. "asking to take this name" and "unlocked for one
-   handover" are words rather than a colour or a dot, because this panel is read
-   on a projector that has lifted the black point and by hosts who cannot rely on
-   hue — the same reasoning `.setup-cat__state` above already applies to the
-   category chips. Amber, because it is the one thing in the row asking to be
-   acted on, and RATIONALE §4.3 spends amber on the task. */
-.setup-roster__flag {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--primary);
-  background: rgba(246, 169, 76, 0.14);
-  border-radius: 6px;
-  padding: 2px 8px;
-}
-
-/* WHO LEFT. Dimmed and struck through — two signals, because opacity alone
-   reads as "loading" on a projector. They keep their score in full so the row
-   cannot be read as "removing someone zeroed them". */
-.setup-roster__row--gone {
-  opacity: 0.65;
-}
-.setup-roster__row--gone .setup-roster__name { text-decoration: line-through; }
-
-/* A second heading inside one tab needs air above it; the first must not get
-   any, or the tab opens with a gap. */
-.setup-h--after { margin-top: 18px; }
-
-/* PlayersList's search and filters, once a room passes twelve. Wraps, never
-   scrolls sideways: at 375px the chips drop under the box. */
-.setup-find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.setup-find__filters { display: flex; flex-wrap: wrap; gap: 6px; }
-.setup-roster__who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.setup-roster__line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.setup-roster__meta { font-size: 12px; color: #B6C2D4; min-width: 0; overflow-wrap: anywhere; }
 
 /* --- Categories ---------------------------------------------------------- */
 .setup-cats { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -1605,7 +1502,7 @@ body {
 }
 .setup-loading { color: #B6C2D4; font-size: 13px; }
 
-/* skin-allowance SC-02: colour=102 font=1 primary=29 */
+/* skin-allowance SC-02: colour=101 font=1 primary=29 */
 /* --- The remote ---------------------------------------------------------- */
 /* The word "join" must never appear in here: this QR is behind the host
    sign-in, and it shipped once under a "Join In" heading — so a host who told
@@ -2392,13 +2289,6 @@ body {
   margin-bottom: 8px;
 }
 
-.school-name {
-  color: #666;
-  font-size: 14px;
-  font-style: italic;
-  margin-bottom: 15px;
-}
-
 .lesson-title {
   font-family: var(--font-display);
   font-size: 1.8rem;
@@ -2456,10 +2346,6 @@ body {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   background: #f0f0f0;
   object-fit: contain;
-}
-
-.artwork-image-expanded {
-  max-height: 65vh;
 }
 
 .artwork-image-voting {
@@ -3981,7 +3867,7 @@ body {
   box-shadow: 0 5px 15px rgba(255, 215, 0, 0.2);
 }
 
-/* skin-allowance SC-04: colour=170 font=0 primary=36 */
+/* skin-allowance SC-04: colour=162 font=0 primary=33 */
 /* Trivia Report Styles */
 .report-trivia-results {
   background: #f8f9fa;
@@ -4620,120 +4506,6 @@ body {
   color: #666;
   margin-top: 30px;
   font-style: italic;
-}
-
-/* Expanded Lesson Modal */
-.expanded-lesson-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.8);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-/* ─── THE QUESTION, ENLARGED FOR THE ROOM ────────────────────────────────────
-   Opened by clicking the stage's `.q` heading, and reported in the same breath
-   as the response spotlight: "a modal pops up but is the same size or smaller
-   than what was shown".
-
-   Here it was literally smaller. `.q` on the stage is set in `--L-primary`
-   (Room 40-68px, TV 52-88px). Expanding it dropped the same words to a fixed
-   1.8rem — 28.8px — and greyed them to #555. So the control named "Show the
-   full question" made the question roughly a THIRD of the size it already was,
-   which is the same inversion the spotlight had and the reason both are fixed
-   together.
-
-   Sizes come from the four per-profile ladders on the root element
-   (`styles/stage.css`), never from a scalar — see the note on `.stage-spot`
-   for the `--k` incident that rule comes from.
-
-   STILL PAPER-ON-DUSK, DELIBERATELY UNCHANGED. This card is a white sheet with
-   raw #333/#555 hex on a dusk stage, which is real design debt — no theme
-   declared, no tokens — but it is a RESTYLE, not this bug, and the reported
-   fault is scale. Logged rather than smuggled in. The one colour that does move
-   is the question's own text, from #555 to #333, because "so all can really
-   read the text" is about legibility and a 7.5:1 grey for the primary content
-   of the card is part of what was wrong with it.
-   ───────────────────────────────────────────────────────────────────────── */
-.expanded-lesson-content {
-  background: white;
-  border-radius: 20px;
-  padding: clamp(32px, 4vh, 64px) clamp(36px, 4vw, 72px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  cursor: default;
-  width: min(1600px, 92vw);
-  max-height: 92vh;
-  overflow-y: auto;
-  text-align: left;
-}
-
-.expanded-lesson-header {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 25px;
-}
-
-/* THE QUESTION ITSELF — the card's primary content, at the stage's primary
-   rung. It is the same string `.q` renders behind the overlay, so anything less
-   than `--L-primary` means the enlarge button shrank it. */
-.expanded-lesson-title {
-  font-family: var(--font-display);
-  font-size: var(--L-primary);
-  font-weight: 600;
-  color: #333;
-  margin-bottom: clamp(20px, 2.6vh, 36px);
-  line-height: 1.25;
-}
-
-.expanded-lesson-subtitle {
-  font-family: var(--font-display);
-  font-size: 2.75rem;
-  font-weight: 800;
-  margin-bottom: 20px;
-  color: #333;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-/* Supporting detail sits a rung below the question, not at a fixed 1.45rem
-   that lands under stage BODY size on every profile. */
-.expanded-lesson-detail {
-  font-size: var(--L-body);
-  color: #555;
-  line-height: 1.6;
-  margin-bottom: 30px;
-  background: #f8f9fa;
-  padding: 25px;
-  border-radius: 12px;
-  border-left: 4px solid var(--primary);
-}
-
-.expanded-lesson-prompt {
-  font-size: var(--L-meta);
-  color: var(--primary);
-  font-weight: 600;
-  text-align: center;
-  padding: 20px;
-  background: rgba(27, 41, 66, 0.1);
-  border-radius: 12px;
-  margin-top: 20px;
-}
-
-.clickable-lesson {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.clickable-lesson:hover {
-  transform: scale(1.02);
-  color: var(--primary);
 }
 
 /* Custom Confirmation Modal */

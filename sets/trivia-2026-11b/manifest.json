@@ -1,0 +1,30 @@
+[
+  {
+    "file": "trivia-80s-movies.csv",
+    "title": "80s Movies: Be Kind, Rewind",
+    "description": "60 questions from the decade of DeLoreans, proton packs and power ballads: big-screen moments, lines everyone quotes, the stars and directors behind them, Oscar nights and the soundtracks that ruled the radio. Every film released 1980 to 1989.",
+    "topic": "film-tv",
+    "tags": [
+      "1980s",
+      "movies",
+      "hollywood",
+      "retro"
+    ],
+    "questions": 60,
+    "categories": 6
+  },
+  {
+    "file": "trivia-greatest-books.csv",
+    "title": "Greatest Books: Page Turners",
+    "description": "60 questions on the books the world keeps reading: famous first lines, who wrote what, unforgettable characters, where the stories happen, classics from Japan to Nigeria to Colombia, and how the books first reached print.",
+    "topic": "language-literature",
+    "tags": [
+      "books",
+      "literature",
+      "classics",
+      "world-literature"
+    ],
+    "questions": 60,
+    "categories": 6
+  }
+]

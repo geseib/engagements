@@ -130,7 +130,8 @@ describe('the structure: exactly one primary, the rest quiet', () => {
     expect(filled).toHaveLength(1);
     expect(filled[0].classList.contains('host-action-bar__primary')).toBe(true);
     expect(container.querySelectorAll('.btn-primary, .btn-secondary')).toHaveLength(0);
-    for (const cls of ['host-action-bar__secondary', 'host-action-bar__tertiary', 'host-action-bar__addtime']) {
+    // Skip sits behind the quiet ⋯ beside the main button (cut 8, 5 Nov 2026).
+    for (const cls of ['hab-more-toggle', 'host-action-bar__tertiary', 'host-action-bar__addtime']) {
       const el = container.querySelector(`.${cls}`);
       expect([cls, el.classList.contains('ui-btn--quiet'), el.classList.contains('ui-btn--h36')]).toEqual([cls, true, true]);
     }

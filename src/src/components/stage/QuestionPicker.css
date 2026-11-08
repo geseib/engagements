@@ -1,0 +1,319 @@
+/* ============================================================
+   CHOOSE A QUESTION — the question picker (docs/design/question-picker,
+   approved 5 Nov 2026). Scope: .qpk. Dusk (data-theme="dark" on the root).
+
+   Derived from the mockup's frames (1-picker-open, 1-one-screen) and the
+   laptop ladder (admin-redesign RATIONALE §3): 12 / 13 / 15 / 19, rows 48px.
+   It is HOST CHROME at fixed laptop sizes on every display profile, never
+   the stage's profile ladder: it is not the room's content.
+
+   Placement: `data-place="sheet"` fills the console's sheet host (over the
+   room tile and the main area, HostConsole.css .hc-sheet); `data-place=
+   "stage"` takes the Stage's rows from the rail to the main area, under the
+   top bar and Your part now (styles/stage.css grid areas).
+
+   Measured contrast, dusk, composited up the stack to --bg #0F1A2E
+   (questionPickerPalette.test.js holds every pairing):
+     --text  #F4EDE4 on --surface #1B2942                       12.5:1
+     --muted #9BA8BE on --surface                                6.1:1
+     --info  #7CA7E6 links on --surface                          5.9:1
+     --text on the selected row (info .14 over --surface)        9.7:1
+     --muted on the selected row (the tightest pairing)          4.7:1
+     --text on the one-screen amber line (warn .12 over surface) 10.0:1
+   The selected wash must not get stronger than .14 (review A6).
+   ============================================================ */
+
+.qpk {
+  --qpk-t-floor: 12px;
+  --qpk-t-label: 13px;
+  --qpk-t-body: 15px;
+  --qpk-t-head: 19px;
+  --qpk-row: 48px;
+  --qpk-sel: rgb(var(--info-rgb) / .14);
+  --qpk-amber: rgb(var(--warn-rgb) / .12);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  font-family: var(--font-ui);
+  font-size: var(--qpk-t-body);
+  overflow: hidden;
+}
+/* The sheet host is transparent: a ring of --bg hides the content area in
+   the gutters around the card (the host clips it). */
+.qpk[data-place="sheet"] { position: absolute; inset: 0 20px 12px; z-index: 1; box-shadow: 0 0 0 24px var(--bg); }
+.qpk[data-place="stage"] {
+  grid-row: rail-start / main-end;
+  grid-column: 1;
+  position: relative;
+  z-index: 6;
+  margin: 8px calc(1.2vw + 8px);
+}
+
+/* ---- the head: the way back, the name, Done ---- */
+.qpk .qpk-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  min-width: 0;
+}
+.qpk .qpk-back { --ui-size: var(--qpk-t-label); color: var(--info); flex: none; }
+.qpk .qpk-title {
+  margin: 0;
+  font-size: var(--qpk-t-head);
+  font-weight: 700;
+  min-width: 0;
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qpk .qpk-title:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 4px; }
+.qpk .qpk-count { font-size: var(--qpk-t-label); font-weight: 400; color: var(--muted); }
+.qpk .qpk-queued { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: var(--qpk-t-label); color: var(--muted); flex: none; }
+.qpk .qpk-done { --ui-size: var(--qpk-t-label); flex: none; margin-left: auto; }
+.qpk .qpk-queued + .qpk-done { margin-left: 0; }
+.qpk .qpk-kbd {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 5px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-size: var(--qpk-t-floor);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text);
+  background: transparent;
+}
+
+/* ---- one screen: the room can see this list ---- */
+.qpk .qpk-room {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 8px 14px;
+  background: var(--qpk-amber);
+  border-bottom: 1px solid var(--warn);
+  font-size: var(--qpk-t-label);
+  color: var(--text);
+}
+.qpk .qpk-room > span { flex: 1 1 auto; min-width: 0; }
+.qpk .qpk-room .ui-btn { --ui-size: var(--qpk-t-label); }
+
+/* ---- the three columns ---- */
+.qpk .qpk-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) minmax(260px, 360px);
+  min-height: 0;
+  min-width: 0;
+}
+.qpk .qpk-filters {
+  padding: 12px 14px;
+  border-right: 1px solid var(--rule);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+.qpk .qpk-search {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  padding: 0 8px;
+  min-height: 40px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.qpk .qpk-search input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--qpk-t-body);
+  padding: 8px 0;
+}
+.qpk .qpk-search input::placeholder { color: var(--muted); opacity: 1; }
+.qpk .qpk-search input:focus { outline: none; }
+.qpk .qpk-search:focus-within { border-color: var(--info); }
+.qpk .qpk-fs { border: 0; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 0; }
+.qpk .qpk-k {
+  margin: 0 0 4px;
+  padding: 0;
+  font-size: var(--qpk-t-floor);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.qpk .qpk-opt {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  font-size: var(--qpk-t-body);
+  cursor: pointer;
+}
+.qpk .qpk-opt input { margin: 0; width: 16px; height: 16px; accent-color: var(--info); }
+.qpk .qpk-opt-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qpk .qpk-n { font-size: var(--qpk-t-label); color: var(--muted); font-variant-numeric: tabular-nums; }
+.qpk .qpk-offtag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 4px;
+  font-size: var(--qpk-t-floor);
+  color: var(--muted);
+}
+.qpk .qpk-note { margin: 4px 0 0; font-size: var(--qpk-t-label); line-height: 1.45; color: var(--muted); }
+.qpk .qpk-link {
+  font: inherit;
+  font-weight: 700;
+  color: var(--info);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.qpk .qpk-link:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+
+/* ---- the list ---- */
+.qpk .qpk-list { overflow-y: auto; min-height: 0; padding: 4px 0 12px; }
+.qpk .qpk-showing { margin: 6px 16px 0; font-size: var(--qpk-t-floor); color: var(--muted); }
+.qpk .qpk-gh {
+  margin: 10px 16px 4px;
+  font-size: var(--qpk-t-floor);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.qpk .qpk-gh-rest { letter-spacing: 0; text-transform: none; font-weight: 600; }
+.qpk .qpk-rows { list-style: none; margin: 0; padding: 0; }
+.qpk .qpk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--qpk-row);
+  padding: 6px 14px 6px 13px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  min-width: 0;
+}
+.qpk .qpk-row:hover { background: var(--row-hover); }
+.qpk .qpk-row.is-selected { background: var(--qpk-sel); border-left-color: var(--info); }
+.qpk .qpk-row:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+.qpk .qpk-row.is-used .qpk-row-t { color: var(--muted); }
+.qpk .qpk-row-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.qpk .qpk-row-t {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--qpk-t-body);
+  font-weight: 600;
+}
+/* One line, cut with its full words in title= (hard rules 7, 8): a block of
+   inline content, not a flex box, so text-overflow works. */
+.qpk .qpk-row-m { display: block; min-width: 0; font-size: var(--qpk-t-label); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qpk .qpk-row-m .qpk-tag { margin-left: 8px; }
+/* The row's actions: margin-left auto on the group, never flex-end (hard rule 9). */
+.qpk .qpk-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+.qpk .qpk-act { --ui-size: var(--qpk-t-label); }
+.qpk .qpk-act--next { border-color: var(--info); }
+.qpk .qpk-act--strong { border-color: var(--info); font-weight: 700; }
+.qpk .qpk-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  font-size: var(--qpk-t-floor);
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.qpk .qpk-tag--q { border-color: var(--info); }
+.qpk .qpk-tag--asked, .qpk .qpk-tag--off { color: var(--muted); }
+.qpk .qpk-tag--off { border-style: dashed; }
+.qpk .qpk-empty { margin: 24px 16px; font-size: var(--qpk-t-body); color: var(--muted); display: grid; gap: 10px; justify-items: start; }
+.qpk .qpk-empty p { margin: 0; }
+
+/* ---- the preview ---- */
+.qpk .qpk-preview {
+  border-left: 1px solid var(--rule);
+  padding: 14px 16px;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qpk .qpk-pv-t { margin: 0; font-size: var(--qpk-t-head); font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.qpk .qpk-pv-d { margin: 0; font-size: var(--qpk-t-body); line-height: 1.5; overflow-wrap: anywhere; }
+.qpk .qpk-pv-opts { margin: 0; padding-left: 1.4em; font-size: var(--qpk-t-body); line-height: 1.5; list-style: upper-alpha; }
+.qpk .qpk-pv-m { margin: 0; font-size: var(--qpk-t-label); color: var(--muted); }
+.qpk .qpk-pv-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.qpk .qpk-pager {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.qpk .qpk-pager .ui-btn { --ui-size: var(--qpk-t-label); color: var(--info); }
+.qpk .qpk-pos { font-size: var(--qpk-t-label); color: var(--muted); }
+
+/* ---- the foot: the keys, and the other way to add a round ---- */
+.qpk .qpk-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--rule);
+  font-size: var(--qpk-t-label);
+  color: var(--muted);
+}
+.qpk .qpk-keys { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto; }
+.qpk .qpk-keys .qpk-kbd + .qpk-kbd { margin-left: 2px; }
+.qpk .qpk-foot .qpk-link { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---- narrower laptops (1280): the preview narrows, then folds under ---- */
+@media (max-width: 1360px) {
+  .qpk .qpk-body { grid-template-columns: 190px minmax(0, 1fr) 240px; }
+  .qpk .qpk-filters { padding: 10px 12px; }
+  .qpk .qpk-row { gap: 8px; padding-right: 10px; }
+  .qpk .qpk-acts { gap: 6px; }
+  /* Ask now… stays one press away in the preview's ⋯ at this width. */
+  .qpk .qpk-row .smenu-rowmenu { display: none; }
+  .qpk .qpk-preview { padding: 12px; }
+  .qpk .qpk-head { gap: 10px; }
+  .qpk .qpk-count { display: none; }
+  .qpk .qpk-search .qpk-kbd { display: none; }
+}
+@media (max-width: 1100px) {
+  .qpk .qpk-body { grid-template-columns: 200px minmax(0, 1fr); }
+  .qpk .qpk-preview { display: none; }
+}

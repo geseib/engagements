@@ -1712,8 +1712,8 @@
    THE SESSION PANEL (docs/design/build-room-sidebar, S1-S6; owner 2026-10-09).
    SESSION at the far right of the header (the three-dot menu is gone), the
    panel from the right edge below the header, the request strip on the Host
-   screen. The Players rows are components/stage/PlayersList (its .setup-roster
-   rules live in styles.css); this sheet only places them. One orange per
+   screen. The People rows are components/people/PersonRow (PersonRow.css);
+   this sheet does not restyle them. One orange per
    screen: the strip's lead button is filled blue, never --primary.
    ========================================================================== */
 .brm .brm-sess {
@@ -1878,13 +1878,6 @@
   .brm .brm-codes { grid-template-columns: minmax(0, 1fr); }
   .brm .brm-codes-qr, .brm .brm-codes-slot { max-width: 260px; }
 }
-/* PlayersList's rows (styles.css), placed for this panel: a dot, the name, the side cluster; the actions on their own line. */
-.brm .brm-sp .setup-roster__row { grid-template-columns: 14px minmax(0, 1fr) auto; }
-.brm .brm-sp .setup-roster__row--norank { grid-template-columns: minmax(0, 1fr) auto; }
-.brm .brm-sp .setup-roster__rank { display: grid; place-items: center; align-self: center; }
-.brm .brm-sp .setup-roster__name { font-weight: 700; font-size: var(--brm-t-body); }
-.brm .brm-sp .setup-roster__meta { font-size: var(--brm-t-label); }
-.brm .brm-sp .setup-roster__act { min-height: 30px; font-size: var(--brm-t-label); }
 
 @media (max-width: 480px) {
   .brm .brm-sp { width: 100%; border-left: 0; border-top: 2px solid var(--primary); }

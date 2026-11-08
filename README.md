@@ -8,7 +8,7 @@ scanning a QR code or typing a four-digit code. Players never sign in and instal
 
 | Kind | What happens | Phases |
 |---|---|---|
-| **Call & Answer** | Everyone writes an answer, then the room ranks the best ones (3, 2, 1 points). | ASK → VOTE → RESULTS |
+| **Call & Answer** | Everyone writes an answer, then the room ranks the best ones (3, 2, 1 points). A set can play a **bluff round** instead: one player secretly holds the real answer, the rest make one up, and the room picks the real one (`docs/design/bluff-round/README.md`). | ASK → VOTE → RESULTS |
 | **Trivia** | Multiple choice, usually four options and up to six, one right answer. Points plus a speed bonus. | ASK → RESULTS |
 | **Poll** | One question at a time: pick, rate, yes/no or a short answer. The result goes up live. No points. | ASK → RESULTS |
 | **Wavelength** | Word association. A word lands when everyone said it. No points. | ASK → RESULTS |
@@ -212,7 +212,26 @@ generic filler trigger one rewrite (`get-ai-summary.js`); what remains is stored
 `ReadCheck` and shown to the host only (`GET …/ai-summary/host`).
 
 What every room screen shows, per moment and room screen size, is decided in one place:
-`src/src/config/roomContent.js`: the title and the lesson lead, the question goes in "Your turn", voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
+`src/src/config/roomContent.js`: the title and the lesson lead, with no instruction on the room's screen (the phones carry it, since 5 Nov 2026), voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
+
+## Question sets as data
+
+A set is data on each tier, not code: a deploy never adds, changes or removes one. Sets
+written in the repo live under `sets/`, one folder per batch (for example
+`sets/trivia-2026-11/`, `sets/uffizi-2026-11/`): the CSV, its sources and QA notes, and an
+`INSTALLED.md` saying which tier has which version. Two scripts put them on a tier through
+the app's own handlers, each a dry run unless given `--apply`:
+
+- `scripts/install-question-set.js <table> <file.csv> --type … --title …` creates a new set.
+- `scripts/replace-question-set.js <table> <setId> --csv …` gives an existing Engage set a
+  new version and/or new details; the old version stays under the set's Versions.
+
+To move a finished set from one tier to the next, use the app's **Archive** (console,
+Engage mode): export on dev with **Promote to test…**, follow its link to test's Archive,
+read the preview (a dry run that writes nothing), restore, and check the read-back counts.
+Test promotes to prod the same way, with a typed confirm. Each tier writes only its own
+table; the archive bucket is the only thing they share. The path and what is still awkward
+about it: `docs/design/archive-promotion/REVIEW.md`.
 
 ## Documentation
 

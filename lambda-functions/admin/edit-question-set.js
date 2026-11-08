@@ -309,6 +309,23 @@ exports.handler = async (event) => {
       applied.engagementType = normalized;
     }
 
+    // THE BLUFF ROUND (docs/design/bluff-round/README.md): a set option, a
+    // boolean and nothing else, that a host's session takes as its default.
+    // "true" as a string is a caller bug to be seen, not a value to guess at.
+    if ('bluffRound' in body && body.bluffRound !== undefined && body.bluffRound !== null) {
+      if (typeof body.bluffRound !== 'boolean') {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'bluffRound must be true or false.' }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      updateParams.UpdateExpression += ', #bluffRound = :bluffRound';
+      updateParams.ExpressionAttributeNames['#bluffRound'] = 'bluffRound';
+      updateParams.ExpressionAttributeValues[':bluffRound'] = body.bluffRound;
+      applied.bluffRound = body.bluffRound;
+    }
+
     // roundKind is validated exactly like engagementType and for the same
     // reason: every generator branch, every future library facet and every test
     // switches on it exhaustively, so a typo must not silently become a new

@@ -707,6 +707,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     webSocketClient.onMessage('handoverRequested', () => loadPlayers());
     // The host's OTHER device answered (grant, Not now, Lock again): the strip clears here too.
     webSocketClient.onMessage('playersChanged', () => loadPlayers());
+    // A page opened or closed (websocket/presence.js): "away" without a reload.
+    webSocketClient.onMessage('presenceChanged', () => loadPlayers());
     webSocketClient.onMessage('playerRemoved', () => { loadPlayers(); refresh(); });
     webSocketClient.onMessage('playerRestored', () => { loadPlayers(); refresh(); });
     webSocketClient.onReconnected(() => { refresh(); loadPlayers(); });
@@ -720,6 +722,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       webSocketClient.offMessage('presentChanged');
       webSocketClient.offMessage('handoverRequested');
       webSocketClient.offMessage('playersChanged');
+      webSocketClient.offMessage('presenceChanged');
       webSocketClient.offMessage('playerRemoved');
       webSocketClient.offMessage('playerRestored');
       webSocketClient.onReconnected(null);

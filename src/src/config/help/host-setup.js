@@ -255,7 +255,9 @@ const gameSetup = {
       MEETING_TYPES), or "Format" chips; "Compare formats" top right; one
       radio group (arrows choose). "Question set": the recents list ("Used
       by you lately", "Browse all"), or for a host with none a line on what a
-      set is and "Browse all N sets" beside the search; "Your question sets ·
+      set is and "Browse all N sets" beside the search; a Preview on every
+      readable set and on the picked line (SetPreview.jsx: Use this set,
+      Back); "Your question sets ·
       Make a new set" for a host who owns a set of the format, else "Make
       your own set"; the set is remembered per format while open. "Topics in
       this set" (all on, "Switch off any you want to skip.", "Loading this
@@ -287,7 +289,7 @@ const gameSetup = {
             { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required, but reveals nothing. Enter moves on.' },
             { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. A card each the first time, chips later. Arrow keys choose; Enter moves on.' },
             { title: 'Build Room and Event', text: 'Under **Bigger than one session**. In Question set\'s place: a Build Room\'s settings, folded under **Build Room setup**, or an event\'s date and start. **Create the Build Room** opens the room; **Create the event** opens its agenda. Event needs a plan with events.' },
-            { title: 'Question set', text: 'A search box with the sets you used lately under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. **Your question sets** opens sets you own; **Make a new set** or **Make your own set** opens the new-set panel.' },
+            { title: 'Question set', text: 'A search box with the sets you used lately under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. **Preview** shows a set\'s questions first. **Your question sets** opens sets you own; **Make a new set** or **Make your own set** opens the new-set panel.' },
           ],
         },
         {
@@ -381,6 +383,20 @@ const gameSetup = {
       ],
     },
     /*
+      SetChooser.jsx onPreview, drawn by SetPreview.jsx in GameSetupDialog's
+      afterContent layer: GET question-sets/{id}/questions?scope=…; no
+      Preview on an unreadable set; Use this set / Back / × / Esc.
+    */
+    {
+      id: 'previewing-a-set',
+      title: 'Previewing a set',
+      icon: 'Eye',
+      blocks: [
+        { t: 'p', text: '**Preview** sits on every set in the list, on the sets you used lately and on the picked line. It opens the set over Create engagement without picking it: its format, owner, topic, tags and description, then its questions by topic. Trivia marks the right option; a poll or survey question shows its kind and options; a picture shows small.' },
+        { t: 'p', text: '**Use this set** picks it, as clicking its row does. **Back**, the × or Esc returns to the form exactly as you left it. A set that cannot be read has no Preview.' },
+      ],
+    },
+    /*
       SetChooser.jsx makeRoutes, wired in GameSetupDialog.jsx to
       HostQuestionSetsDialog initialRoute (manual / ai / template); a set the
       sets dialog newly reports for this format is picked (takeSets).
@@ -470,6 +486,30 @@ const gameSetup = {
       ],
     },
     /*
+      The bluff round (docs/design/bluff-round/README.md): SessionOptions.jsx
+      checkbox BLUFF_WORDS.setupLabel, defaulting from the set's bluffRound;
+      the stage and the remote say BLUFF_WORDS.stageOn, never who.
+    */
+    {
+      id: 'bluff-round',
+      title: 'Bluff round (Call & Answer)',
+      icon: 'EyeSlash',
+      blocks: [
+        {
+          t: 'p',
+          text: 'In Advanced, a Call & Answer session can play a bluff round: one player secretly gets the real answer. It starts on when the set has it on, and you can switch it either way for this session.',
+        },
+        {
+          t: 'p',
+          text: 'Each round with a real answer (a picture\'s real title, what a patent drawing really is), one connected player is picked at random and shown it on their phone. They type it in their own words; everyone else makes one up. The vote asks which one is real, and nobody can vote for their own.',
+        },
+        {
+          t: 'p',
+          text: 'Points: 2 to the author for each vote a made-up answer gets; 1 to the player who had the real answer and 1 to each voter who spotted it. The stage and your remote say a bluff is in play, never who has it, and you are not told either. With fewer than 3 players connected, or a question with no real answer, the round plays normally and the stage says so. At results the stage shows the real answer, and Workie tells its story and who fooled the room.',
+        },
+      ],
+    },
+    /*
       SessionHistoryPanel.jsx rowActions: Edit only while not started; the
       dialog in mode="edit": "Edit session", "Save changes", format and set
       disabled with "The format and question set are fixed once a session is
@@ -503,6 +543,11 @@ const gameSetup = {
       Search (23 Oct 2026): one box over both lists, headings "Your sets" and
       "Everyone else's sets" with "N of M"; no match names the words and offers
       Clear the search; Esc clears before it closes.
+      Filters (7 Nov 2026): the console's bar (SetFilterBar.jsx) over both
+      lists: type, topic, status, owner, updated, sort, then "Browse topics
+      and tags"; a list a filter empties names "this filter" / "these N
+      filters" and offers Clear all filters; nothing anywhere adds the
+      one-click drops with counts.
     */
     {
       id: 'choosing-question-set',
@@ -515,7 +560,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The search box above the lists narrows both to sets with your words in the name, description or tags, and each list says how many of its sets match; Esc or **Clear the search** empties it.',
+          text: 'The bar above the lists matches the console\'s Question sets: search (name, description or tags), then type, topic, status, owner (Yours, Team, Engage, Public), when it was updated, and a sort. **Browse topics and tags** lists every topic and tag in use. Esc empties the search; **Clear all filters** brings everything back, and when nothing matches, each filter hiding sets is offered on its own with how many it would bring back.',
         },
         {
           t: 'list',
@@ -556,6 +601,7 @@ const gameSetup = {
           t: 'list',
           items: [
             { title: 'Details', text: 'The name, description, format, categories and the set\'s Workie. **Save Changes** saves these.' },
+            { title: 'Bluff round (Call & Answer)', text: 'Sessions on the set start with the bluff round on. A question bluffs when it has a real answer: a RealAnswer column in the CSV, or a reveal that starts "Real answer:" or "Real title:".' },
             { title: 'Questions', text: 'Add, edit, delete and reorder questions, pull some from another set, or **Add questions** with Workie. **Save** saves the questions as a new version.' },
             { title: 'Images', text: 'The pictures the set\'s questions use.' },
           ],

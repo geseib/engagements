@@ -52,7 +52,7 @@ export default function ResponsesPanel({
   const showPoints = phase === 'RESULTS' && !authorsHidden;
   return (
     <section className="hc-panel">
-      <p className="hc-kicker">{kicker}</p>
+      {kicker ? <p className="hc-kicker">{kicker}</p> : null}
       <h2 className="hc-h">{title}</h2>
       {/* The lesson the room is answering, above the task (owner, 18 Oct 2026). */}
       {lesson && phase === 'ASK' ? <p className="hc-lesson">{lesson}</p> : null}

@@ -9,6 +9,74 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 8 Nov 2026 (the bluff round, promoting sets through the Archive, the question picker, Auto that never stalls)
+
+**Test:** merge of dev `d708952db` plus these notes. Everything below this entry is already on test.
+
+**Content is data, not code.** The new question sets below are on **dev**. They reach test by promoting them through the Archive after this push (step 1 of What to look at), not with the deploy.
+
+### New
+
+- **Bluff round for Call & Answer** (`docs/design/bluff-round/README.md`). A set can switch it on (set editor, Details), and the host can turn it on or off per session in Advanced when creating it. On a question with a real answer, one connected player is secretly shown the real answer and puts it in their own words; everyone else makes one up. The vote is one pick, "Which one is real?", and nobody can vote for their own. Points: 2 per vote a made-up answer earns its author; 1 to the holder and 1 to each spotter. Nobody, the host included, is told who holds it. With fewer than 3 players the round plays normally and says so.
+  - The room's screen and `/present` say "Bluff round: one player has the real answer", name nobody and show no points; at results they show the real answer and its ballot number, "The real answer" and "Fooled the most".
+  - The phone's **This round** shows your own bluff points. Details such as the artist and date stay hidden from everyone until results.
+  - Workie is told who held the real answer and who it fooled, and tells that story at results.
+- **Promote a set to the next tier from the Archive.** On dev, export with **Promote to test…**; on test, **Promote to prod…**. The link opens the next tier's Archive with that batch already chosen ("N items promoted from dev — review and restore"), and it survives signing in. The restore opens on a **preview** that writes nothing: new set or new version of vN, question and category counts, whether it arrives active. After the restore, each set's read-back counts sit beside the snapshot's (flagged if they differ) with **Open the set**, and the Shared library shows them without signing in again. On prod the confirm is red, names PROD on the button and waits for you to type "prod". The export list can be searched and sorted (name, last backed up, type) and shows when each set was last backed up; the Exported column shows the time.
+- **The question picker.** One picker for "what's next" in Trivia and Poll, with four ways in: **C**, the rail's **Choose a question**, Your part now's **Change what's next**, and Session menu › Up next. It searches, filters by category and by Not asked, shows what the set would serve next, and previews a question without its answer. **Ask next** closes it and shows "Next: … · Undo". The phone remote gets the same picker as a sheet. The rail's link is now **All rounds**.
+- **Preview a set before choosing it** in New engagement: every set you can read has **Preview** (name, format, topic, tags, description, then its questions by category; for trivia the right answer is marked). **Use this set** picks it; Back or Esc returns to the half-filled form.
+- **Set filters: type first, and the same bar for hosts.** The console's Question sets list now filters by type, then topic, status, owner and date. The host's **Question sets** dialog on Home has the same filter bar (it had only a search) and starts newest first.
+- **Event join: "Are you Sam?"** Two people on one browser no longer end up as one. A reload picks up where you were; a new tab asks "Are you Sam?" (Continue as Sam / I'm someone else). A name typed on the join form is kept through to the event. A session link with `?code=` rejoins the same way ("Welcome back, Ada." in the same tab, "Are you Ada?" in a new one).
+- **The answer screen on a laptop** is two columns at 1024px and wider: the question on the left, your answer on the right with Send under it, no scrolling.
+- **Sign-in with Google.** **Sign out** now really ends the Google sign-in at Cognito (it used to survive every sign-out but the phone remote's). The sign-in page has **Use a different Google account**, which explains how to add or switch accounts at Google first.
+- **Quieter host and phone screens** (the nine cuts from the 5 Nov noise review):
+  - Console: one room tile saying "Waiting on …" with up to six names (away listed apart); Needs you is a quiet line unless something waits; People sorts those still out first, its ⋯ shows on hover; Score and Late show only once they have something; Skip this round sits behind a ⋯.
+  - Phone: the question is the headline; the vote screen goes straight to the ballot (Detailed vote is a link); the lobby's recovery steps sit behind **Lost this page?**.
+  - On one screen, the calm Needs-you line and "Goal n" are not projected.
+- **The room's screen: a bigger question.** The enlarge button and its white overlay are gone, and so are the "Your turn" band and the how-to line (phones still say "Your task"). The question is drawn larger. On one screen, "Show the question" (phone remote, Session menu) puts the question card up in place of the answers.
+- **Presence on the rail.** A player whose phone drops shows **away** on the host's People rail straight away, with no reload.
+- **Workie knows the session so far in trivia.** It is given each earlier round's results, so "the first time everyone got it" or "three in a row" is only said when true; a claim the earlier rounds do not show is flagged to the host like any other unsupported claim.
+- **A Workie can choose its own model.** A prompt may name its model (`summaryModel`); it goes through the Claude models switch like every other call (Sonnet 5.5 on the Anthropic API when the switch is on, Bedrock Sonnet 4.6 when off or on any failure). *What Is This Thing?*'s prompt is the first to use Sonnet; every other prompt is unchanged.
+- **New content, on dev:** trivia *80s Movies: Be Kind, Rewind*, *Greatest Books: Page Turners* and *Florence: Ciao, Firenze!*; Call & Answer *What Is This Thing?* (patent drawings, bluff round on, its own Workie prompt) and *Uffizi Art Titles* (60 paintings). The four trivia sets *Around the World*, *Space*, *Tech, Toys & Tomorrow* and *Music & Pop Culture* have been on test and prod since 5 Nov. Every set on all three tiers now has a topic and tags. *Famous Art Titles* images are now served from each tier under neutral names, so the image address no longer gives the title away (dev and test).
+
+### Fixed
+
+- **Auto mode never waits on Workie.** A read still missing after about 25 seconds, or one that fails (after 6 seconds), no longer holds the session; Auto moves on to the next round. Trivia and Poll on two screens no longer sit on their results for minutes (Auto was waiting to walk responses those formats don't have).
+- A trivia round where nobody scored named everyone as "winner".
+- After reopening the console mid-round, the pulse read "Took 10:30:37".
+- The set editor opened blank (no title, Unfiled) when loaded straight from a link, such as the Archive's **Open the set**.
+- The host's armed main button no longer lets go after 6 seconds; Esc lets go.
+- On one screen, the People show/hide choice is kept for the session, across closing the panel and reloads.
+- The phone-remote QR is larger (256px) so phone cameras and Google Lens can read it.
+- On one screen, Setup no longer shows a needs line while nothing waits.
+- The names-hidden line on the ballot now reads "Only names are hidden, from the host too, until voting closes."
+- The notes page of Workie's read could fail with a conflict when it raced the What we heard beat.
+
+### What to look at
+
+1. **Promote sets from dev to test.** Sign in to https://engage.dev.seibtribe.us, open **Library & team** › Archive (Engage mode), choose **80s Movies**, **Greatest Books**, **Florence**, **What Is This Thing?** (and its Workie prompt) and **Uffizi Art Titles**, and press **Promote to test…**. Follow the link: https://engage.test.seibtribe.us opens its Archive with those items chosen. Read the preview (each "new set", with counts), restore, and check every read-back line says it matches. Open **Shared library**: the sets are there. Press **Open the set** on one: the editor is filled in.
+2. **Play a bluff round** (needs 3 or more players). Create a Call & Answer session with **What Is This Thing?**; in Advanced the bluff round is already on. Join from three phones. One phone says "You have the real answer"; the others don't; the room's screen and your console say a bluff is in play but not who. Vote: one pick, and your own answer is not on the ballot. At results the room sees the real answer and "Fooled the most", with no names or points; each phone's **This round** shows its own points.
+3. **Preview a set.** Press **New engagement**, choose Trivia, press **Preview** on a set: its questions show by category with the right answers marked. **Use this set** picks it; Esc returns to the form as you left it.
+4. **Filters.** In Library & team › Question sets, the first filter is the type. On Home, open **Question sets**: the same filter bar, newest first. Filter to an empty list: it names the filter and offers to drop it.
+5. **Auto through a trivia game.** Run a Trivia session on two screens with three phones and **Auto-advance when everyone has responded** ticked (Session menu › How it runs › Pace). Start round 1 yourself; after that it moves through results and Workie's read into the next round without stopping, even when a read is slow.
+6. **Workie's mid-game claims.** In that trivia game, get several rounds where everyone is right. Workie's read should only say "the first time" or "in a row" when it is true; if it claims otherwise, the host sees the small "words the room's answers don't support" line.
+7. **The question picker.** In a Trivia session press **C**: pick a question, press **Ask next**, then **Undo**. Try the rail's **All rounds** and the phone remote's Up next.
+8. **Event join on one browser.** Join an event on a phone as Sam, then open the event link in a new tab: it asks "Are you Sam?". Choose **I'm someone else** and join as Priya: both stay themselves.
+9. **Laptop answer screen.** Join a Call & Answer round from a laptop: question left, answer right.
+10. **Google sign-out.** Sign in with Google, **Sign out**, then **Continue with Google** again: it goes through Google rather than straight back in. Try **Use a different Google account** on the sign-in page.
+11. **Presence.** With a player joined, close their tab: the console's People rail shows them **away** within seconds.
+
+### Known gaps
+
+- **Test still needs the new sets promoted** (step 1). Promote *What Is This Thing?*'s Workie prompt in the same batch, or the set arrives linked to the default Call & Answer prompt.
+- **Prod's site is older** until the next prod deploy, so **Promote to prod…** on test opens prod's old Archive, which does not pick the batch for you or preview it.
+- The bluff round can be switched only when the session is created, not once it exists.
+- The per-question editor has no **Real answer** field; a real answer comes from the CSV's RealAnswer column or a "Real answer:" line in the reveal.
+- Safari with one Google account still never shows Google's chooser; the full fix (Cognito's newer managed login) changes how the sign-in pages look and waits on the owner.
+- The host's vote count resets to 0 if the console reloads during voting (after the round a 0 is left out rather than shown wrongly).
+- The phone's quick vote is still three dropdowns, so responses can't be read without opening one.
+
+---
+
 ## 3 Nov 2026 (one Engage: the experience plan, the impromptu ask, suspension enforced)
 
 **Test:** merge of dev `b22b96143`. This push also carries the three entries directly below (**1 Nov**, **Build Room: fixes from the test walk**, **the event summary names its host**), which never reached test on their own. Everything below those is already on test.

@@ -126,7 +126,7 @@ export const UP_NEXT_COUNT = 6;
 export async function fetchUpNext({
   fetchFn = authFetch, apiBase, gameId, count = UP_NEXT_COUNT,
 }) {
-  const empty = { upNext: [], blocked: [], advisories: [], excluded: [] };
+  const empty = { upNext: [], blocked: [], advisories: [], excluded: [], asked: [] };
   let response;
   try {
     response = await fetchFn(`${apiBase}games/${encodeURIComponent(gameId)}/up-next?count=${count}`);
@@ -147,6 +147,10 @@ export async function fetchUpNext({
       blocked: list(body.blocked),
       advisories: list(body.advisories),
       excluded: list(body.excluded),
+      // The questions this session has truly asked (up-next.js `asked`): the
+      // phone's only honest source for its picker's "Not asked" (question
+      // picker D10). The host page keeps its own usedQuestionIds.
+      asked: list(body.asked),
       error: null,
     };
   } catch {

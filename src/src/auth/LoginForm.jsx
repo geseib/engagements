@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
-import { startGoogleSignIn } from './googleSignIn';
+import { startGoogleSignIn, GOOGLE_ACCOUNT_CHOOSER_URL } from './googleSignIn';
 import PasswordField from './PasswordField';
 import { GoogleMark, AlertIcon } from './AuthChrome';
 import './auth.css';
@@ -29,6 +29,7 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError, onNeedsConfirmation,
   const [form, setForm] = useState({ email: initialEmail, password: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [showOtherGoogle, setShowOtherGoogle] = useState(false);
 
   const { signIn, error, setError } = useAuth();
   const displayError = error || initialError;
@@ -121,6 +122,48 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError, onNeedsConfirmation,
       >
         <GoogleMark /> Continue with Google
       </button>
+
+      {/* ANOTHER GOOGLE ACCOUNT (owner, 2026-11-04: on Safari "it won't let me
+          pick a different host user"). Google hands back the one account the
+          browser is signed in to without asking (googleSignIn.js, "WHY SAFARI
+          NEVER OFFERS ANOTHER GOOGLE ACCOUNT"), so the way to another account
+          is through Google itself. */}
+      <div className="au-meta" style={{ marginTop: '-12px' }}>
+        <button
+          type="button"
+          onClick={() => setShowOtherGoogle((v) => !v)}
+          aria-expanded={showOtherGoogle}
+          aria-controls="login-other-google"
+          disabled={isSubmitting}
+          style={{
+            background: 'none', border: 0, padding: 0, font: 'inherit',
+            color: 'var(--secondary)', cursor: 'pointer', textDecoration: 'underline',
+          }}
+        >
+          Use a different Google account
+        </button>
+      </div>
+
+      {showOtherGoogle && (
+        <div className="au-notice" id="login-other-google" role="region" aria-label="Use a different Google account">
+          <div className="au-notice-body">
+            <h3>Google signs you in as the account this browser already uses</h3>
+            <p>
+              If this browser is signed in to only one Google account — usual in Safari — Google
+              does not ask which one. To use another:
+            </p>
+            <ol style={{ margin: '6px 0 0', paddingLeft: '20px' }}>
+              <li>
+                <a href={GOOGLE_ACCOUNT_CHOOSER_URL} target="_blank" rel="noopener noreferrer">
+                  Open your Google accounts
+                </a>{' '}
+                and add or switch to the account you want.
+              </li>
+              <li>Come back here and press Continue with Google. With more than one account signed in, Google asks which.</li>
+            </ol>
+          </div>
+        </div>
+      )}
 
       <p className="au-divider">or</p>
 

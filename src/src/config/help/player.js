@@ -79,9 +79,9 @@ const gettingStarted = {
     {
       /*
         Join form: "On rounds where the room votes, your name is not shown next
-        to your answer until voting closes." Ballot: "Nobody sees who wrote what
-        — the host included — until voting closes. This hides names, not
-        identities." Session setting "Show who wrote each response from the
+        to your answer until voting closes." Ballot, one line under it since
+        5 Nov 2026: "Only names are hidden, from the host too, until voting
+        closes." Session setting "Show who wrote each response from the
         start" (SessionSetupPanel) makes displayLabelFor (config/anonymity.js)
         show names. Comments: FeedbackRoundPanel "Your name is shown with this
         comment. Everyone in the session can read it, …"
@@ -106,7 +106,7 @@ const gettingStarted = {
           t: 'note',
           tone: 'info',
           title: 'Hidden names are not anonymity',
-          text: 'Your phone says it plainly: "This hides names, not identities." In a small room people may still recognise how you write.',
+          text: 'Your ballot says it plainly: "Only names are hidden." In a small room people may still recognise how you write.',
         },
       ],
     },
@@ -228,10 +228,12 @@ const joining = {
     {
       /*
         The session knows a player by this browser (components/joinResult.js
-        getClientId), not by name alone. Same browser: "Welcome back." with
-        "Rejoin as {name}" / "Join as someone else" (PlayerPage rejoinPrompt,
-        checked on dev). Another browser: join-game.js answers NAME_TAKEN.
-        The lobby card "If you lose this page" repeats the code.
+        getClientId), not by name alone. Same tab: "Welcome back, {name}."
+        with "Rejoin as {name}" / "Join as someone else"; a new tab of the
+        same browser: "Are you {name}?" / "I'm someone else" (PlayerPage
+        rejoinPrompt, utils/sessionSeat.js; dev QA 5 Nov). Another browser: join-game.js answers NAME_TAKEN.
+        The lobby's "Lost this page?" line (a disclosure, 5 Nov 2026) opens
+        to the same steps and repeats the code.
       */
       id: 'lost-the-page',
       title: 'If you lose the page',
@@ -239,15 +241,19 @@ const joining = {
       blocks: [
         {
           t: 'p',
-          text: 'Reopen the link, or the join screen, on the same phone and the same browser. Your screen says "Welcome back." Tap **Rejoin as** your name, and your answers and points come back with you.',
+          text: 'Reopen the link on the same phone and the same browser. In the same tab your screen says "Welcome back" with your name; in a new tab it asks "Are you" and your name first. Tap **Rejoin as** your name, and your answers and points come back with you.',
         },
         {
           t: 'p',
-          text: '**Join as someone else** forgets that name on this phone and opens an empty join form.',
+          text: '**Join as someone else** (in a new tab, **I’m someone else**) forgets that name on this phone and opens an empty join form.',
         },
         {
           t: 'p',
           text: 'The session knows you by this browser, not by your name alone. On a different phone, or another browser on the same phone, your screen says your name "is already in this session": the next section moves it to you.',
+        },
+        {
+          t: 'p',
+          text: 'While you wait for the first round, **Lost this page?** under the session details opens these steps with your session code.',
         },
       ],
     },
@@ -387,7 +393,10 @@ const playing = {
         Every round: question, "Your task" (the instruction), the answer form,
         and in the dock at the bottom "Send my answer" (experience plan 3d:
         every next action is in the dock, config/playerWords.js SEND); with the
-        keyboard up the question folds, "Show the whole question ↓". After
+        keyboard up the background folds (a Call & Answer title stays; a
+        passage-length question condenses), "Show the whole question ↓". The
+        Call & Answer title is the headline and the brief is body text under
+        it, as on the room's screen (owner, 5 Nov 2026). After
         sending: "Locked for this round. If this page reloads, it comes back."
         (PlayerPage ASK receipt), and the dock's button reads "Sent" with a
         check (components/SendButton.jsx, owner 3 Nov 2026; never for an
@@ -401,8 +410,8 @@ const playing = {
         {
           t: 'steps',
           items: [
-            { title: 'Read the question', text: 'It is at the top, with the round number above it. Under it, Your task says what the host wants.' },
-            { title: 'Answer', text: 'The form depends on the kind of session (sections below). While you type, the question folds away to make room; **Show the whole question ↓** brings it back.' },
+            { title: 'Read the question', text: 'It is at the top in large type, with the round number above it. Any background the host added is under it, then Your task says what the host wants.' },
+            { title: 'Answer', text: 'The form depends on the kind of session (sections below). While you type, the background folds away to make room and the question stays; **Show the whole question ↓** brings it back.' },
             { title: 'Send', text: 'The button is always in the bar at the bottom of your screen, so you never scroll to find it. Once your answer is in, the button reads **Sent** with a tick, and your screen shows what you sent.' },
           ],
         },
@@ -438,7 +447,35 @@ const playing = {
         },
         {
           t: 'p',
+          text: 'On a laptop or a tablet held sideways, the question sits on the left and your answer box on the right, with **Send my answer** under it, so you can read and write without scrolling.',
+        },
+        {
+          t: 'p',
           text: 'Then the room votes on the answers (see Voting). At results your phone says which response was yours, for example "You wrote response 3", and shows the points it earned this round, your total and your standing. Who wrote what, and the room\'s top answers, are on the room’s screen.',
+        },
+      ],
+    },
+    {
+      /* The bluff round (docs/design/bluff-round/README.md; config/bluffRound.js
+         BLUFF_WORDS): the holder's card "You have the real answer" + "Put it in
+         your own words, so it sounds like you."; everyone else "Bluff round";
+         the ballot "Which one is real? Pick one."; own answer off the ballot;
+         the reveal card "The real answer" at results. */
+      id: 'bluff-round',
+      title: 'Bluff round',
+      icon: 'EyeSlash',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Some Call & Answer sessions play a bluff round: a picture or a puzzle with a real answer nobody knows. One player, picked at random, is secretly shown the real answer on their phone. They still type it, in their own words, so it sounds like them. Everyone else makes one up.',
+        },
+        {
+          t: 'p',
+          text: 'At the vote you pick one: the answer you think is real. You cannot pick your own. A vote for a made-up answer gives its author 2 points. Spotting the real one gives you 1 point and the player who had it 1 point.',
+        },
+        {
+          t: 'p',
+          text: 'Nobody else is told who has the real answer, not even the host. At results your phone shows the real answer, who had it, and who fooled the most people.',
         },
       ],
     },
@@ -581,10 +618,13 @@ const voting = {
   sections: [
     {
       /*
-        PlayerPage VOTE: "Rank your top three." (one/two when fewer answers:
-        requiredVotes = min(3, answers)), the question repeated, the names line,
-        Quick Vote / Detailed Vote, slot bar, "Pick N more to send" → "Send my
-        votes", in the dock (3d). A refused vote is a dock line ("Your votes
+        PlayerPage VOTE (5 Nov 2026): the question as one line (the title;
+        a passage clamped to two lines), "Show the whole question ↓" for the
+        rest, "Rank your top three." (one/two when fewer answers:
+        requiredVotes = min(3, answers)), the quick ballot, the link
+        "Detailed vote: read each response in full" (back: "Back to the quick
+        vote"), the one-line names promise, slot bar, "Pick N more to send" →
+        "Send my votes", in the dock (3d). A refused vote is a dock line ("Your votes
         did not send. Try again."); voting closing first says "Voting closed
         before your votes arrived…" on the result. Never a pop-up. Moved here
         from player-playing (HELP_SECTION_MOVES).
@@ -595,14 +635,14 @@ const voting = {
       blocks: [
         {
           t: 'p',
-          text: 'On Call & Answer rounds, once the host opens voting your phone says "Rank your top three." and lists every answer, numbered: Response 1, Response 2, and so on. The numbers match the room’s screen, so the host can say "look at six" and everyone finds it.',
+          text: 'On Call & Answer rounds, once the host opens voting your phone shows the question in one line (tap **Show the whole question** for the rest), then asks you to rank your top three. Every answer is numbered: Response 1, Response 2, and so on. The numbers match the room’s screen, so the host can say "look at six" and everyone finds it.',
         },
         { t: 'h', text: 'Two ways to rank' },
         {
           t: 'list',
           items: [
-            { title: 'Quick Vote', text: 'Three dropdowns: 1st, 2nd and 3rd place. Fastest if you already know what you liked.' },
-            { title: 'Detailed Vote', text: 'Every answer in full, with 1st, 2nd and 3rd place buttons on each. Better when you want to read them.' },
+            { title: 'The quick vote', text: 'What your phone opens on. Three dropdowns: 1st, 2nd and 3rd place. Fastest if you already know what you liked.' },
+            { title: 'The detailed vote', text: 'Tap **Detailed vote** under the dropdowns. Every answer in full, with 1st, 2nd and 3rd place buttons on each. Better when you want to read them. **Back to the quick vote** returns.' },
           ],
         },
         {
@@ -620,7 +660,7 @@ const voting = {
       ],
     },
     {
-      /* Own row: "(Yours)" in Quick Vote options, "Yours" flag on the Detailed
+      /* Own row: "(Yours)" in the quick vote's options, "Yours" flag on the detailed
          card (ownAnswerIndex); rankable — no self-vote check in submit-vote.js. */
       id: 'your-own-answer',
       title: 'Your own answer is on the ballot',
@@ -645,7 +685,7 @@ const voting = {
       blocks: [
         {
           t: 'p',
-          text: 'On the **Detailed Vote** ballot, tap an answer\'s text or **Show all ↓** to open it full-screen. Then use Previous and Next to walk through the rest without going back to the list each time.',
+          text: 'On the detailed vote (tap **Detailed vote** under the dropdowns), tap an answer\'s text or **Show all ↓** to open it full-screen. Then use Previous and Next to walk through the rest without going back to the list each time.',
         },
         {
           t: 'keys',
@@ -849,7 +889,7 @@ const scoring = {
           t: 'table',
           head: ['Round', 'Where points come from'],
           rows: [
-            ['Call & Answer', 'Votes from the room: 3 points for each first-place vote, 2 for second, 1 for third.'],
+            ['Call & Answer', 'Votes from the room: 3 points for each first-place vote, 2 for second, 1 for third. In a bluff round, 2 for each vote your made-up answer gets, and 1 for spotting the real one.'],
             ['Trivia', 'Getting it right, plus a speed bonus of up to 5 points: the faster a right answer, the bigger it is.'],
             ['Poll', 'None. A poll counts opinions; nobody scores.'],
             ['Wavelength', 'None. The result shows which words the room landed on together.'],

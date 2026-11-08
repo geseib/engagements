@@ -149,6 +149,9 @@ exports.handler = async (event) => {
         roundKind: item.roundKind || '',
         roundKindBrief: item.roundKindBrief || '',
         roundNoun: item.roundNoun || null,
+        // The bluff round set option: the host's create dialog defaults its
+        // session toggle from it (docs/design/bluff-round/README.md).
+        bluffRound: item.bluffRound === true,
         // The shelf and the author's own words, carried so both list routes
         // describe the same set — NOT because anything here reads them yet.
         // Nothing on the host surface does: its picker shows a set's name,

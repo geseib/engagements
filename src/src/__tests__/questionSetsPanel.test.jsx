@@ -780,3 +780,35 @@ describe('the Updated filter — the owner\'s "or by date"', () => {
     expect(matchesFilters(DATED[0], { tag: 'sprint,retro' })).toBe(false);
   });
 });
+
+/* ------------------------------------------------------ the filter order --- */
+
+/*
+  TYPE FIRST. The owner, 7 Nov 2026: "in the question set explorer it makes
+  sense to have the type filter be the first choice not second." The bar is
+  SetFilterBar's, shared with the host's set dialog, so this order is the
+  order in both explorers (hostQuestionSets.test.jsx pins the host half).
+*/
+describe('the filter bar', () => {
+  test('opens with the engagement type, then topic, status, owner, date and sort', () => {
+    // rejects: the topic select back in front of the type, or a filter dropped.
+    mount();
+    const labels = screen.getAllByRole('combobox').map((el) => el.getAttribute('aria-label'));
+    expect(labels).toEqual([
+      'Filter by engagement type',
+      'Filter by topic',
+      'Filter by status',
+      'Filter by owner',
+      'Filter by when it was updated',
+      'Sort order',
+    ]);
+  });
+
+  test('the type filter still narrows the list from first place', () => {
+    mount();
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'trivia' } });
+    const types = rows().map((r) => within(r).getAllByRole('cell')[1].textContent);
+    expect(types.length).toBeGreaterThan(0);
+    expect(types.every((t) => /trivia/i.test(t))).toBe(true);
+  });
+});

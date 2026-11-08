@@ -339,6 +339,7 @@ const troubleshooting = {
           items: [
             { title: '"Your account exists. It cannot host yet."', text: 'New accounts wait for approval. An admin lets you host: The console: a tour › Someone cannot host yet.' },
             { title: '"This account can\'t be reset by email."', text: 'It signs in with Google, so there is no password to reset. Use **Continue with Google**.' },
+            { title: 'Google signs you in as the wrong account', text: 'Google uses the account this browser is already signed in to, and with only one (usual in Safari) it does not ask. Press **Use a different Google account** under Continue with Google: open your Google accounts, add or switch to the one you want, then come back and continue. **Sign out** ends Engage\'s sign-in fully, so Continue with Google goes back to Google rather than straight in as the last account.' },
             { title: 'No reset code arrives', text: 'An account set up for you with a temporary password has nothing to reset until that password is changed. Sign in with the temporary password: you are asked to choose your own.' },
             { title: 'A console section is missing', text: 'The console shows what your role allows: The console: a tour › What is in the console, and who sees it.' },
           ],

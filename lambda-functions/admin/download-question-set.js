@@ -205,6 +205,8 @@ exports.handler = async (event) => {
       // is precisely the defect this block was rewritten to end.
       const carriesImages = questions.some(q => String(q.Image || q.image || '').trim());
       const carriesAnswerDetails = questions.some(q => String(q.AnswerDetails || q.answerDetails || '').trim());
+      // A bluff round's real answer (docs/design/bluff-round/README.md).
+      const carriesRealAnswer = questions.some(q => String(q.RealAnswer || q.realAnswer || '').trim());
       const carriesBackground = questions.some(q => String(q.Background || q.background || '').trim());
       const carriesRoundKind = questions.some(q => String(q.RoundKind || q.roundKind || '').trim());
       const carriesAttribution = questions.some(q => String(q.SourceAttribution || q.sourceAttribution || '').trim());
@@ -217,7 +219,8 @@ exports.handler = async (event) => {
         + (carriesImages ? ',Image' : '')
         + (carriesRoundKind ? ',RoundKind' : '') + (carriesAttribution ? ',SourceAttribution' : '')
         + (carriesSourceSet ? ',SourceSetId' : '') + (carriesSourceSk ? ',SourceQuestionSk' : '')
-        + (carriesClaudeGets ? ',ClaudeGets' : '') + (carriesClaudeNote ? ',ClaudeNote' : '');
+        + (carriesClaudeGets ? ',ClaudeGets' : '') + (carriesClaudeNote ? ',ClaudeNote' : '')
+        + (carriesRealAnswer ? ',RealAnswer' : '');
       const optionalCells = (q) =>
         (carriesAnswerDetails ? `,"${esc(q.AnswerDetails || q.answerDetails)}"` : '')
         + (carriesBackground ? `,"${esc(q.Background || q.background)}"` : '')
@@ -227,7 +230,8 @@ exports.handler = async (event) => {
         + (carriesSourceSet ? `,"${esc(q.SourceSetId || q.sourceSetId)}"` : '')
         + (carriesSourceSk ? `,"${esc(q.SourceQuestionSk || q.sourceQuestionSk)}"` : '')
         + (carriesClaudeGets ? `,"${esc(q.ClaudeGets || q.claudeGets)}"` : '')
-        + (carriesClaudeNote ? `,"${esc(q.ClaudeNote || q.claudeNote)}"` : '');
+        + (carriesClaudeNote ? `,"${esc(q.ClaudeNote || q.claudeNote)}"` : '')
+        + (carriesRealAnswer ? `,"${esc(q.RealAnswer || q.realAnswer)}"` : '');
 
       if (engagementType === 'trivia') {
         // OptionA..OptionF, which is what the importer reads and what every

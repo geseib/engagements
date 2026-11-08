@@ -196,7 +196,8 @@ describe('#21 host-only Workie controls live in the Session panel', () => {
 
   const src = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
   const fieldNotes = (() => {
-    const at = src.indexOf("{hostPhase === 'FIELD_NOTES' && (");
+    // `!stageQuestionUp`: the question put back up replaces the beat (one screen).
+    const at = src.indexOf("{hostPhase === 'FIELD_NOTES' && !stageQuestionUp && (");
     expect(at).toBeGreaterThan(-1);
     // The branch closes at its own indent; comments are stripped, since the
     // one explaining the move names what moved.

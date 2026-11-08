@@ -21,9 +21,27 @@ const block = (sel) => {
 
 test('every selector is rooted at .prow, and styles.css declares nothing in that scope', () => {
   const selectors = css.match(/[^{}]+(?=\{)/g) || [];
+  // At-rules (@media) are not selectors.
   selectors.flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean)
+    .filter((s) => !s.startsWith('@'))
     .forEach((s) => expect([s, s.startsWith('.prow')]).toEqual([s, true]));
   expect(read('styles.css')).not.toMatch(/\.prow\b/);
+});
+
+/* THE RAIL'S ⋯ (owner, 5 Nov 2026, cut 6): shown on hover and focus-within
+   where a pointer can hover, always on touch, and never removed from the tab
+   order (opacity, never display:none or visibility:hidden). */
+test('the rail\'s ⋯ shows on hover and focus-within, always on touch, and stays keyboard-reachable', () => {
+  const hover = (css.match(/@media \(hover: hover\)\s*\{([\s\S]*?)\n\}/) || [])[1] || '';
+  expect(hover).toMatch(/\.prow\.prow--rail \.prow-more-toggle \{[^}]*opacity:\s*0/);
+  expect(hover).toMatch(/\.prow\.prow--rail:hover \.prow-more-toggle/);
+  expect(hover).toMatch(/\.prow\.prow--rail:focus-within \.prow-more-toggle/);
+  expect(hover).toMatch(/\.prow-more-toggle\[aria-expanded="true"\] \{ opacity: 1; \}/);
+  const touch = (css.match(/@media \(hover: none\)\s*\{([\s\S]*?)\n\}/) || [])[1] || '';
+  expect(touch).toMatch(/\.prow\.prow--rail \.prow-more-toggle \{ opacity: 1; \}/);
+  expect(css).not.toMatch(/prow-more-toggle[^{]*\{[^}]*(display:\s*none|visibility:\s*hidden)/);
+  // Only the rail's rows: the Session menu's and the Remote's keep ⋯ drawn.
+  expect(hover).not.toMatch(/(^|[\s,])\.prow \.prow-more-toggle/);
 });
 
 test('no colour literal, no --primary, never text in --danger', () => {

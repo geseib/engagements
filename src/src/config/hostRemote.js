@@ -437,11 +437,23 @@ export function questionForCard(question = {}) {
   return { ...question, correctAnswer: typeof text === 'string' ? text.trim() : '' };
 }
 
-/** Title search, the one filter `17-remote.html` draws. */
-export function filterRemoteRows(rows = [], search = '') {
+/**
+ * THE PHONE'S PICKER FILTERS (docs/design/question-picker D10, §1.8): the
+ * search matches the title, the question's text and its category, as the
+ * laptop's does (`matchDetail`); `show: 'unasked'` drops the keys in
+ * `asked` (the up-next response's own list, never a tab's memory); and
+ * `category` narrows to one. They change the list only, never the session.
+ */
+export function filterRemoteRows(rows = [], search = '', { show = 'all', category = '', asked = [] } = {}) {
   const needle = String(search || '').trim().toLowerCase();
-  if (!needle) return rows;
-  return rows.filter((row) => (row.title || '').toLowerCase().includes(needle));
+  const spent = new Set((asked || []).map((k) => String(k ?? '').replace(/^QUESTION#/, '')));
+  return rows.filter((row) => {
+    if (needle && ![row.title, row.detail, row.category]
+      .some((text) => String(text || '').toLowerCase().includes(needle))) return false;
+    if (category && row.category !== category) return false;
+    if (show === 'unasked' && spent.has(String(row.id ?? '').replace(/^QUESTION#/, ''))) return false;
+    return true;
+  });
 }
 
 /**

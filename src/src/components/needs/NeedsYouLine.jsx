@@ -6,11 +6,12 @@ import './NeedsYou.css';
 
 /**
  * THE NEEDS-YOU LINE (PLAN §3.2, §4.3), directly under Your part now on a
- * private laptop. ALWAYS THERE, AT ONE HEIGHT: calm ("Nothing needs you
- * now.") when nothing waits, the Soon item in plain words with its quiet
- * button when something can wait, amber with the Now item and its buttons
- * when someone is waiting. Because it never appears or disappears, nothing
- * below it moves (owner review O1).
+ * private laptop. Calm ("Nothing needs you now.") is one quiet muted line
+ * with no box (owner, 5 Nov 2026, cut 4); the Soon item in plain words with
+ * its quiet button, and amber with the Now item and its buttons, are the bar
+ * at its one height. The line is always mounted, so its live region is there
+ * before anything arrives; what is below it moves when the bar appears (the
+ * owner accepted that, reversing review O1).
  *
  * The words change inside a polite live region, so a screen reader hears
  * "Sam wants their name on a new device" without the line stealing focus.

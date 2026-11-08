@@ -2,7 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
-const { inferPromptType, normalizeOutputSections, normalizeAngleWeights } = require('./shared/prompt-shape');
+const { inferPromptType, normalizeOutputSections, normalizeAngleWeights, normalizeSummaryModel } = require('./shared/prompt-shape');
 const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
@@ -77,6 +77,9 @@ exports.handler = async (event) => {
       // This Workie's own round-angle mix (game/round-angles.js). Absent means
       // the house mix.
       angleWeights: rawAngleWeights,
+      // The model that writes this Workie's reads (prompt-shape.js
+      // normalizeSummaryModel). Absent means the house default.
+      summaryModel: rawSummaryModel,
       defaultSettings = {},
       // Common fields
       isDefault = false,
@@ -152,6 +155,9 @@ exports.handler = async (event) => {
     const angleWeightsCheck = normalizeAngleWeights(rawAngleWeights);
     if (!angleWeightsCheck.ok) throw new Error(angleWeightsCheck.error);
     const angleWeights = angleWeightsCheck.weights;
+    const summaryModelCheck = normalizeSummaryModel(rawSummaryModel);
+    if (!summaryModelCheck.ok) throw new Error(summaryModelCheck.error);
+    const summaryModel = summaryModelCheck.model;
     const gameType = normalizeGameType(rawGameType);
 
     // promptType decides which surfaces list this prompt. AIPromptManager used
@@ -392,6 +398,9 @@ exports.handler = async (event) => {
       ...(outputFormat && { outputFormat }),
       ...(outputSections && { outputSections }),
       ...(angleWeights && { angleWeights }),
+      // A setting, not prose: on the row only, plaintext on every scope, read
+      // with the row by get-ai-summary.js's fetchPromptFromS3.
+      ...(summaryModel && { summaryModel }),
       ...(Object.keys(defaultSettings).length > 0 && { defaultSettings }),
       isDefault,
       status,

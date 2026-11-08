@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { readRoundQuestion, listOwnQuestions } = require('./round-question');
+const { bluffSk, publicBluff } = require('./bluff-round');
 const { callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
@@ -339,7 +340,8 @@ exports.handler = async (event) => {
               questionDetail: questionItem.Detail || '',
               category: questionItem.Category,
               field: questionItem.Category,
-              school: questionItem.School || '',
+              // A clue until the reveal (get-question.js says why): '' before RESULTS.
+              school: revealed ? (questionItem.School || '') : '',
               image: questionItem.Image || '', // Optional artwork URL ("Art Title" rounds)
               customInstructions: questionItem.CustomInstructions || '',
               setId: questionSetId,
@@ -384,6 +386,15 @@ exports.handler = async (event) => {
               ...((gameMetadata.Item && gameMetadata.Item.GameType) === POLL ? { poll: pollQuestionOf(questionItem) } : {})
             };
             
+            // A bluff round: on or off and why, never who (bluff-round.js).
+            // The holder's own copy is get-question's, behind their client id.
+            const bluffRow = (await db.send(new GetCommand({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: bluffSk(currentQuestionNumber) }
+            }))).Item;
+            const bluffPublic = publicBluff(bluffRow);
+            if (bluffPublic) currentQuestionData.bluff = bluffPublic;
+
             console.log(`✅ Fetched question data for question ${currentQuestionNumber}: ${currentQuestionData.title}`);
           } else {
             console.warn(`❌ Question not found: ${read.sourceQuestionId} from set ${questionSetId}`);

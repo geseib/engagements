@@ -1,0 +1,974 @@
+{
+  "title": "Around the World: Geography Adventure",
+  "description": "Sixty surprising stops across islands, waterways, wild landscapes and cities—with map mysteries and the forces that shape our planet.",
+  "categories": [
+    "Island Hopping",
+    "Water World",
+    "Nature’s Showstoppers",
+    "Cities with Stories",
+    "Map Detective",
+    "Earth in Motion"
+  ],
+  "questions": [
+    {
+      "category": "Island Hopping",
+      "difficulty": "easy",
+      "question": "Your island adventure reaches the Galápagos. Which country are you visiting?",
+      "options": [
+        "Chile",
+        "Ecuador",
+        "Peru",
+        "Costa Rica"
+      ],
+      "correctIndex": 1,
+      "explanation": "The Galápagos belong to Ecuador, roughly 1,000 km from its mainland. This is a real offshore adventure, not a quick bridge crossing!",
+      "sources": [
+        "https://whc.unesco.org/en/list/1/"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "hard",
+      "question": "Umbrella-shaped dragon’s blood trees give which Yemeni archipelago its otherworldly look?",
+      "options": [
+        "Socotra",
+        "Canary Islands",
+        "Azores",
+        "Seychelles"
+      ],
+      "correctIndex": 0,
+      "explanation": "Socotra is home to the remarkable dragon’s blood tree. The silhouette looks borrowed from science fiction, but the tree is entirely real.",
+      "sources": [
+        "https://www.fao.org/yemen/stories/detail/conserving-the-firmihin-dragon-s-blood-tree-forest/en"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "medium",
+      "question": "Which island’s monumental stone figures are called moai?",
+      "options": [
+        "Crete",
+        "Rapa Nui",
+        "Sicily",
+        "Bali"
+      ],
+      "correctIndex": 1,
+      "explanation": "The moai are monumental sculptures of Rapa Nui, also known as Easter Island. They are cultural works created by people, not mysterious visitors from space.",
+      "sources": [
+        "https://whc.unesco.org/document/154090"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "hard",
+      "question": "Surtsey appeared above the sea in 1963. Which country gained this new volcanic island?",
+      "options": [
+        "Iceland",
+        "Indonesia",
+        "New Zealand",
+        "Japan"
+      ],
+      "correctIndex": 0,
+      "explanation": "Surtsey emerged during an eruption off Iceland. In this case, the landscape really did get a new addition within living memory.",
+      "sources": [
+        "https://www.ust.is/english/visiting-iceland/protected-areas/south/surtsey/"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "easy",
+      "question": "To visit the islands of Komodo National Park, which country goes on your itinerary?",
+      "options": [
+        "Indonesia",
+        "Thailand",
+        "Philippines",
+        "Malaysia"
+      ],
+      "correctIndex": 0,
+      "explanation": "Komodo National Park is in Indonesia. Its rugged islands and surrounding marine waters make this much more than a single-animal destination.",
+      "sources": [
+        "https://whc.unesco.org/en/list/609"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "hard",
+      "question": "Aldabra Atoll belongs to Seychelles. Which ocean surrounds it?",
+      "options": [
+        "Atlantic Ocean",
+        "Indian Ocean",
+        "Arctic Ocean",
+        "Pacific Ocean"
+      ],
+      "correctIndex": 1,
+      "explanation": "Aldabra lies in the Indian Ocean. Its raised coral landscape is a reminder that tiny-looking islands can have enormous natural importance.",
+      "sources": [
+        "https://whc.unesco.org/en/list/185/"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "medium",
+      "question": "At very high tides, which French landmark becomes an island again?",
+      "options": [
+        "Carcassonne",
+        "Mont-Saint-Michel",
+        "Pont du Gard",
+        "Chambord"
+      ],
+      "correctIndex": 1,
+      "explanation": "High tides can surround Mont-Saint-Michel with water. The sea gets to redraw the access map, so this is definitely a place to respect tide guidance.",
+      "sources": [
+        "https://www.ot-montsaintmichel.com/en/practical-information/faq-frequently-asked-questions/"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "medium",
+      "question": "The Rainforests of the Atsinanana run along the eastern side of which island?",
+      "options": [
+        "Sumatra",
+        "Cuba",
+        "Tasmania",
+        "Madagascar"
+      ],
+      "correctIndex": 3,
+      "explanation": "These forests occupy parts of eastern Madagascar. The unfamiliar name is a good excuse to look beyond the usual beach-island postcard.",
+      "sources": [
+        "https://whc.unesco.org/en/list/1257/"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "medium",
+      "question": "Kinabalu Park is in Malaysian Sabah, on which large island?",
+      "options": [
+        "Borneo",
+        "Sulawesi",
+        "Java",
+        "Luzon"
+      ],
+      "correctIndex": 0,
+      "explanation": "Kinabalu Park sits at the northern end of Borneo. An island trip can mean mountain scenery rather than a deckchair.",
+      "sources": [
+        "https://whc.unesco.org/en/list/1012"
+      ]
+    },
+    {
+      "category": "Island Hopping",
+      "difficulty": "medium",
+      "question": "Sigiriya’s spectacular Lion Rock is a landmark of which island country?",
+      "options": [
+        "Cyprus",
+        "Mauritius",
+        "Maldives",
+        "Sri Lanka"
+      ],
+      "correctIndex": 3,
+      "explanation": "Sigiriya is in Sri Lanka, with ancient remains around and atop its dramatic rock. The entrance’s lion imagery makes the name especially memorable.",
+      "sources": [
+        "https://whc.unesco.org/en/list/202"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "easy",
+      "question": "Which ocean basin is so vast that its area exceeds that of all the continents combined?",
+      "options": [
+        "Atlantic",
+        "Arctic",
+        "Indian",
+        "Pacific"
+      ],
+      "correctIndex": 3,
+      "explanation": "The Pacific is that enormous. On a globe turned the right way, Earth makes an excellent case for the nickname water planet.",
+      "sources": [
+        "https://oceanexplorer.noaa.gov/ocean-fact/pacific-size/"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "easy",
+      "question": "Which of the five commonly named ocean basins is the smallest?",
+      "options": [
+        "Atlantic",
+        "Southern",
+        "Indian",
+        "Arctic"
+      ],
+      "correctIndex": 3,
+      "explanation": "The Arctic is the smallest of the five commonly named ocean basins. Smallest is relative: this is still an ocean, not a chilly pond.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/smallestocean.html?vm=r"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "hard",
+      "question": "Which sea is bounded by ocean currents rather than land?",
+      "options": [
+        "Mediterranean Sea",
+        "Baltic Sea",
+        "Sargasso Sea",
+        "Red Sea"
+      ],
+      "correctIndex": 2,
+      "explanation": "Currents define the Sargasso Sea’s boundaries. It breaks the familiar mental picture of a sea tucked between coastlines.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/oceanorsea.html"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "medium",
+      "question": "Which river supplies the thunderous water at Victoria Falls?",
+      "options": [
+        "Niger",
+        "Nile",
+        "Congo",
+        "Zambezi"
+      ],
+      "correctIndex": 3,
+      "explanation": "Victoria Falls interrupts the Zambezi River. All that spectacular spray begins as a river continuing its journey.",
+      "sources": [
+        "https://whc.unesco.org/en/list/509"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "medium",
+      "question": "Iguazú Falls stretches across the border of which pair of countries?",
+      "options": [
+        "Argentina and Brazil",
+        "Ecuador and Colombia",
+        "Bolivia and Paraguay",
+        "Chile and Peru"
+      ],
+      "correctIndex": 0,
+      "explanation": "The falls span Argentina and Brazil. One magnificent waterfall system gives visitors two national perspectives.",
+      "sources": [
+        "https://whc.unesco.org/en/list/303"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "medium",
+      "question": "The Okavango Delta is an inland watery wonder in which country?",
+      "options": [
+        "Ghana",
+        "Kenya",
+        "Botswana",
+        "Senegal"
+      ],
+      "correctIndex": 2,
+      "explanation": "The Okavango Delta lies in northwestern Botswana. Its inland setting is the twist: a delta does not have to sit at an ocean coastline.",
+      "sources": [
+        "https://whc.unesco.org/en/list/1432"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "medium",
+      "question": "Which strait separates Alaska from northeastern Siberia?",
+      "options": [
+        "Bering Strait",
+        "Strait of Hormuz",
+        "Strait of Gibraltar",
+        "Strait of Malacca"
+      ],
+      "correctIndex": 0,
+      "explanation": "The Bering Strait separates Alaska and Siberia. It links the Bering Sea with the Chukchi Sea, giving it a big job between two ocean regions.",
+      "sources": [
+        "https://nauticalcharts.noaa.gov/publications/coast-pilot/files/cp9/CPB9_WEB.pdf"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "medium",
+      "question": "A semi-enclosed coastal water body where a freshwater river meets the sea is called what?",
+      "options": [
+        "A lagoon",
+        "A fjord",
+        "An estuary",
+        "An oxbow lake"
+      ],
+      "correctIndex": 2,
+      "explanation": "That meeting place is an estuary. Think of it as a watery transition zone, rather than a hard line where river suddenly becomes ocean.",
+      "sources": [
+        "https://media.fisheries.noaa.gov/dam-migration/estuary_fact_sheet.pdf"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "medium",
+      "question": "From above, a coral reef forms a ring around a lagoon. What are you looking at?",
+      "options": [
+        "A delta",
+        "An isthmus",
+        "A fjord",
+        "An atoll"
+      ],
+      "correctIndex": 3,
+      "explanation": "An atoll is a ring-like coral reef enclosing a lagoon. The aerial view really does help the geography click.",
+      "sources": [
+        "https://apps.usgs.gov/thesaurus/term-simple.php?code=GC-185&thcode=62"
+      ]
+    },
+    {
+      "category": "Water World",
+      "difficulty": "medium",
+      "question": "Roughly how much of Earth’s surface is covered by the ocean?",
+      "options": [
+        "29 percent",
+        "90 percent",
+        "50 percent",
+        "71 percent"
+      ],
+      "correctIndex": 3,
+      "explanation": "The ocean covers about 71 percent of Earth’s surface. Our land-focused maps can make it easy to forget which side wins the area contest.",
+      "sources": [
+        "https://www.noaa.gov/jetstream/ocean"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "easy",
+      "question": "Most of Yellowstone National Park lies in which U.S. state?",
+      "options": [
+        "Colorado",
+        "Nevada",
+        "Wyoming",
+        "Utah"
+      ],
+      "correctIndex": 2,
+      "explanation": "About 96 percent of Yellowstone lies in Wyoming. Montana and Idaho share the park too, so the state line is not the park boundary.",
+      "sources": [
+        "https://www.nps.gov/yell/planyourvisit/parkfacts.htm"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "medium",
+      "question": "Kilimanjaro’s summit rises in which country?",
+      "options": [
+        "Uganda",
+        "Rwanda",
+        "Ethiopia",
+        "Tanzania"
+      ],
+      "correctIndex": 3,
+      "explanation": "Kilimanjaro is in Tanzania. Its 5,895-metre summit makes it an unmistakable feature of the African landscape.",
+      "sources": [
+        "https://whc.unesco.org/en/list/403/"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "medium",
+      "question": "The dramatic sea towers of Ha Long Bay are made mainly of which rock?",
+      "options": [
+        "Basalt",
+        "Granite",
+        "Limestone",
+        "Slate"
+      ],
+      "correctIndex": 2,
+      "explanation": "Ha Long Bay’s islands and islets are limestone. Nature has turned rock and water into a skyline without a single skyscraper.",
+      "sources": [
+        "https://whc.unesco.org/en/list/672/"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "medium",
+      "question": "The Giant’s Causeway’s interlocking columns are made of which volcanic rock?",
+      "options": [
+        "Chalk",
+        "Basalt",
+        "Sandstone",
+        "Marble"
+      ],
+      "correctIndex": 1,
+      "explanation": "The columns are basalt, associated with ancient volcanic activity. They can look designed, but geology did the construction.",
+      "sources": [
+        "https://whc.unesco.org/en/list/369/"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "hard",
+      "question": "Pamukkale’s name is commonly translated as what?",
+      "options": [
+        "Silver Mountain",
+        "White Fortress",
+        "Cotton Palace",
+        "Crystal Garden"
+      ],
+      "correctIndex": 2,
+      "explanation": "Pamukkale means Cotton Palace. Its pale mineral terraces explain the nickname far better than any actual cotton crop could.",
+      "sources": [
+        "https://whc.unesco.org/en/list/485"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "medium",
+      "question": "What mineral gives White Sands National Park its unusual pale dunes?",
+      "options": [
+        "Quartz",
+        "Olivine",
+        "Gypsum",
+        "Mica"
+      ],
+      "correctIndex": 2,
+      "explanation": "White Sands is famous for gypsum sand. Sand describes grain size, not one compulsory mineral recipe.",
+      "sources": [
+        "https://www.nps.gov/whsa/learn/gypsum.htm/index.htm"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "medium",
+      "question": "Wadi Rum’s dramatic desert landscape is in which country?",
+      "options": [
+        "Jordan",
+        "Oman",
+        "Egypt",
+        "Morocco"
+      ],
+      "correctIndex": 0,
+      "explanation": "Wadi Rum is in southern Jordan. Its desert setting shows how a landscape can be visually rich without being green.",
+      "sources": [
+        "https://whc.unesco.org/en/list/1377/"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "hard",
+      "question": "Te Wāhipounamu’s mountains and fiords occupy which part of New Zealand?",
+      "options": [
+        "Northeastern South Island",
+        "Southwestern South Island",
+        "Northeastern North Island",
+        "Central North Island"
+      ],
+      "correctIndex": 1,
+      "explanation": "Te Wāhipounamu lies in the southwest of the South Island. Mountains, glaciers, forests and fiords pack an impressive variety into this region.",
+      "sources": [
+        "https://whc.unesco.org/en/list/551"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "medium",
+      "question": "Crater Lake sits on the crest of the Cascades in which U.S. state?",
+      "options": [
+        "Washington",
+        "Idaho",
+        "California",
+        "Oregon"
+      ],
+      "correctIndex": 3,
+      "explanation": "Crater Lake is in southern Oregon. The deep blue water occupies a volcanic landscape rather than a crater punched out by a space rock.",
+      "sources": [
+        "https://home.nps.gov/places/crater-lake.htm"
+      ]
+    },
+    {
+      "category": "Nature’s Showstoppers",
+      "difficulty": "easy",
+      "question": "Which river runs through the Grand Canyon?",
+      "options": [
+        "Missouri",
+        "Mississippi",
+        "Colorado",
+        "Columbia"
+      ],
+      "correctIndex": 2,
+      "explanation": "The Colorado River runs through the Grand Canyon and played the central role in carving it. Water can be a very patient sculptor.",
+      "sources": [
+        "https://www.nps.gov/grca/learn/nature/grca-geology.htm"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "easy",
+      "question": "Which Italian city spreads across 118 small islands in a lagoon?",
+      "options": [
+        "Verona",
+        "Venice",
+        "Florence",
+        "Bologna"
+      ],
+      "correctIndex": 1,
+      "explanation": "Venice’s historic city spreads across 118 small islands. Here, water is part of the street-plan story, not just the scenery.",
+      "sources": [
+        "https://whc.unesco.org/en/list/394"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "medium",
+      "question": "Machu Picchu stands where the Peruvian Andes meet the edge of which great basin?",
+      "options": [
+        "Murray–Darling Basin",
+        "Danube Basin",
+        "Amazon Basin",
+        "Congo Basin"
+      ],
+      "correctIndex": 2,
+      "explanation": "Machu Picchu occupies the meeting zone of the Andes and Amazon Basin. Its setting is a mountain-and-forest story as well as an architectural one.",
+      "sources": [
+        "https://whc.unesco.org/en/list/274"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "medium",
+      "question": "Petra, the ancient city famous for rock-cut monuments, is in which country?",
+      "options": [
+        "Tunisia",
+        "Lebanon",
+        "Jordan",
+        "Greece"
+      ],
+      "correctIndex": 2,
+      "explanation": "Petra is in Jordan. It is a city where the rock is part of the architecture, not merely the ground underneath it.",
+      "sources": [
+        "https://whc.unesco.org/en/list/326"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "medium",
+      "question": "You are exploring the historic medina of Fez. Which country are you in?",
+      "options": [
+        "Egypt",
+        "Morocco",
+        "Tunisia",
+        "Algeria"
+      ],
+      "correctIndex": 1,
+      "explanation": "Fez is in Morocco. Its historic medina preserves a distinctive urban landscape shaped over many centuries.",
+      "sources": [
+        "https://whc.unesco.org/en/list/170/"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "hard",
+      "question": "Timbuktu is a real city, not just a phrase for far away. In which country is it?",
+      "options": [
+        "Mali",
+        "Mauritania",
+        "Chad",
+        "Niger"
+      ],
+      "correctIndex": 0,
+      "explanation": "Timbuktu is in Mali. A place that often gets used as shorthand for remoteness deserves its own real pin on the map.",
+      "sources": [
+        "https://ambamali.ca/en/timbuktu/"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "medium",
+      "question": "Kathmandu, Patan and Bhaktapur are the three ancient cities of a valley in which country?",
+      "options": [
+        "Bangladesh",
+        "Bhutan",
+        "Nepal",
+        "Laos"
+      ],
+      "correctIndex": 2,
+      "explanation": "They are in Nepal’s Kathmandu Valley. The valley brings three historic city stories into one geographical setting.",
+      "sources": [
+        "https://ntb.gov.np/kathmandu-valley"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "hard",
+      "question": "The Aztec city beneath modern Mexico City began on an island in which lake?",
+      "options": [
+        "Lake Nicaragua",
+        "Lake Titicaca",
+        "Lake Atitlán",
+        "Lake Texcoco"
+      ],
+      "correctIndex": 3,
+      "explanation": "Tenochtitlan was founded on an island in Lake Texcoco. Modern Mexico City has a watery origin that its streets do not immediately advertise.",
+      "sources": [
+        "https://whc.unesco.org/en/list/412"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "medium",
+      "question": "Which planned capital’s design is associated with Lúcio Costa and architect Oscar Niemeyer?",
+      "options": [
+        "Brasília",
+        "Montevideo",
+        "Lima",
+        "Buenos Aires"
+      ],
+      "correctIndex": 0,
+      "explanation": "Brasília combines Costa’s city plan with Niemeyer’s architecture. In this capital, the layout itself is part of the landmark.",
+      "sources": [
+        "https://whc.unesco.org/en/list/445"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "medium",
+      "question": "Istanbul’s famous setting sits at the meeting of which two continents?",
+      "options": [
+        "North America and South America",
+        "Asia and Africa",
+        "Europe and Africa",
+        "Europe and Asia"
+      ],
+      "correctIndex": 3,
+      "explanation": "Istanbul is associated with the meeting of Europe and Asia around the Bosphorus. This is a city whose location helps explain its long historical importance.",
+      "sources": [
+        "https://whc.unesco.org/document/106679"
+      ]
+    },
+    {
+      "category": "Cities with Stories",
+      "difficulty": "easy",
+      "question": "Which river is central to Cairo’s geography and history?",
+      "options": [
+        "Nile",
+        "Jordan",
+        "Tigris",
+        "Euphrates"
+      ],
+      "correctIndex": 0,
+      "explanation": "The Nile is central to Cairo’s story. The city’s ports, canals and water infrastructure show how geography shapes urban life.",
+      "sources": [
+        "https://whc.unesco.org/en/list/89"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "easy",
+      "question": "Which imaginary line is assigned latitude 0°?",
+      "options": [
+        "Arctic Circle",
+        "Equator",
+        "Tropic of Cancer",
+        "Prime meridian"
+      ],
+      "correctIndex": 1,
+      "explanation": "The equator is latitude 0°. It provides the starting line for measuring how far north or south a place lies.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/latitude.html"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "medium",
+      "question": "A map pin reads 25° S. What does that tell you?",
+      "options": [
+        "It is 25 km from a pole",
+        "It is south of the equator",
+        "It is south of the prime meridian",
+        "It is in the Southern Ocean"
+      ],
+      "correctIndex": 1,
+      "explanation": "The S means south latitude, measured from the equator. It tells you a hemisphere, not the country or the kind of landscape.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/latitude.html"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "medium",
+      "question": "Which named line lies at roughly 23.5° north latitude?",
+      "options": [
+        "Equator",
+        "Tropic of Cancer",
+        "Tropic of Capricorn",
+        "Antarctic Circle"
+      ],
+      "correctIndex": 1,
+      "explanation": "The Tropic of Cancer lies about 23.5° north. Capricorn is its southern counterpart, so the two tropical names are not interchangeable.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/latitude.html"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "medium",
+      "question": "Unlike parallel latitude lines, lines of longitude meet where?",
+      "options": [
+        "At the equator",
+        "At the poles",
+        "At sea level",
+        "At the tropics"
+      ],
+      "correctIndex": 1,
+      "explanation": "Lines of longitude converge at the poles. A flat map can hide that globe-shaped detail.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/longitude.html"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "hard",
+      "question": "The antimeridian opposite 0° longitude has what longitude?",
+      "options": [
+        "180°",
+        "270° east or west",
+        "90°",
+        "45°"
+      ],
+      "correctIndex": 0,
+      "explanation": "The antimeridian is at 180° longitude. It supplies the broad geographical basis for the International Date Line, though that boundary does not follow it perfectly.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/longitude.html"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "medium",
+      "question": "The International Date Line runs mainly through which ocean?",
+      "options": [
+        "Arctic",
+        "Indian",
+        "Atlantic",
+        "Pacific"
+      ],
+      "correctIndex": 3,
+      "explanation": "The date line runs mainly through the Pacific. Its bends remind us that calendar boundaries are human arrangements laid over geography.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/international-date-line.html"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "easy",
+      "question": "On a topographic map, a contour line joins points with the same what?",
+      "options": [
+        "Elevation",
+        "Rainfall",
+        "Temperature",
+        "Population"
+      ],
+      "correctIndex": 0,
+      "explanation": "Contour lines connect equal elevations. They let a flat sheet of paper describe a very un-flat landscape.",
+      "sources": [
+        "https://www.usgs.gov/faqs/what-a-topographic-map"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "medium",
+      "question": "Your hiking map’s contour lines suddenly crowd together. What lies ahead?",
+      "options": [
+        "A wider river",
+        "A flatter plain",
+        "A steeper slope",
+        "A lower sea level"
+      ],
+      "correctIndex": 2,
+      "explanation": "Closely spaced contour lines indicate a steep slope. Your map is politely warning your legs before the climb begins.",
+      "sources": [
+        "https://pubs.usgs.gov/gip/TopographicMapSymbols/topomapsymbols.pdf"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "hard",
+      "question": "On a USGS topographic map, a blue dashed-and-dotted stream line indicates what?",
+      "options": [
+        "An underground pipeline",
+        "An irrigation canal",
+        "A perennial stream",
+        "An intermittent stream"
+      ],
+      "correctIndex": 3,
+      "explanation": "USGS uses a dashed-and-dotted blue line for an intermittent stream. That is different from the solid blue line used for a perennial stream.",
+      "sources": [
+        "https://www.usgs.gov/ngp-standards-and-specifications/us-topo-cartographic-specifications-map-symbol-guide"
+      ]
+    },
+    {
+      "category": "Map Detective",
+      "difficulty": "medium",
+      "question": "On a map scaled 1:24,000, one inch represents how many feet on the ground?",
+      "options": [
+        "12,000 feet",
+        "24,000 feet",
+        "240 feet",
+        "2,000 feet"
+      ],
+      "correctIndex": 3,
+      "explanation": "One map inch represents 24,000 real inches, which is 2,000 feet. A tiny ruler measurement can stand for a surprisingly long walk.",
+      "sources": [
+        "https://www.usgs.gov/ngp-standards-and-specifications/us-topo-cartographic-specifications-map-symbol-guide"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "easy",
+      "question": "Which moving natural force typically scours a valley into a broad U-shape?",
+      "options": [
+        "A coastal current",
+        "A landslide",
+        "A river",
+        "A glacier"
+      ],
+      "correctIndex": 3,
+      "explanation": "Glaciers can widen and steepen valleys into a U-shape. A glacier is not just frozen scenery: it is a slow-moving landscape tool.",
+      "sources": [
+        "https://www.usgs.gov/geology-and-ecology-of-national-parks/geology-glacier-national-park"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "A long, narrow sea inlet in a steep-sided glacial valley is called what?",
+      "options": [
+        "A fjord",
+        "A delta",
+        "A lagoon",
+        "An estuary"
+      ],
+      "correctIndex": 0,
+      "explanation": "That sea-filled glacial valley is a fjord. It is a watery clue to the ice that once shaped the coast.",
+      "sources": [
+        "https://apps.usgs.gov/thesaurus/term-simple.php?code=398&thcode=3"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "In a rain shadow, which side of a mountain range tends to receive less precipitation?",
+      "options": [
+        "Only the summit",
+        "Leeward side",
+        "Both sides always equally",
+        "Windward side"
+      ],
+      "correctIndex": 1,
+      "explanation": "The leeward side tends to be drier. Mountains can change the weather story dramatically over a surprisingly short map distance.",
+      "sources": [
+        "https://pubs.usgs.gov/ha/ha730/ch_c/C-text1.html"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "Hawaiian volcanoes are classic examples of volcanism above what?",
+      "options": [
+        "A boundary where two plates slide past each other",
+        "A subduction zone at a plate edge",
+        "A hotspot beneath a tectonic plate",
+        "A continent–continent collision zone"
+      ],
+      "correctIndex": 2,
+      "explanation": "Hawaii is a classic hotspot example within a plate. Not every volcano needs to sit on a plate boundary.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/volcanoes.html"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "The volcanic belt nicknamed the Ring of Fire surrounds which ocean?",
+      "options": [
+        "Atlantic",
+        "Indian",
+        "Pacific",
+        "Arctic"
+      ],
+      "correctIndex": 2,
+      "explanation": "The Ring of Fire encircles the Pacific region. The name describes a broad belt of volcanic activity, not a literal burning ring.",
+      "sources": [
+        "https://oceanservice.noaa.gov/facts/volcanoes.html"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "hard",
+      "question": "Crater Lake’s basin formed chiefly when Mount Mazama did what?",
+      "options": [
+        "Collapsed after a major eruption",
+        "Was excavated by a glacier",
+        "Was pulled apart along a rift valley",
+        "Was struck by a meteorite"
+      ],
+      "correctIndex": 0,
+      "explanation": "Mount Mazama erupted and collapsed, producing a caldera that later held the lake. The word crater can tempt you toward the wrong space-impact story.",
+      "sources": [
+        "https://home.nps.gov/crla/learn/nature/mountmazamageology.htm"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "What deposited the pale terraces at Pamukkale?",
+      "options": [
+        "Windblown snow",
+        "Mineral-rich spring water",
+        "Glacial ice",
+        "Coral reef growth"
+      ],
+      "correctIndex": 1,
+      "explanation": "Mineral-rich spring water built Pamukkale’s terraces. The snowy appearance is a visual trick: the white landscape is mineral, not a permanent snowdrift.",
+      "sources": [
+        "https://whc.unesco.org/en/list/485"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "In the classic explanation of atoll formation, what happens to the central volcanic island while the reef keeps growing?",
+      "options": [
+        "It remains fixed while the lagoon drains",
+        "It gradually subsides",
+        "It rises while the reef retreats",
+        "It grows outward until it covers the reef"
+      ],
+      "correctIndex": 1,
+      "explanation": "The island gradually subsides while coral growth can maintain a reef around it. Over geological time, a ring and lagoon can remain where an island once stood.",
+      "sources": [
+        "https://science.nasa.gov/earth/earth-observatory/atafu-atoll-tokelau-37753/"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "What natural processes break White Sands’ gypsum crystals into smaller sand grains?",
+      "options": [
+        "Wind and water",
+        "Glacial grinding and ice movement",
+        "Ocean waves and tides",
+        "Volcanic heat and lava flows"
+      ],
+      "correctIndex": 0,
+      "explanation": "Wind and water break the crystals into smaller particles. Those brilliant dunes begin with minerals being worked down to sand-sized grains.",
+      "sources": [
+        "https://home.nps.gov/whsa/learn/geology-of-white-sands.htm"
+      ]
+    },
+    {
+      "category": "Earth in Motion",
+      "difficulty": "medium",
+      "question": "Spring tides are associated with which arrangement of the Sun, Moon and Earth?",
+      "options": [
+        "Sun and Moon at their greatest distances from Earth",
+        "Sun and Moon at right angles as seen from Earth",
+        "All three roughly aligned",
+        "Sun and Moon at their closest distances to Earth"
+      ],
+      "correctIndex": 2,
+      "explanation": "Spring tides occur around new and full moons, when the three are roughly aligned. Spring here is about the tidal range, not the season.",
+      "sources": [
+        "https://www.noaa.gov/jetstream/ocean/tides"
+      ]
+    }
+  ]
+}

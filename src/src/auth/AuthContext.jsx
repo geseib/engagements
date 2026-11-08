@@ -5,7 +5,7 @@ import {
   AuthenticationDetails,
   CognitoUserAttribute 
 } from 'amazon-cognito-identity-js';
-import { hostedLogoutUrl, isGoogleUsername } from './googleSignIn';
+import { hostedLogoutUrl, isGoogleSession } from './googleSignIn';
 import { navigateTo } from './navigate';
 import { onSessionExpired, clearSessionExpired } from './sessionExpiry';
 
@@ -309,7 +309,12 @@ export const AuthProvider = ({ children }) => {
     // the local signOut below does not end — and while it lives, "Continue
     // with Google" comes straight back as the same account (googleSignIn.js,
     // hostedLogoutUrl). Read before the local session is forgotten.
-    const leaveHostedSession = Boolean(cognitoUser) && isGoogleUsername(cognitoUser.getUsername());
+    //
+    // The username covers a user Cognito made from Google; the ID token's
+    // `identities` claim also covers a native account linked to Google.
+    let idPayload = null;
+    try { idPayload = currentUser?.session?.getIdToken?.()?.payload || null; } catch (_) { idPayload = null; }
+    const leaveHostedSession = Boolean(cognitoUser) && isGoogleSession(cognitoUser.getUsername(), idPayload);
     if (cognitoUser) {
       cognitoUser.signOut();
     }
@@ -319,7 +324,17 @@ export const AuthProvider = ({ children }) => {
     setTempUser(null);
     if (leaveHostedSession) {
       const url = hostedLogoutUrl();
-      if (url) navigateTo(url);
+      if (url) {
+        navigateTo(url);
+        // THE CALLERS' OWN NAVIGATION CANCELLED THIS (2026-11-04). The host
+        // page and the admin page sign out with `signOut(); location.href =
+        // '/auth'`, and App.jsx with `signOut(); location.reload()`. A later
+        // navigation in the same task replaces an earlier one that has not
+        // committed, so /logout was never reached from any of them and the
+        // hosted session lived on. Saying it again on the next tick makes
+        // /logout the last word whatever the caller does after us.
+        setTimeout(() => navigateTo(url), 0);
+      }
     }
   };
 

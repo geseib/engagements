@@ -48,6 +48,11 @@
  *               has", "as usual", "signals that … is to") — review #46's
  *               "the current habit is to build visible tooling first" — unless
  *               an answer says the same thing in its own words.
+ *   history     a claim about the session's earlier rounds ("the first time
+ *               the four of them agreed this session", "three in a row") the
+ *               read was given no history for, or that the history it was
+ *               given contradicts (vote.history, session-so-far.js; session
+ *               8741).
  *   filler      generic AI hype ("game-changer", "powerful", "delve"…). Low
  *               weight: reported only when another issue is, or when three or
  *               more appear.
@@ -350,6 +355,49 @@ function claimIssues(text, vote, voice) {
   return issues;
 }
 
+// ---- claims about the session's earlier rounds ------------------------------
+
+/*
+  SESSION 8741 (dev, trivia, round 14): "it was a clean sweep, and the first
+  time the four of them agreed on something this session" — after seven
+  earlier rounds had everyone right. The read was handed no earlier round at
+  all. A "first time", "in a row" or streak claim ABOUT THE ROOM is only as
+  good as the history the read was given (vote.history, from
+  session-so-far.js): absent, it is unsupported; present, a "first time"
+  everyone-right claim needs no earlier everyone-right round, and a run needs
+  a run of at least two.
+
+  Only in a sentence that is about the room's session: a session word (this
+  session, tonight, so far) or an agreement word (agreed, the four of them,
+  everyone, clean sweep, 4 of 4). "Who remembers the first time they watched
+  Platoon?" is a discussion question, not a claim, and passes.
+*/
+const FIRST_CUE = /\b(?:for the first time|the first time|first time|never before)\b/gi;
+const RUN_CUE = /\b(?:in a row|straight rounds?|streak|back[\s-]to[\s-]back|consecutive(?:ly)?)\b/gi;
+const SESSION_SCOPE = /\b(?:this session|the session|tonight|today|so far|all session|this game|all game|all night|yet)\b/i;
+const AGREEMENT = new RegExp(
+  '\\b(?:agreed|agree|agreement|everyone|everybody|every player|whole room|clean sweep|unanimous(?:ly)?|perfect round'
+  + `|all (?:of )?(?:them|you|us|the players)|(?:all )?(?:${['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'].join('|')}) of (?:them|you|us)`
+  + '|\\d+ (?:of|out of) \\d+|all (?:two|three|four|five|six|seven|eight|nine|ten))\\b', 'i');
+
+function historyIssues(text, history) {
+  const issues = [];
+  for (const sentence of String(text || '').split(/(?<=[.!?])\s+|\n+/)) {
+    const aboutRoom = SESSION_SCOPE.test(sentence) || AGREEMENT.test(sentence);
+    if (!aboutRoom) continue;
+    const everyoneClaim = AGREEMENT.test(sentence);
+    for (const m of sentence.matchAll(FIRST_CUE)) {
+      const ok = history && (!everyoneClaim || Number(history.priorAllRight) === 0);
+      if (!ok) issues.push({ kind: 'history', token: m[0], quote: sentence.trim(), why: 'not something the earlier rounds show' });
+    }
+    for (const m of sentence.matchAll(RUN_CUE)) {
+      const ok = history && (!everyoneClaim || Number(history.streak) >= 2);
+      if (!ok) issues.push({ kind: 'history', token: m[0], quote: sentence.trim(), why: 'not something the earlier rounds show' });
+    }
+  }
+  return issues;
+}
+
 // ---- next steps written as decided -----------------------------------------
 
 const STEP_HEADING = /next\s*steps?|actions?|to\s+try|follow[\s-]?ups?|what\s+now|try\s+next|steps?\s+to\s+take/i;
@@ -629,7 +677,7 @@ function dedupe(issues) {
  * @param {string|string[]} args.material  what the model was given as the room's/author's material
  * @param {Object} args.vote       { points: [each answer's points], votes, answered, joined,
  *                                   round, consensus (consensusLabel), names: [player names],
- *                                   rankCount, unanimous? }
+ *                                   rankCount, unanimous?, history?: { priorAllRight, streak } }
  * @param {string} args.voice      the persona's voice text
  * @param {string} args.instructions  the prompt's own instruction text (template, contract,
  *                                   rules) — NOT material: an owner found only here is the
@@ -648,6 +696,7 @@ function checkRead({ read = '', material = '', vote = {}, voice = '', instructio
   const hard = dedupe([
     ...numberIssues(text, nums, rankCount),
     ...claimIssues(text, vote, voice),
+    ...historyIssues(text, vote.history),
     ...commitmentIssues(text, vote.names),
     ...ownerIssues(text, { names: vote.names, materialText, instructions: String(instructions || '') }),
     ...practiceIssues(text, { materialText, names: vote.names }),
@@ -683,6 +732,7 @@ const NOTE_LINES = {
   filler: (q) => `- "${q}" is generic filler: cut it, or say the specific thing the material shows.`,
   owner: (q) => `- "${q}" is an owner the answers never named: use a person or a role an answer names.`,
   practice: (q) => `- "${q}" says what the organisation already does; the answers only propose it: say it as their proposal.`,
+  history: (q) => `- "${q}" claims something about earlier rounds that THE SESSION SO FAR does not show: remove it, or say only what those lines state.`,
 };
 
 /** The exact revision note for one more call. */

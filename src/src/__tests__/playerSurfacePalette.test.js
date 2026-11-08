@@ -570,7 +570,10 @@ describe('the shell is what makes "scroll to read, never to act" structural', ()
     // places it is easiest to cheat: the rank buttons and the Show-all control.
     // The dock's buttons are ui/Button at 56px since step 5a (components/ui/Button.css).
     expect(block(stripped(read('components', 'ui', 'Button.css')), '.ui-btn--h56')).toMatch(/min-height:\s*56px/);
-    for (const sel of ['.plr-rk', '.plr-slot', '.plr-mode', '.plr-more', '.plr-chip']) {
+    // `.plr-lost > summary` is the lobby's "Lost this page?" disclosure; the
+    // two-button `.plr-mode` toggle it sat beside is gone (5 Nov 2026), its
+    // job taken by a `.plr-more` link under the ballot.
+    for (const sel of ['.plr-rk', '.plr-slot', '.plr-more', '.plr-chip', '.plr-lost > summary']) {
       expect(block(CSS, sel)).toMatch(/min-height:\s*var\(--plr-tap\)/);
     }
     expect(block(CSS, '.plr')).toMatch(/--plr-tap:\s*44px/);

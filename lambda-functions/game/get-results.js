@@ -6,6 +6,7 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-be
 // switch is on (claude-route.js).
 const claudeRoute = require('./claude-route');
 const { readRoundByNumber } = require('./round-question');
+const { bluffSk, scoreBluff, realAnswerOf, publicBluff } = require('./bluff-round');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
 const { callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
@@ -692,6 +693,7 @@ const handle = async (event) => {
                 voteTallies: row.VoteTallies,
                 totalVotes: Number(row.TotalVotes) || 0,
                 maxScore: Number(row.MaxVotes) || 0,
+                ...(row.Bluff ? { bluff: row.Bluff } : {}),
                 timestamp: row.CompletedAt || null,
                 stored: true,
                 // Issue #35: the phone headed an earlier round "Round 1" only.
@@ -953,6 +955,33 @@ const handle = async (event) => {
     });
 
     /*
+      A BLUFF ROUND PAYS DIFFERENTLY (bluff-round.js; owner, 2026-11): a pick
+      for a made-up answer is 2 to its author, a pick for the real one is 1 to
+      the truth-holder and 1 to the voter who spotted it. Only the first-place
+      pick counts. The tallies are rewritten to say so — firstPlace is the
+      picks an answer drew, totalScore what it earned its author — so every
+      screen that reads them shows the bluff round's numbers.
+    */
+    const bluffRow = (await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: bluffSk(paddedQuestionId) }
+    }))).Item;
+    const bluffActive = Boolean(bluffRow && bluffRow.Status === 'active' && bluffRow.HolderName);
+    let bluffScore = null;
+    if (bluffActive) {
+      bluffScore = scoreBluff({ answers, votes, holderName: bluffRow.HolderName });
+      Object.keys(voteTallies).forEach((idx) => {
+        const t = voteTallies[idx];
+        t.firstPlace = bluffScore.votesFor[idx] || 0;
+        t.secondPlace = 0;
+        t.thirdPlace = 0;
+        t.totalScore = bluffScore.answerPoints[idx] || 0;
+        t.bluffRole = Number(idx) === bluffScore.holderIdx ? 'real' : 'bluff';
+        answerScores[idx] = t.totalScore;
+      });
+    }
+
+    /*
       THE ROOM'S ORDER ON THE WAY OUT (answer-order.js). The ballots were
       tallied against the answers in SK order above, as they are stored. What
       leaves this handler is keyed by DISPLAY position instead — the numbers
@@ -966,13 +995,18 @@ const handle = async (event) => {
     const shownTallies = Object.fromEntries(
       shownOrder.map((canonical, pos) => [String(pos), { ...voteTallies[canonical], ballot: pos + 1 }]));
 
-    // Find winners (highest score)
+    // Find winners (highest score). In a bluff round the winners are the
+    // bluffers who fooled the most people, never the real answer.
     const maxScore = Math.max(...Object.values(answerScores));
     const winners = [];
-    
+    const winnerScore = (index) => (bluffActive
+      ? (voteTallies[index].bluffRole === 'bluff' ? (bluffScore.votesFor[index] || 0) : 0)
+      : answerScores[index]);
+    const maxWinner = Math.max(0, ...shownOrder.map((canonical) => (voteTallies[canonical] ? winnerScore(canonical) : 0)));
+
     // With no points given, every response ties at 0 and none of them won.
     shownOrder.map((canonical) => [canonical, answerScores[canonical]]).forEach(([index, score]) => {
-      if (maxScore > 0 && score === maxScore && voteTallies[index]) {
+      if (maxWinner > 0 && voteTallies[index] && winnerScore(index) === maxWinner) {
         winners.push({
           playerName: voteTallies[index].playerName,
           answerText: voteTallies[index].answerText,
@@ -981,9 +1015,22 @@ const handle = async (event) => {
       }
     });
 
+    // WHAT EACH PLAYER EARNED THIS ROUND. Normally the points their answer
+    // drew; in a bluff round the bluff points, which also pay a voter who
+    // spotted the real answer (bluff-round.js scoreBluff).
+    const roundPoints = {};
+    if (bluffActive) {
+      Object.assign(roundPoints, bluffScore.points);
+    } else {
+      Object.values(voteTallies).forEach((tally) => {
+        if (tally.playerName) roundPoints[tally.playerName] = (roundPoints[tally.playerName] || 0) + tally.totalScore;
+      });
+    }
+
     // Update player scores using simplified PLAYER#{playerName}#SCORE architecture
     console.log(`🏆 Updating player scores for ${gameId} using simplified score records`);
-    const playerUpdatePromises = Object.entries(voteTallies).map(async ([index, tally]) => {
+    const playerUpdatePromises = Object.entries(roundPoints).map(async ([playerName, points]) => {
+      const tally = { playerName, totalScore: points };
       if (tally.playerName && tally.totalScore > 0) {
         try {
           // Use playerName directly in score key for simplicity
@@ -1058,6 +1105,33 @@ const handle = async (event) => {
     await recordScoresCounted(event, gameId, paddedQuestionId);
     await enterResultsState(event, gameId, paddedQuestionId);
 
+    /*
+      THE REVEAL (bluff-round.js). Which answer was real, who held it, who
+      fooled the most and who spotted it, plus each player's bluff points.
+      Closing the round reveals authors anyway (AuthorsRevealed), so the
+      holder's name is in step with the round's anonymity. Stored on the
+      RESULTS row as `Bluff`, sealed with the other `results` fields.
+    */
+    let bluffReveal = null;
+    if (bluffActive) {
+      const read = await readRoundByNumber(db, process.env.TABLE_NAME, gameId, paddedQuestionId).catch(() => null);
+      const real = realAnswerOf(read && read.question);
+      const holderPos = bluffScore.holderIdx === -1 ? -1 : shownOrder.indexOf(bluffScore.holderIdx);
+      bluffReveal = {
+        realAnswer: real ? real.realAnswer : '',
+        holderName: bluffRow.HolderName,
+        holderAnswered: bluffScore.holderIdx !== -1,
+        holderAnswer: bluffScore.holderIdx !== -1 ? (answers[bluffScore.holderIdx].Answer || '') : '',
+        realBallot: holderPos === -1 ? null : holderPos + 1,
+        realVotes: bluffScore.holderIdx !== -1 ? (bluffScore.votesFor[bluffScore.holderIdx] || 0) : 0,
+        topBluffers: bluffScore.topBluffers,
+        spotters: bluffScore.spotters,
+        points: bluffScore.points,
+      };
+    } else if (bluffRow && bluffRow.Status) {
+      bluffReveal = publicBluff(bluffRow);
+    }
+
     const result = {
       gameId: gameId,
       questionId: paddedQuestionId,
@@ -1065,6 +1139,7 @@ const handle = async (event) => {
       winners: winners,
       totalVotes: votes.length,
       maxScore: maxScore,
+      ...(bluffReveal ? { bluff: bluffReveal } : {}),
       timestamp: new Date().toISOString()
     };
 
@@ -1085,6 +1160,7 @@ const handle = async (event) => {
         VoteTallies: shownTallies,
         MaxVotes: maxScore,
         TotalVotes: votes.length,
+        ...(bluffReveal ? { Bluff: bluffReveal } : {}),
         CompletedAt: new Date().toISOString(),
         ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
       })

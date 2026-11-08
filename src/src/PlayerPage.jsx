@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useMediaQuery from './hooks/useMediaQuery';
 import Button from './components/ui/Button';
 import webSocketClient from './WebSocketClient';
 import Icon from './components/Icon';
@@ -22,9 +23,10 @@ import { getClientId, classifyJoinFailure } from './components/joinResult';
 import SessionCodeField from './components/SessionCodeField';
 import PlayerEnded, { PlayerEndedDock } from './components/PlayerEnded';
 import { codeFromUrl } from './hooks/useJoinCode';
+import { readSeat, saveSeat, forgetSeat, sessionCodeFrom } from './utils/sessionSeat';
 import {
   JOIN, EARLY, WAIT, SENT, RECEIPT, RESULTS, ENDED, LOOK_UP, STEP, IN_SESSION, barWhere, receiptFor,
-  SEND, HELD, SEND_FAILED,
+  SEND, HELD, SEND_FAILED, NAMES_HIDDEN,
 } from './config/playerWords';
 import {
   roundOf, pendingVerdict, savePendingAnswer, loadPendingAnswer, clearPendingAnswer,
@@ -55,6 +57,19 @@ import { rankResponses } from './config/responseOrder';
 import RoomTimeLine from './components/RoomTimeLine';
 import { timerOnPhase } from './config/roundTimer';
 import { noteServerNow } from './utils/serverClock';
+import {
+  BLUFF_WORDS, isBluffRound, bluffHolderCard, ballotSize, bluffIdentityQuery, bluffRevealLines,
+  bluffRoundPoints,
+} from './config/bluffRound';
+
+/** Past this many characters a headline is a passage (PlayerSurface.css `.plr-q--long`). */
+const LONG_HEADLINE = 160;
+/** Past this many characters the ballot's question line may run past its two-line clamp
+ *  (`.plr-q--clamp`), so it carries "Show the whole question". */
+const VOTE_LINE_CLAMP = 70;
+
+/** Matches PlayerSurface.css §2b's media query exactly. */
+export const WIDE_COMPOSE_QUERY = '(min-width: 1024px) and (orientation: landscape)';
 
 const API_BASE = window.API_BASE;
 
@@ -441,6 +456,9 @@ function PlayerPage({ event = null } = {}) {
   const [myFeedbackDrafts, setMyFeedbackDrafts] = useState({});
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
+  // Read by the event redirect, which runs in an effect keyed on the code.
+  const nameInputRef = useRef('');
+  nameInputRef.current = nameInput;
   const [accessCodeInput, setAccessCodeInput] = useState('');
   const [needsAccessCode, setNeedsAccessCode] = useState(false);
   const [joined, setJoined] = useState(false);
@@ -575,6 +593,14 @@ function PlayerPage({ event = null } = {}) {
   */
   const [isAnswerInputFocused, setIsAnswerInputFocused] = useState(false);
   const [showFullQuestion, setShowFullQuestion] = useState(false);
+  /* The ballot's question line opens to the whole question for ONE round: the
+     gameState it was opened on, so the next ballot starts folded again. */
+  const [voteQuestionOpenFor, setVoteQuestionOpenFor] = useState(null);
+  /* A LAPTOP OR A TABLET HELD SIDEWAYS (owner, 4 Nov 2026: "the screen should
+     be laid out well to read and write, no need for a narrow scroll"). There
+     the answer screen reads on the left and writes on the right, and nothing
+     folds: no soft keyboard covers half of it. PlayerSurface.css §2b. */
+  const wideCompose = useMediaQuery(WIDE_COMPOSE_QUERY);
   const [gameIdFromUrl, setGameIdFromUrl] = useState(false);
   /*
     Has the player asked to type a code over the one the link supplied?
@@ -713,29 +739,33 @@ function PlayerPage({ event = null } = {}) {
 
     // 🔗 PLAYER: Get game ID from URL params (optional)
     const urlParams = new URLSearchParams(window.location.search);
-    const gameIdFromUrl = urlParams.get('gameId');
-    
+    // `?gameId=` (every link this app makes) or `?code=` (dev QA 5 Nov: a
+    // `/play?code=` link came back to a blank form; only gameId was read).
+    const gameIdFromUrl = sessionCodeFrom(window.location.search);
+
     if (gameIdFromUrl) {
       console.log(`🎯 PLAYER: Found game ID in URL: ${gameIdFromUrl}`);
       setGameId(gameIdFromUrl);
       setGameIdFromUrl(true);
 
-      // 👤 PLAYER: Check for automatic reconnection
+      // 👤 PLAYER: Check for automatic reconnection. THIS BROWSER'S SEAT
+      // (utils/sessionSeat.js): this tab's own copy first, else the browser's.
       const nameFromUrl = urlParams.get('name') || '';
-      const savedName = localStorage.getItem(`playerName_${gameIdFromUrl}`);
-      
+      const seat = readSeat(gameIdFromUrl);
+      const savedName = seat ? seat.name : null;
+
       console.log(`🔍 PLAYER: Checking reconnection - URL name: "${nameFromUrl}", Saved name: "${savedName}"`);
-      
+
       if (nameFromUrl) {
         // Name in URL - try to auto-join
         console.log(`🚀 PLAYER: Attempting auto-join with name from URL: ${nameFromUrl}`);
         setNameInput(nameFromUrl);
-        
+
         if (savedName === nameFromUrl) {
           // Previously joined this game with this name — confirm before rejoining
           // instead of silently auto-joining (B2).
           console.log(`✅ PLAYER: Saved name matches — staging rejoin prompt`);
-          setRejoinPrompt({ gameId: gameIdFromUrl, name: nameFromUrl });
+          setRejoinPrompt({ gameId: gameIdFromUrl, name: nameFromUrl, thisTab: seat.thisTab });
         } else {
           // Try to join automatically
           console.log(`🔄 PLAYER: Auto-joining with URL name (not previously saved)`);
@@ -745,7 +775,7 @@ function PlayerPage({ event = null } = {}) {
         // No name in URL but we have saved name - pre-fill the form and offer rejoin (B2)
         console.log(`💾 PLAYER: Pre-filling form with saved name: ${savedName}`);
         setNameInput(savedName);
-        setRejoinPrompt({ gameId: gameIdFromUrl, name: savedName });
+        setRejoinPrompt({ gameId: gameIdFromUrl, name: savedName, thisTab: seat.thisTab });
       }
     } else {
       console.log(`🔗 PLAYER: No game ID in URL - showing manual join form`);
@@ -840,7 +870,8 @@ function PlayerPage({ event = null } = {}) {
     setJoined(true);
     setJoinCollision(null);
     setRejoinPrompt(null);
-    localStorage.setItem(`playerName_${gid}`, name);
+    // The browser's copy and this tab's (utils/sessionSeat.js).
+    saveSeat(gid, name);
 
     if (data.isReconnection || data.rejoined) {
       setRejoinedPlayer(true);
@@ -1098,7 +1129,12 @@ function PlayerPage({ event = null } = {}) {
           // event" leaves this page exactly as it was.
           if (res.status === 404 && !eventRef.current) {
             const kind = await resolveJoinCode(briefCode, { apiBase: API_BASE });
-            if (!cancelled && kind === 'event') navigateTo(joinPathFor(briefCode, kind));
+            if (!cancelled && kind === 'event') {
+              // A name already typed goes with it: the event page joins as
+              // THAT person rather than whoever this browser held (4 Nov).
+              const typedName = String(nameInputRef.current || '').trim();
+              navigateTo(`${joinPathFor(briefCode, kind)}${typedName ? `&name=${encodeURIComponent(typedName)}` : ''}`);
+            }
           }
           return;
         }
@@ -1760,7 +1796,10 @@ function PlayerPage({ event = null } = {}) {
     
     try {
       console.log(`🎯 PLAYER: Fetching question ${questionNumber} for game ${gameId}`);
-      const questionRes = await fetch(`${API_BASE}games/${gameId}/question?role=player`);
+      // Name and client id ride along so a bluff round's truth-holder gets
+      // their real answer (game/bluff-round.js); everyone else gets the same
+      // payload as before.
+      const questionRes = await fetch(`${API_BASE}games/${gameId}/question?role=player${bluffIdentityQuery(playerName, getClientId(gameId))}`);
       
       if (!questionRes.ok) {
         console.error('❌ Failed to fetch question:', questionRes.status);
@@ -2654,6 +2693,11 @@ function PlayerPage({ event = null } = {}) {
               } else {
                 console.log(`📊 PLAYER: No trivia round score found for ${playerName} in answers`);
               }
+            } else if (bluffRoundPoints(resultsToUse, playerName) !== null) {
+              // A BLUFF ROUND: the player's own points, every part of them —
+              // what their answer drew AND the point for spotting the real one
+              // (config/bluffRound.js). An answer's tally is not a player's.
+              roundScore = bluffRoundPoints(resultsToUse, playerName);
             } else if (resultsToUse.voteTallies) {
               // Call-and-answer format: find player in voteTallies
               const playerResult = Object.values(resultsToUse.voteTallies).find(tally => 
@@ -3047,7 +3091,7 @@ function PlayerPage({ event = null } = {}) {
 
     const round = roundOf(gameState);
     const eligibleAnswers = answers;
-    const requiredRanks = Math.min(3, eligibleAnswers.length);
+    const requiredRanks = requiredVotes;
     const filledVotes = Object.values(votes).filter(v => v !== '').length;
 
     // The button is disabled until the ballot is full and says how many are
@@ -3298,7 +3342,7 @@ function PlayerPage({ event = null } = {}) {
     const gone = String(name || playerName || '').trim();
     if (gameId && gone) clearPendingAnswer(gameId, gone);
     setPendingAnswer(null);
-    try { if (gameId) localStorage.removeItem(`playerName_${gameId}`); } catch (_) { /* storage off */ }
+    forgetSeat(gameId);
     webSocketClient.disconnect();
     setJoined(false);
     setRejoinPrompt(null);
@@ -3326,7 +3370,7 @@ function PlayerPage({ event = null } = {}) {
   const handleRejoinDecline = () => {
     if (!rejoinPrompt) return;
     console.log(`🙅 PLAYER: Declining rejoin — joining as someone else`);
-    localStorage.removeItem(`playerName_${rejoinPrompt.gameId}`);
+    forgetSeat(rejoinPrompt.gameId);
     setNameInput('');
     setPlayerName('');
     setRejoinPrompt(null);
@@ -3355,7 +3399,7 @@ function PlayerPage({ event = null } = {}) {
     container it lives in, and it is unusable with a screen reader or a switch
     device. Three buttons are boring and work for everybody.
   */
-  const DetailedVotingMode = ({ answers, votes, onVoteChange, requiredVotes, mySubmittedAnswer }) => {
+  const DetailedVotingMode = ({ answers, votes, onVoteChange, requiredVotes, mySubmittedAnswer, ownLocked = false }) => {
     const handleVoteClick = (answerIndex, position) => {
       // Track interaction to prevent polling interference
       setLastVoteInteraction(Date.now());
@@ -3398,6 +3442,7 @@ function PlayerPage({ event = null } = {}) {
                     moment self-voting is blocked. */}
                 {isOwn && <span className="plr-flag plr-flag--mine">Yours</span>}
               </div>
+              {isOwn && ownLocked && <p className="plr-help">{BLUFF_WORDS.ownLocked}</p>}
 
               {/* THE TEXT OPENS; THE RANK BUTTONS DO NOT.
                   A click handler on the whole card would fire behind every one
@@ -3444,11 +3489,11 @@ function PlayerPage({ event = null } = {}) {
                       className="plr-rk"
                       onClick={() => handleVoteClick(idx, position)}
                       aria-pressed={isSelected}
-                      aria-label={`Vote this answer ${rankLabel(rank)}`}
-                      title={rankLabel(rank)}
+                      aria-label={singlePick ? BLUFF_WORDS.pickThis : `Vote this answer ${rankLabel(rank)}`}
+                      title={singlePick ? BLUFF_WORDS.pickThis : rankLabel(rank)}
                     >
-                      <RankIcon rank={rank} size={18} />{' '}
-                      {rankLabel(rank)}
+                      {singlePick ? null : <><RankIcon rank={rank} size={18} />{' '}</>}
+                      {singlePick ? BLUFF_WORDS.pickThis : rankLabel(rank)}
                     </button>
                   );
                 })}
@@ -3473,7 +3518,7 @@ function PlayerPage({ event = null } = {}) {
         const filled = idx !== null && Number.isFinite(idx) && answers[idx];
         return (
           <div key={position} className={`plr-slot${filled ? ' plr-slot--filled' : ''}`}>
-            <span className="plr-sk">{rankLabel(VOTE_POSITIONS[position])}</span>
+            <span className="plr-sk">{slotLabel(position)}</span>
             <span className="plr-sv">
               {filled ? displayLabelFor(answers[idx], idx) : '—'}
             </span>
@@ -3598,7 +3643,15 @@ function PlayerPage({ event = null } = {}) {
     failed a WATCH screen for having a button on it, three times, once per
     device profile, and the failure was right.
   */
+  /*
+    THIS TAB, OR ONLY THIS BROWSER (dev QA 5 Nov; the 5 Nov rule for an
+    event, EventAttendeePage's "Are you Ges?"). This tab's own seat (a reload,
+    or coming back in the same tab) is "Welcome back, Priya." A seat only the
+    browser holds (a new tab, maybe a second person at the same laptop) is
+    asked as a question, never assumed: "Are you Priya?" / I'm someone else.
+  */
   if (!joined && rejoinPrompt) {
+    const asking = rejoinPrompt.thisTab === false;
     return (
       <PlayerShell
         phase="join"
@@ -3610,15 +3663,18 @@ function PlayerPage({ event = null } = {}) {
               Rejoin as {rejoinPrompt.name}
             </Button>
             <Button variant="secondary" size={56} onClick={handleRejoinDecline}>
-              Join as someone else
+              {asking ? 'I’m someone else' : 'Join as someone else'}
             </Button>
           </>
         )}
       >
-        <h1 className="plr-h1 plr-h1--primary">Welcome back.</h1>
+        <h1 className="plr-h1 plr-h1--primary" data-testid="rejoin-heading">
+          {asking ? `Are you ${rejoinPrompt.name}?` : `Welcome back, ${rejoinPrompt.name}.`}
+        </h1>
         <p className="plr-lede plr-muted">
-          This device joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
+          {asking ? 'This browser' : 'This device'} joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
           <strong>{rejoinPrompt.name}</strong>.{' '}
+          {asking ? 'If that is you, carry on where you were. If not, join with your own name. ' : ''}
           {/* A survey has answers and no score (the brief says which this is). */}
           {briefSaysSurvey
             ? 'Rejoining brings your answers back with you.'
@@ -3886,7 +3942,15 @@ function PlayerPage({ event = null } = {}) {
   const roundNoun = resolveRoundNoun(currentQuestion, gameType, setRoundNoun);
   const position = roundNo !== null ? `${roundNoun} ${roundNo}` : null;
   const category = currentQuestion?.field || currentQuestion?.category || null;
-  const requiredVotes = Math.min(3, answers.length);
+  // A BLUFF ROUND (config/bluffRound.js): one pick, "which one is real?",
+  // and never your own answer.
+  const bluffVote = isBluffRound(currentQuestion);
+  const ballotOwnIdx = bluffVote ? ownAnswerIndex(answers, mySubmittedAnswer) : null;
+  const requiredVotes = ballotSize(answers.length, bluffVote, ballotOwnIdx);
+  // A ONE-PICK BALLOT (a bluff round, or a round of one other answer) says
+  // "your pick" and "my vote", never "1st place" (QA 2026-11-07).
+  const singlePick = requiredVotes === 1;
+  const slotLabel = (slot) => (singlePick ? BLUFF_WORDS.pickLabel : rankLabel(VOTE_POSITIONS[slot]));
   const filledVotes = Object.values(votes).filter((v) => v !== '').length;
   const instruction = getPlayerInstructionText(customInstruction, currentQuestion, gameType);
 
@@ -4044,6 +4108,8 @@ function PlayerPage({ event = null } = {}) {
   let centre = false;
   let dock = null;
   let body = null;
+  // The answer screen's read-and-write layout (PlayerShell `wide`).
+  let composing = false;
   /* A send the server took is showing as "Sent" (owner, 3 Nov). The shell's
      live region says it once; a held send never sets it. */
   let sentShowing = false;
@@ -4274,26 +4340,23 @@ function PlayerPage({ event = null } = {}) {
        single player. Two of five shipped game types had no ASK design at all
        (INVENTORY §4). */
     const isArtwork = gameType === 'call-and-answer' && !!currentQuestion.image;
+    /* THE QUESTION IS THE HEADLINE (owner, 5 Nov 2026), as on the room's
+       screen: a call-and-answer title is the line in large type and the brief
+       is body text under it. Until then the brief was the headline and the
+       title a grey caps label above it, so "What should we stop doing next
+       quarter?" read as a caption to a 400-character passage. With no title
+       the brief is still the headline (and `.plr-q--long` sets it at a
+       reading size). */
+    const callBrief = currentQuestion.detail || currentQuestion.question;
     const headline = isArtwork
       ? (currentQuestion.title || currentQuestion.question)
       : gameType === 'call-and-answer'
-        // `|| title` is the fallback the shipped chain lacked: a call-and-answer
-        // question carrying only a `title` rendered an empty prompt and pushed
-        // the real one into a "subtitle" beneath it.
-        ? (currentQuestion.detail || currentQuestion.question || currentQuestion.title)
+        ? (currentQuestion.title || callBrief)
         : (currentQuestion.title || currentQuestion.question);
-    // Compared against the RESOLVED headline rather than against `detail ||
-    // question`, so it can never restate the line directly above it.
-    const subtitle = gameType === 'call-and-answer'
-      && currentQuestion.title
-      && currentQuestion.title !== headline
-      && currentQuestion.title.length < 100
-      ? currentQuestion.title
-      : null;
     const detail = isArtwork
       ? currentQuestion.detail
       : gameType === 'call-and-answer'
-        ? null
+        ? (currentQuestion.title && callBrief !== currentQuestion.title ? callBrief : null)
         : gameType === 'trivia'
           ? currentQuestion.questionDetail
           : gameType === 'wavelength'
@@ -4305,12 +4368,22 @@ function PlayerPage({ event = null } = {}) {
        cannot both have them. Focus is the trigger because no browser reliably
        reports the keyboard's height. The control that undoes it is rendered
        with it, always — a fold, not a deletion. */
-    const folded = isAnswerInputFocused && !showFullQuestion;
+    // A passage, not a question: read at body size rather than shouted (4 Nov).
+    const longHeadline = String(headline || '').length > LONG_HEADLINE;
+    /* What the fold takes away. A call-and-answer TITLE is the question line
+       and stays whole; only the brief under it folds. Every other headline
+       (a passage standing in for a missing title, a "title" that is itself a
+       passage, a trivia or poll question) condenses as it always has. With nothing to fold there is no fold, so
+       no control that opens nothing. */
+    const titleLine = gameType === 'call-and-answer' && !isArtwork && !!currentQuestion.title
+      && !longHeadline;
+    const foldable = !titleLine || !!detail;
+    const folded = foldable && isAnswerInputFocused && !showFullQuestion && !wideCompose;
+    const headlineFolds = folded && !titleLine;
 
     const questionBlock = (
       <>
-        {subtitle && !folded && <p className="plr-lab">{subtitle}</p>}
-        <p className={`plr-q${folded ? ' plr-q--fold' : ''}`}>{headline}</p>
+        <p className={`plr-q${headlineFolds ? ' plr-q--fold' : longHeadline ? ' plr-q--long' : ''}`}>{headline}</p>
         {folded ? (
           <button
             type="button"
@@ -4334,7 +4407,12 @@ function PlayerPage({ event = null } = {}) {
                 and any words about its meaning seed the very answers the game
                 exists to compare. The term is the headline; the words form's
                 own copy says what to do (the owner, off the AI Jargon set). */}
-            {detail && <p className="plr-detail plr-muted">{detail}</p>}
+            {/* A call-and-answer brief under its title is the thing they must
+                read to answer, so it is set in --text, not the muted grey a
+                trivia or poll aside wears. */}
+            {detail && (
+              <p className={`plr-detail${titleLine ? ' plr-brief' : ' plr-muted'}`}>{detail}</p>
+            )}
           </>
         )}
       </>
@@ -4350,6 +4428,26 @@ function PlayerPage({ event = null } = {}) {
         <p className="plr-lab">Your task</p>
         <p>{instruction}</p>
       </div>
+    ) : null;
+
+    /* A BLUFF ROUND (config/bluffRound.js). The truth-holder's phone alone
+       carries `bluff.yours` (game/get-question.js checks the client id); it
+       shows them the real answer to put in their own words. Everyone else is
+       told a bluff is in play, and never who has it. */
+    const bluffYours = bluffHolderCard(currentQuestion);
+    const bluffBlock = gameType === 'call-and-answer' && isBluffRound(currentQuestion) ? (
+      bluffYours ? (
+        <div className="plr-card plr-bluff plr-bluff--yours">
+          <p className="plr-lab">{BLUFF_WORDS.yoursEyebrow}</p>
+          <p className="plr-quote">{bluffYours.realAnswer}</p>
+          <p className="plr-detail">{bluffYours.prompt}</p>
+        </div>
+      ) : (
+        <div className="plr-task plr-bluff">
+          <p className="plr-lab">{BLUFF_WORDS.eyebrow}</p>
+          <p>{BLUFF_WORDS.othersLine}</p>
+        </div>
+      )
     ) : null;
 
     // Only a held answer for the round on screen. One for an earlier round goes
@@ -4554,11 +4652,15 @@ function PlayerPage({ event = null } = {}) {
            were answering — carrying THREE submit affordances at once (an
            airplane icon, a button inside its form, and the form beneath it once
            dismissed). The question folds instead. */
+        composing = true;
         body = (
-          <>
-            {questionBlock}
-            {taskBlock}
-            <form id="plr-answer-form" onSubmit={handleSubmitAnswer}>
+          <div className="plr-compose">
+            <div className="plr-compose__read">
+              {questionBlock}
+              {taskBlock}
+              {bluffBlock}
+            </div>
+            <form id="plr-answer-form" className="plr-compose__write" onSubmit={handleSubmitAnswer}>
               <label className="plr-lab" htmlFor="plr-answer">Your response</label>
               <textarea
                 id="plr-answer"
@@ -4586,7 +4688,7 @@ function PlayerPage({ event = null } = {}) {
               </p>
               <input type="submit" hidden aria-hidden="true" tabIndex={-1} />
             </form>
-          </>
+          </div>
         );
         dock = (
           <>
@@ -4629,7 +4731,9 @@ function PlayerPage({ event = null } = {}) {
               is always "Sent"; the heading is always "Your <thing> is in." */}
           <p className="plr-lab plr-lab--good">{SENT}</p>
           <h1 className="plr-h1 plr-h1--primary">
-            {receiptFor(gameType, { artwork: gameType === 'call-and-answer' && Boolean(currentQuestion?.image) })}
+            {/* "Your title is in." only where a title was asked for (an art
+                set's Artwork); a picture of anything else is an answer. */}
+            {receiptFor(gameType, { artwork: gameType === 'call-and-answer' && Boolean(currentQuestion?.image) && /artwork|painting|title/i.test(String(roundNoun || '')) })}
           </h1>
 
           {submittedWords ? (
@@ -4689,14 +4793,14 @@ function PlayerPage({ event = null } = {}) {
       body = (
         <>
           <p className="plr-lab plr-lab--good">{SENT}</p>
-          <h1 className="plr-h1 plr-h1--primary">{RECEIPT.votes}</h1>
+          <h1 className="plr-h1 plr-h1--primary">{singlePick ? BLUFF_WORDS.voteIn : RECEIPT.votes}</h1>
 
           {ranked.length > 0 && (
             <div className="plr-card plr-card--good">
               <p className="plr-lab">{RECEIPT.ballotCard}</p>
               {ranked.map(({ slot, idx }) => (
                 <div key={slot} className="plr-stat">
-                  <span className="plr-k">{rankLabel(VOTE_POSITIONS[slot])}</span>
+                  <span className="plr-k">{slotLabel(slot)}</span>
                   <span className="plr-v">{displayLabelFor(answers[idx], idx)}</span>
                 </div>
               ))}
@@ -4748,16 +4852,45 @@ function PlayerPage({ event = null } = {}) {
          player who joined at round three — or who has been discussing something
          else for two minutes — ranks six answers to a question the phone will
          not show them (INVENTORY §5). */
-      const votedQuestion = currentQuestion?.image
-        ? (currentQuestion.title || currentQuestion.question)
-        : (currentQuestion?.detail || currentQuestion?.title || currentQuestion?.question);
+      /* WHAT TO VOTE ON, FIRST, IN ONE LINE (owner, 5 Nov 2026). The screen
+         used to open on "Rank your top three.", the whole brief again (eleven
+         lines on a phone), a two-line privacy note and a mode toggle, and no
+         response was on the first phone screen. Now: the question as one line
+         (the title; or, with no title, the brief clamped to two lines), then
+         the ballot. The rest of the question is one tap away: a reduction with
+         no recovery is a deletion. */
+      const voteBrief = currentQuestion?.detail || currentQuestion?.question || '';
+      const voteTitle = currentQuestion?.title || '';
+      const voteLine = voteTitle || voteBrief;
+      const voteRest = voteTitle && voteBrief && voteBrief !== voteTitle ? voteBrief : '';
+      // The clamp only folds something when the line can run past two lines:
+      // an untitled brief, or a "title" that is itself a passage.
+      const voteClamps = voteLine.length > VOTE_LINE_CLAMP;
+      const voteOpen = voteQuestionOpenFor === gameState;
+      const voteFoldable = !currentQuestion?.image && (voteRest || voteClamps);
+      const rankWord = requiredVotes === 1 ? 'one' : requiredVotes === 2 ? 'two' : 'three';
 
       body = (
         <>
-          <h1 className="plr-h1 plr-h1--primary">
-            Rank your top {requiredVotes === 1 ? 'one' : requiredVotes === 2 ? 'two' : 'three'}.
-          </h1>
-          {votedQuestion && <p className="plr-detail plr-muted">{votedQuestion}</p>}
+          {voteLine && (
+            <h1
+              className={`plr-q plr-q--vote${voteClamps && !voteOpen ? ' plr-q--clamp' : ''}`}
+            >
+              {voteLine}
+            </h1>
+          )}
+          {voteFoldable && !voteOpen && (
+            <button
+              type="button"
+              className="plr-more plr-more--after"
+              onClick={() => setVoteQuestionOpenFor(gameState)}
+            >
+              Show the whole question ↓
+            </button>
+          )}
+          {voteFoldable && voteOpen && voteRest && (
+            <p className="plr-detail plr-brief">{voteRest}</p>
+          )}
           {/* STILL WRITING WHEN VOTING STARTED (session flow v3 §4.4). The
               draft is not thrown away: it can still be sent, and the server
               keeps it with this round, labelled late, outside the vote. */}
@@ -4778,50 +4911,21 @@ function PlayerPage({ event = null } = {}) {
             />
           )}
 
-          {/* THE ROOM-FACING SENTENCE, VERBATIM, ABOVE THE BALLOT, EVERY TIME,
-              NOT DISMISSIBLE — and the qualifier is not a footnote (§6.3). It
-              is the difference between a true statement and an overclaim, and
-              the product has to be able to say the true one out loud. Before
-              this, rows were labelled `Response 1…N` and nothing anywhere said
-              why, which reads as a bug or as the app having lost the names. */}
-          <p className="plr-anon">
-            <b>Nobody sees who wrote what — the host included — until voting closes.</b>{' '}
-            This hides names, not identities.
-          </p>
-
-          {/* TWO BALLOTS SURVIVE, WHICH IS A DEPARTURE FROM RATIONALE §6.1.
-              §6.1 deletes Quick Vote outright; `__tests__/voteSwitching.test.jsx`
-              (commit a4bd7127, today) pins the fix that made a vote switchable
-              at all and drives the quick ballot's three selects with user-event.
-              Deleting the mode deletes the regression test for a defect the
-              owner reported this morning, so both are restyled instead. See the
-              report. */}
-          <div className="plr-modes" role="group" aria-label="How to rank">
-            <button
-              type="button"
-              className="plr-mode"
-              aria-pressed={votingMode === 'quick'}
-              onClick={() => setVotingMode('quick')}
-            >
-              Quick Vote
-            </button>
-            <button
-              type="button"
-              className="plr-mode"
-              aria-pressed={votingMode === 'detailed'}
-              onClick={() => setVotingMode('detailed')}
-            >
-              Detailed Vote
-            </button>
-          </div>
+          {/* The instruction is the ballot's own label now, not a heading over
+              the question: one line, directly above what it describes. */}
+          {bluffVote ? (
+            <p className="plr-rank-cue">{BLUFF_WORDS.voteCue}</p>
+          ) : (
+            <p className="plr-rank-cue">Rank your top {rankWord}.</p>
+          )}
 
           {votingMode === 'quick' ? (
             <div className="plr-quick">
               {['first', 'second', 'third'].slice(0, requiredVotes).map((slot) => (
                 <div key={slot} className="plr-vpos">
                   <label className="plr-lab" htmlFor={`plr-rank-${slot}`}>
-                    <RankIcon rank={VOTE_POSITIONS[slot]} size={18} />{' '}
-                    {rankLabel(VOTE_POSITIONS[slot])}
+                    {singlePick ? null : <><RankIcon rank={VOTE_POSITIONS[slot]} size={18} />{' '}</>}
+                    {slotLabel(slot)}
                   </label>
                   <select
                     id={`plr-rank-${slot}`}
@@ -4856,6 +4960,8 @@ function PlayerPage({ event = null } = {}) {
                       const heldRank = rankHolding(votes, idx);
                       const isCurrentSelection = heldRank === slot;
                       const isOwn = idx === ownAnswerIdx;
+                      // A bluff round takes no vote for your own answer.
+                      if (bluffVote && idx === ballotOwnIdx) return null;
 
                       /* THE NUMBER COMES FIRST because it is the handle a
                          facilitator reads aloud — on the shipped ballot it was
@@ -4888,8 +4994,31 @@ function PlayerPage({ event = null } = {}) {
               onVoteChange={handleVoteChange}
               requiredVotes={requiredVotes}
               mySubmittedAnswer={mySubmittedAnswer}
+              ownLocked={bluffVote}
             />
           )}
+
+          {/* ONE WAY TO VOTE BY DEFAULT (owner, 5 Nov 2026): the quick vote.
+              The detailed ballot (every response in full, place buttons on
+              each) stays one quiet tap away, below the ballot, rather than a
+              two-button toggle above it that asked a first-timer to choose a
+              method before they had seen a single response. Both ballots
+              survive because `__tests__/voteSwitching.test.jsx` pins the fix
+              that made a vote switchable in each (commit a4bd7127). */}
+          <button
+            type="button"
+            className="plr-more plr-more--switch"
+            onClick={() => setVotingMode(votingMode === 'quick' ? 'detailed' : 'quick')}
+          >
+            {votingMode === 'quick' ? 'Detailed vote: read each response in full' : 'Back to the quick vote'}
+          </button>
+
+          {/* THE ROOM-FACING PROMISE, ON EVERY BALLOT, NOT DISMISSIBLE, in one
+              short line under it (owner, 5 Nov 2026; was two lines above it).
+              "Only names" carries the qualifier the long form spelled out
+              ("This hides names, not identities"): it never says anonymous,
+              because a room of twelve can still recognise a voice. */}
+          <p className="plr-anon plr-anon--line">{NAMES_HIDDEN}</p>
         </>
       );
 
@@ -4907,7 +5036,7 @@ function PlayerPage({ event = null } = {}) {
           >
             {filledVotes < requiredVotes
               ? SEND.pickMore(requiredVotes - filledVotes)
-              : SEND.votes}
+              : singlePick ? BLUFF_WORDS.sendVote : SEND.votes}
           </Button>
         </>
       );
@@ -5197,6 +5326,8 @@ function PlayerPage({ event = null } = {}) {
       // RESULTS the rows carry names, and that label would be their own name.
       // After a reload the own answer is read back from the server; while that
       // read is out the heading says so rather than "you didn't send one".
+      // A bluff round's reveal (get-results' `bluff`, config/bluffRound.js).
+      const bluffReveal = gameType === 'call-and-answer' ? bluffRevealLines(results && results.bluff) : null;
       const resultHeading = myRow
         ? `You wrote response ${ownAnswerIdx + 1}`
         : (mySubmittedAnswer || hasAnswered || ownAnswerStatus === 'withheld')
@@ -5211,6 +5342,14 @@ function PlayerPage({ event = null } = {}) {
           {(mySubmittedAnswer || myRow?.answer) && (
             <div className="plr-card">
               <p className="plr-quote">{mySubmittedAnswer || myRow.answer}</p>
+            </div>
+          )}
+          {bluffReveal && (
+            <div className="plr-card plr-bluff">
+              <p className="plr-lab">{BLUFF_WORDS.revealHeading}</p>
+              <p className="plr-quote">{bluffReveal.realAnswer}</p>
+              <p className="plr-detail">{bluffReveal.holder}</p>
+              <p className="plr-detail">{bluffReveal.fooled} {bluffReveal.spotted}</p>
             </div>
           )}
           {scoreRows}
@@ -5302,24 +5441,29 @@ function PlayerPage({ event = null } = {}) {
           </div>
         )}
 
-        <div className="plr-card">
-          <p className="plr-lab">If you lose this page</p>
+        {/* ONE CARD, NOT TWO (owner, 5 Nov 2026). The way back was a second
+            six-line card that every participant read before anything had gone
+            wrong; it is now one line that opens in place to the same words.
+            A <details>, so it opens without script and announces as a
+            disclosure. */}
+        <details className="plr-lost">
+          <summary>Lost this page?</summary>
           {/* IN AN EVENT the way back is the EVENT's code, which knows this
               phone without a name; the item's own code would ask for one and
               seat a stranger (found driving the day in Chromium, 27 Sep 2026). */}
           {inEvent ? (
-            <p className="plr-quote">
+            <p className="plr-detail">
               Open the join screen and enter <b>{event.code}</b> again. This device is
               remembered, so no name is needed, and your answers come back with you.
             </p>
           ) : (
-            <p className="plr-quote">
+            <p className="plr-detail">
               On this device, go back to the join screen and enter <b>{gameId}</b> and the
               same name: your answers come back with you. On another device?
               You can move your name there; the host lets you in.
             </p>
           )}
-        </div>
+        </details>
 
         <LookUpCue>{LOOK_UP.lobby}</LookUpCue>
       </>
@@ -5381,6 +5525,7 @@ function PlayerPage({ event = null } = {}) {
       online={wsConnected}
       banner={offlineBanner || lateBanner || missedBanner}
       centre={centre}
+      wide={composing}
       dock={dock}
       sent={sentShowing}
       help={playerHelpScreen(gameState, myFeedbackShowing)}

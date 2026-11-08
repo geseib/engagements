@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { render, cleanup } from '@testing-library/react';
 import PresentStage, { fitCanvas, PRESENT_LADDERS } from '../present/PresentStage';
-import { PresentMoment, PhaseWipe } from '../present/PresentMoments';
+import { PresentMoment, PhaseWipe, PRESENT_GROW } from '../present/PresentMoments';
 import { presentModel } from '../present/presentModel';
 
 jest.mock('qrcode.react', () => ({ QRCodeSVG: ({ value }) => <svg data-qr={value} /> }));
@@ -76,6 +76,16 @@ describe('the canvas', () => {
     expect(fitCanvas(div, 'room')).toBe('ok');
     expect(div.style.getPropertyValue('--fit')).toBe('1');
     expect(div.querySelector('[data-drop]').hidden).toBe(false);
+  });
+  it('fitCanvas grows a main that carries data-grow, and steps down to the largest scale that fits', () => {
+    const div = document.createElement('div');
+    div.innerHTML = '<div class="present-main" data-grow="1.3"><p>q</p></div>';
+    const main = div.querySelector('.present-main');
+    // Overflowing above 1.15, fitting at or below it.
+    Object.defineProperty(main, 'scrollHeight', { get: () => (parseFloat(div.style.getPropertyValue('--fit')) > 1.15 ? 1000 : 800) });
+    Object.defineProperty(main, 'clientHeight', { get: () => 900 });
+    expect(fitCanvas(div, 'room')).toBe('ok');
+    expect(div.style.getPropertyValue('--fit')).toBe('1.15');
   });
   it('fitCanvas drops the optional block, then marks a miss, when the moment will not fit', () => {
     const div = document.createElement('div');
@@ -197,7 +207,9 @@ describe('every moment', () => {
     // with no QR up there is no panel
     expect(drawn(snap({ state: 'VOTE#005' }), { answers: NAMED }).container.querySelector('.present-joinpanel')).toBeNull();
   });
-  it('a lesson is up: the title leads, the lesson under it, the question in "Your turn"; no generic line on Room (frames 1-2)', () => {
+  it('a lesson is up: the title leads and the whole lesson under it, and no instruction at all (owner, 5 Nov 2026)', () => {
+    // rejects: "Your turn", or the generic line, on the room's window; the
+    // question at the front of the lesson lost with the band.
     const Q2 = {
       title: 'THE IMPORTANCE OF THRESHOLDS', category: 'School of Architecture',
       detail: 'Describe how you apply thresholds in your work. Architect Christopher Alexander taught that thresholds are crucial for human comfort.',
@@ -209,20 +221,32 @@ describe('every moment', () => {
     expect(title.getAttribute('data-rc')).toBe('lead');
     expect(title.textContent).toBe('The Importance of Thresholds');
     const story = container.querySelector('.present-rc-story');
-    expect(story.textContent).toMatch(/^Architect Christopher Alexander/);
+    expect(story.textContent).toBe(Q2.detail);
+    expect(story.className).toMatch(/is-primary/);
     expect(story.hasAttribute('data-drop')).toBe(false);
-    const turn = container.querySelector('.present-turn');
-    expect(turn.querySelector('.present-turn-ey').textContent).toBe('Your turn');
-    expect(turn.querySelector('.present-turn-text').textContent).toBe('Describe how you apply thresholds in your work.');
-    expect(container.textContent).not.toMatch(/Answer on your phone\./);
-  });
-  it('on Call the generic instruction is one slim line that may give way', () => {
-    const Q3 = { title: 'Thresholds', detail: 'A lesson about doorways and how people pass through them.', setCustomInstruction: 'Answer on your phone.' };
-    const { container } = drawn(snap({ currentQuestionData: Q3, stageProfile: 'call' }), {});
-    const line = container.querySelector('[data-rc-part="task"]');
-    expect(line.textContent).toBe('Answer on your phone.');
-    expect(line.getAttribute('data-drop')).toBe('1');
     expect(container.querySelector('.present-turn')).toBeNull();
+    expect(container.querySelector('[data-rc-part="task"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/Your turn|Answer on your phone\./);
+  });
+  it.each(['call', 'tv', 'table'])('on %s no instruction either, own or generic', (profile) => {
+    const Q3 = {
+      title: 'Thresholds', detail: 'A lesson about doorways and how people pass through them.',
+      setCustomInstruction: 'Answer on your phone.', customInstructions: 'One doorway, one sentence.',
+    };
+    const { container } = drawn(snap({ currentQuestionData: Q3, stageProfile: profile }), {});
+    expect(container.querySelector('[data-rc-part="task"]')).toBeNull();
+    expect(container.querySelector('.present-turn')).toBeNull();
+    expect(container.textContent).not.toMatch(/Answer on your phone|One doorway/);
+  });
+  it('the question up grows: ANSWERING and QUESTION_FOCUS carry the data-grow the fitter starts from', () => {
+    [EVERY[1], EVERY[8]].forEach(([moment, s, reads]) => {
+      const { container, unmount } = drawn(s, reads);
+      expect([moment, container.querySelector('.present-main').getAttribute('data-grow')]).toEqual([moment, PRESENT_GROW]);
+      unmount();
+    });
+    // Every other moment runs at the ladder.
+    const { container } = drawn(...EVERY[2].slice(1));
+    expect(container.querySelector('.present-main').hasAttribute('data-grow')).toBe(false);
   });
   it('one result up: its place, the answer and a ladder with no numbers when names are hidden (frame 12)', () => {
     const [, s] = EVERY[5];
@@ -315,9 +339,13 @@ describe('every moment', () => {
     expect(lobby.querySelector('.present-code-label').className).toMatch(/ui-eyebrow--muted/);
   });
   it('the fitter finds the canvas inside the root (Ground takes no ref)', () => {
-    const { container } = drawn(...EVERY[1].slice(1));
+    const { container } = drawn(...EVERY[2].slice(1));
     expect(container.querySelector('.present-canvas').dataset.fit).toBe('ok');
     expect(container.querySelector('.present-canvas').style.getPropertyValue('--fit')).toBe('1');
+    // A question up starts at its grow; with nothing overflowing (jsdom) it stays there.
+    cleanup();
+    const up = drawn(...EVERY[1].slice(1)).container;
+    expect(up.querySelector('.present-canvas').style.getPropertyValue('--fit')).toBe(PRESENT_GROW);
   });
   it('the read shows its page and "Page 1 of 2"', () => {
     const { container } = drawn(...EVERY[6].slice(1));

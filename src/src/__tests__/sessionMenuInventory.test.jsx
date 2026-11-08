@@ -51,6 +51,7 @@ const caProps = (over = {}) => ({
   onWriteQuestion: () => {},
   onEditOwn: () => {},
   onRemoveOwn: () => {},
+  onChoose: () => {},
   goal: { progress: 'Question 3 of 5' },
   gameId: '7924',
   playUrl: 'https://example.test/play?gameId=7924',
@@ -102,14 +103,10 @@ const CA_INVENTORY = [
   ['Yours row ⋯: Remove', 'Up next', false, byTest('queue-own-menu-remove'), () => fireEvent.click(screen.getByTestId('queue-own-menu'))],
   ['Put-aside list with Restore', 'Up next', true, byRole('button', /Restore Put away one/)],
   ['Parked / advisory / Auto tags', 'Up next', false, byText('Auto')],
-  ['Browser: search', 'Up next', false, byLabel('Search titles'), () => fireEvent.click(screen.getByTestId('up-next-choose'))],
-  ['Browser: one Category select (incl. categories that are on)', 'Up next', false, byText('Categories that are on'), () => fireEvent.click(screen.getByTestId('up-next-choose'))],
-  ['Browser: Hide asked, with the count', 'Up next', false, byTest('hide-asked'), () => fireEvent.click(screen.getByTestId('up-next-choose'))],
-  ['Browser: correct answers line', 'Up next', false, byText('Correct answers are not on this screen.'), () => fireEvent.click(screen.getByTestId('up-next-choose'))],
-  ['Browser row: Queue / Unqueue', 'Up next', false, byText(/^(Queue|Unqueue)$/), () => fireEvent.click(screen.getByTestId('up-next-choose'))],
-  ['Browser row: Ask next', 'Up next', false, () => within(screen.getAllByTestId('browser-row')[0]).queryByText('Ask next'), () => fireEvent.click(screen.getByTestId('up-next-choose'))],
-  ['Browser row ⋯: Ask now', 'Up next', false, byTest('browser-row-menu-ask-now'), () => { fireEvent.click(screen.getByTestId('up-next-choose')); fireEvent.click(screen.getAllByTestId('browser-row-menu')[0]); }],
-  ['Browser: back to Up next', 'Up next', false, byTest('choose-back'), () => fireEvent.click(screen.getByTestId('up-next-choose'))],
+  /* The set's browser moved out of the menu into the question picker
+     (docs/design/question-picker D3): the menu keeps a door, and every
+     browser control is inventoried in questionPicker.test.jsx. */
+  ['Choose a question (the picker\'s door)', 'Up next', false, byRole('button', /^Choose a question$/)],
   ['Session report', 'Rounds so far', false, byTest('open-report')],
   ['Late list: count, help, Review', 'Rounds so far', false, byTest('late-review')],
   ['Late list itself', 'Rounds so far', false, byTest('late-line'), () => fireEvent.click(screen.getByTestId('late-review'))],
@@ -295,7 +292,7 @@ describe('the phone Remote: every control in the README inventory', () => {
   );
 
   test('People tab: rank, score', () => { phone('people'); expect(screen.getByText('Priya')).toBeInTheDocument(); });
-  test('Up next: running order, Write a question, Choose from the set', () => {
+  test('Up next: running order, Write a question, Choose a question', () => {
     phone('up-next');
     expect(screen.getByText('Running order')).toBeInTheDocument();
     expect(screen.getByTestId('remote-write')).toBeInTheDocument();

@@ -18,7 +18,9 @@ const CW = Object.freeze({
   needsYou: 'needs you',
   wantsName: 'Wants their name on a new device',
   late: 'Late & not reviewed',
-  allRounds: 'Rounds and questions',
+  // The Round queue's link to Up next (question picker D4; renamed from
+  // "Rounds and questions", which landed on Rounds so far and had no questions).
+  allRounds: 'All rounds',
   // People's link to the whole list in the Session menu (experience plan p-1).
   allPeople: SESSION_MENU_WORDS.allPeople,
   reviewLate: 'Review them',

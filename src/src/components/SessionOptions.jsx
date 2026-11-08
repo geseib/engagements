@@ -46,6 +46,7 @@ import { gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
 import { NAMES_MODES, namesMode } from '../config/surveyNames';
 import { advancedSummary } from '../config/setupDefaults';
+import { NAMES_HIDDEN } from '../config/playerWords';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
@@ -55,6 +56,7 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import './GameSetupDialog.css';
 import Button from './ui/Button';
+import { BLUFF_WORDS } from '../config/bluffRound';
 
 /** "None picked, so all 4 are in · 12 questions" — what will be asked, not the chips. */
 const questionsIn = (list) => {
@@ -252,6 +254,9 @@ export default function SessionOptions({
      the closed line is the full sentence, as before. */
   briefSummary = false,
   namesStated = false,
+  /* The set's own bluff-round setting, so the Advanced line can say when the
+     host moved off it (docs/design/bluff-round/README.md). */
+  bluffDefault = false,
 }) {
   const isSurvey = normalizeGameType(gameType) === 'survey';
   const anonymous = value.anonymousResponses !== false;
@@ -343,6 +348,8 @@ export default function SessionOptions({
     promptChoices: promptList,
     setPromptWillBeUsed,
     namesStated,
+    ...(gameType === 'call-and-answer' && typeof value.bluffRound === 'boolean'
+      ? { bluffRound: value.bluffRound, bluffDefault } : {}),
   });
 
   return (
@@ -432,11 +439,30 @@ export default function SessionOptions({
                 : <><b>It is off</b> — every answer is labelled with its author from the moment voting opens.</>}
             </p>
 
-            {/* Never overclaim. Shipped verbatim. */}
+            {/* Never overclaim. The ballot's own sentence (playerWords
+                NAMES_HIDDEN), so the two cannot drift again (dev QA 5 Nov). */}
             <p className="gsd-opt-limit">
-              This hides names, not identities. In a small group, people may still
+              {NAMES_HIDDEN} In a small group, people may still
               recognise each other’s answers.
             </p>
+          </div>
+        )}
+
+        {/* THE BLUFF ROUND (docs/design/bluff-round/README.md): Call & Answer
+            only, offered only by a parent that carries the choice, defaulting
+            from the set (GameSetupDialog). */}
+        {gameType === 'call-and-answer' && typeof value.bluffRound === 'boolean' && (
+          <div className={`gsd-opt${value.bluffRound ? ' is-on' : ''}`}>
+            <label className="gsd-opt-head">
+              <input
+                type="checkbox"
+                checked={value.bluffRound}
+                onChange={(e) => onChange({ bluffRound: e.target.checked })}
+              />
+              <span className="gsd-opt-name">{BLUFF_WORDS.setupLabel}</span>
+              <span className="gsd-opt-state" aria-hidden="true">{value.bluffRound ? 'On' : 'Off'}</span>
+            </label>
+            <p className="gsd-opt-does">{BLUFF_WORDS.setupHelp}</p>
           </div>
         )}
 

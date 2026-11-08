@@ -11,6 +11,7 @@ import Icon from '../Icon';
 import PersonRow, { PERSON_WORDS } from '../people/PersonRow';
 import useArrival from '../../hooks/useArrival';
 import { ownQuestionWords as OQ } from '../../config/consoleWords';
+import { PICKER_WORDS as PW } from '../../config/questionPicker';
 import '../needs/NeedsYou.css';
 
 /** The rail shows the first few; "Review them" opens the whole list. */
@@ -115,6 +116,11 @@ export default function ConsoleRail({
      Rounds. Null draws nothing. A round the host wrote carries `own: true`
      and is marked Yours. */
   onWriteQuestion = null,
+  /* CHOOSE A QUESTION (docs/design/question-picker D3, D4): the Round
+     queue's door to the one picker, beside Write a question, and every
+     planned row as a button that opens it with that row's question in the
+     preview (`onChoose({ focusKey })`). Null draws neither. */
+  onChoose = null,
   /* THE ROW'S ⋯ (PersonRow; the Session menu's People has the same two):
      Move to a new device, and Remove from session (pressed twice). Null
      leaves the item out. */
@@ -162,6 +168,11 @@ export default function ConsoleRail({
   });
   const live = scoresLive(moment);
   const unscored = Boolean(scoreboard && scoreboard.show && !scoreboard.enabled);
+  /* NO SCORE COLUMN UNTIL THERE IS A SCORE (owner, 5 Nov 2026, cut 6): a
+     column of zeros (or dashes) beside every name before anyone has scored
+     is noise. It appears with the first score above zero, or the first
+     Trivia mark. */
+  const scored = peopleRows.some((p) => p.fact && (Number(p.fact.score) > 0 || p.fact.mark));
   const menuFor = (name) => [
     onPersonMove && { id: 'move', label: PERSON_WORDS.move, onSelect: () => onPersonMove(name) },
     onPersonRemove && { id: 'remove', label: PERSON_WORDS.remove, danger: true, onSelect: () => onPersonRemove(name) },
@@ -178,17 +189,39 @@ export default function ConsoleRail({
         open={open === 'queue'}
         onToggle={toggle}
         link={CW.allRounds}
-        onLink={() => onOpenSection('history')}
+        onLink={() => onOpenSection('up-next')}
       >
         <ul className="hc-list">
-          {rounds.map((r) => (
-            <li key={r.n} className={r.state === 'now' ? 'is-now' : ''}>
-              <span className="hc-n">{r.n}</span>
-              {r.own ? <YoursMark className="hc-yours" /> : null}
-              <span>{r.title}{r.state !== 'later' ? <span className="hc-meta">{` · ${CW[r.state]}`}</span> : null}</span>
-            </li>
-          ))}
+          {rounds.map((r) => {
+            const body = (
+              <>
+                <span className="hc-n">{r.n}</span>
+                {r.own ? <YoursMark className="hc-yours" /> : null}
+                <span>{r.title}{r.state !== 'later' ? <span className="hc-meta">{` · ${CW[r.state]}`}</span> : null}</span>
+              </>
+            );
+            /* A ROUND NOT YET PLAYED IS A DOOR (D4): one click opens the
+               picker with that slot's question in the preview. Not the host's
+               own question, which has no row in the set. */
+            const planned = (r.state === 'next' || r.state === 'later') && onChoose && r.key && !r.own;
+            return (
+              <li key={r.n} className={r.state === 'now' ? 'is-now' : ''}>
+                {planned ? (
+                  <button type="button" className="hc-row-door" onClick={() => onChoose({ focusKey: r.key })} title={`${PW.door}: ${r.title}`} data-testid="rail-planned-row">
+                    {body}
+                  </button>
+                ) : body}
+              </li>
+            );
+          })}
         </ul>
+        {onChoose ? (
+          <button type="button" className="hc-link hc-choose" onClick={() => onChoose({})} data-testid="rail-choose">
+            <Icon name="MagnifyingGlass" weight="bold" size={12} color="currentColor" />
+            {PW.door}
+            <kbd className="hc-kbd" aria-hidden="true">{PW.key}</kbd>
+          </button>
+        ) : null}
         {onWriteQuestion ? (
           <button type="button" className="hc-link hc-write" onClick={onWriteQuestion} data-testid="rail-write">
             <Icon name="Plus" weight="bold" size={12} color="currentColor" />
@@ -236,14 +269,15 @@ export default function ConsoleRail({
         ) : null}
         {/* THE SHARED PERSON ROW (PLAN §3.2b), at the rail's compact density:
             the status a glyph, the score muted mid-round and bright from
-            Results (README D6, D7). Rows never re-sort during a round. */}
+            Results (README D6, D7). While the room answers or votes the
+            people still out come first (consoleRail.js peopleRows, cut 6). */}
         {peopleRows.length ? (
           // The columns' heads (frames 1, 3, 6): decorative, the row's own labels speak.
           <div className="hc-colhd" aria-hidden="true">
             <span />
             <span>{CW.colName}</span>
             <span>{peopleRows.some((p) => MARK[p.state]) ? '✓' : ''}</span>
-            <span>{peopleRows.some((p) => p.fact) ? CW.colScore : ''}</span>
+            <span>{scored ? CW.colScore : ''}</span>
             <span />
           </div>
         ) : null}
@@ -253,11 +287,11 @@ export default function ConsoleRail({
               key={p.name}
               density="rail"
               name={p.name}
-              status="here"
+              status={p.away ? 'away' : 'here'}
               mark={MARK[p.state] || null}
               doing={WORD[p.state] || ''}
               note={!MARK[p.state] && p.from ? p.from : ''}
-              fact={<Fact fact={p.fact} unscored={unscored} />}
+              fact={scored ? <Fact fact={p.fact} unscored={unscored} /> : ''}
               factLive={live && !unscored}
               menu={menuFor(p.name)}
             />
@@ -285,6 +319,10 @@ export default function ConsoleRail({
           few with their two quiet buttons; "Review them" opens the full list
           in the Session panel's Rounds tab. A Soon item: a dot and "2 to
           review", never amber (PLAN §4.1; console-rail fork 7). */}
+      {/* NOT DRAWN WHEN IT SAYS "none" (owner, 5 Nov 2026, cut 6): a header
+          whose only word is "none" is a row to read for nothing. It appears
+          with the first late item. */}
+      {waiting > 0 || late.length ? (
       <Section
         id="late"
         title={CW.late}
@@ -316,6 +354,7 @@ export default function ConsoleRail({
         ) : <p className="hc-empty">{CW.noLate}</p>}
         {lateError ? <p className="hc-empty hc-error" role="alert">{lateError}</p> : null}
       </Section>
+      ) : null}
       {/* No fourth section (experience plan 2a): the connection is on the top
           bar when it is broken, and Questions, Rounds and the settings are in
           the Session menu, top right. */}

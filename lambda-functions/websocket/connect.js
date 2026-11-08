@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { spendHostTicket } = require('./host-tickets');
 const { heldByAnotherDevice, presentedClientId } = require('./name-holder');
+const { announcePresence } = require('./presence');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -105,19 +106,20 @@ exports.handler = async (event) => {
 
     const connectedAt = new Date().toISOString();
     const ttl = Math.floor(Date.now() / 1000) + (2 * 60 * 60); // 2 hours TTL
+    const row = {
+      PK: `GAME#${gameId || 'LOBBY'}`,
+      SK: `CONNECTION#${connectionId}`,
+      ConnectionId: connectionId,
+      ConnectionType: isHost ? 'HOST' : 'PLAYER',
+      GameId: gameId || null,
+      PlayerName: playerName || null,
+      ...(isViewer ? { Viewer: 'present', ViewerId: viewerId } : {}),
+      ConnectedAt: connectedAt,
+      ttl
+    };
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: {
-        PK: `GAME#${gameId || 'LOBBY'}`,
-        SK: `CONNECTION#${connectionId}`,
-        ConnectionId: connectionId,
-        ConnectionType: isHost ? 'HOST' : 'PLAYER',
-        GameId: gameId || null,
-        PlayerName: playerName || null,
-        ...(isViewer ? { Viewer: 'present', ViewerId: viewerId } : {}),
-        ConnectedAt: connectedAt,
-        ttl
-      }
+      Item: row
     }));
 
     // C3: dedup prior connection rows for this identity. Every reconnect mints
@@ -160,6 +162,9 @@ exports.handler = async (event) => {
     }
 
     console.log(`✅ WebSocket connection stored: ${connectionId}`);
+    // A person's page is open again: "away" clears on the host's console now
+    // (presence.js; dev QA 5 Nov). Named player sockets only; never throws.
+    await announcePresence('connect', row, { db, tableName: process.env.TABLE_NAME });
     return { statusCode: 200, body: 'Connected' };
   } catch (error) {
     console.error('❌ Connect error:', error);

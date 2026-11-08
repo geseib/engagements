@@ -1,12 +1,14 @@
 /**
- * THE PULSE'S FACTS (config/consolePulse.js; session-start D3; experience plan
- * Phase 2 step 2c). Pure: every tile, every phase, the everyone's-in state and
- * the elapsed time, and the one-count rule for the Your-part-now status.
+ * THE ROOM TILE'S FACTS (config/consolePulse.js; owner's cut 5, 5 Nov 2026,
+ * which made the pulse's three tiles one). Pure: every phase, the
+ * everyone's-in state, who is left, the elapsed time from a stamp the page was
+ * given, and the one-count rule for the Your-part-now status.
  *
  * // rejects: the count said three times on one console (People header
  * //          "9 of 12 answered", the card's status, the tile; audit A §3.4).
  */
-import { pulseFor, formatClock, arrivalsSince, withoutRoomCount, pulsePhase, PULSE_WORDS } from '../config/consolePulse';
+import { pulseFor, formatClock, arrivalsSince, withoutRoomCount, pulsePhase } from '../config/consolePulse';
+import { roomProgressFor } from '../config/roomProgress';
 
 const T0 = Date.parse('2026-11-01T10:00:00Z');
 const at = (s) => T0 + s * 1000;
@@ -20,65 +22,75 @@ describe('formatClock', () => {
   });
 });
 
-describe('every phase keeps three tiles in the same order', () => {
+describe('one room tile in every phase (cut 5, 5 Nov 2026)', () => {
   test.each(['LOBBY', 'ANSWERING', 'VOTING', 'VOTE_RESPONSES', 'RESULTS', 'RESPONSES', 'READ', 'FEEDBACK', 'ENDED', 'OTHER'])('%s', (moment) => {
     const p = pulseFor({ moment, players: 4, answered: 2, voted: 1, now: at(10), openedAt: at(0) });
-    expect(Object.keys(p)).toEqual(['phase', 'room', 'time', 'since']);
+    // rejects: the three tiles (room, time, since) that took ~110px for one fact.
+    expect(Object.keys(p)).toEqual(['phase', 'room', 'time', 'joined']);
     expect(p.room.eyebrow).toBeTruthy();
-    expect(p.time.eyebrow).toBe(PULSE_WORDS.time);
-    expect(p.since.eyebrow).toBe(PULSE_WORDS.since);
   });
 });
 
-describe('ASK: answered with a bar, then Everyone\'s in; time open since the round opened', () => {
-  test('part way', () => {
+describe('ASK: 9/15 answered with a bar, open since the round opened, who is left', () => {
+  test('part way, counts only: "3 still writing"', () => {
     const p = pulseFor({ moment: 'ANSWERING', players: 12, answered: 9, openedAt: new Date(at(0)).toISOString(), now: at(84) });
-    expect(p.room).toMatchObject({ eyebrow: 'Answered', value: '9', of: 'of 12', everyoneIn: false, sub: '3 still writing' });
+    expect(p.room).toMatchObject({ eyebrow: 'The room', value: '9', of: '/12', verb: 'answered', everyoneIn: false, nudge: '3 still writing' });
     expect(p.room.bar).toBeCloseTo(0.75);
-    expect(p.time).toMatchObject({ value: 'Open 1:24', sub: 'No limit set' });
+    expect(p.time).toMatchObject({ value: 'open 1:24', state: 'none' });
+  });
+  test('with names: "Waiting on …" from roomProgressFor, away apart', () => {
+    const roster = ['Maya', 'Sam', 'Hannah', 'Ravi', 'Tom'].map((name) => ({ name, deviceConnected: name !== 'Tom' }));
+    const progress = roomProgressFor({ moment: 'ANSWERING', roster, answer: { names: ['Maya', 'Sam'], count: 2 } });
+    const p = pulseFor({ moment: 'ANSWERING', progress, now: at(10) });
+    expect(`${p.room.value}${p.room.of} ${p.room.verb}`).toBe('2/5 answered');
+    expect(p.room.nudge).toBe('Waiting on Hannah, Ravi · away: Tom');
   });
   test('everyone in', () => {
     const p = pulseFor({ moment: 'ANSWERING', players: 4, answered: 4, openedAt: at(0), now: at(30) });
-    expect(p.room).toMatchObject({ everyoneIn: true, sub: "Everyone's in", bar: 1 });
+    expect(p.room).toMatchObject({ everyoneIn: true, nudge: "Everyone's in", bar: 1 });
   });
   test('the page\'s own everyone-in wins when it is given', () => {
     expect(pulseFor({ moment: 'ANSWERING', players: 4, answered: 3, everyoneIn: true }).room.everyoneIn).toBe(true);
   });
   test('nobody here yet is not everyone in', () => {
     const p = pulseFor({ moment: 'ANSWERING', players: 0, answered: 0 });
-    expect(p.room).toMatchObject({ everyoneIn: false, sub: 'Nobody here yet', bar: 0 });
+    expect(p.room).toMatchObject({ everyoneIn: false, nudge: 'Nobody here yet', bar: 0 });
   });
-  test('no stamp at all: the tile still says Open, never a wrong time', () => {
-    expect(pulseFor({ moment: 'ANSWERING', players: 2, answered: 1 }).time.value).toBe('Open');
+  test('no stamp at all: no time, never a wrong one', () => {
+    expect(pulseFor({ moment: 'ANSWERING', players: 2, answered: 1 }).time).toBeNull();
   });
 });
 
-describe('VOTE: voted, time since voting opened, answering\'s length under it', () => {
+describe('VOTE: voted, open since voting opened, the answered count beside it', () => {
   test('from the vote stamp', () => {
     const p = pulseFor({ moment: 'VOTING', players: 12, answered: 12, voted: 7, openedAt: at(0), voteAt: at(134), now: at(176) });
-    expect(p.room).toMatchObject({ eyebrow: 'Voted', value: '7', of: 'of 12', sub: '5 still voting', everyoneIn: false });
-    expect(p.time).toMatchObject({ value: 'Open 0:42', sub: 'Answering took 2:14' });
+    expect(p.room).toMatchObject({ value: '7', of: '/12', verb: 'voted', nudge: '5 still voting', everyoneIn: false, steps: '✓ 12/12 answered' });
+    expect(p.time).toMatchObject({ value: 'open 0:42' });
   });
   test('everyone voted', () => {
-    expect(pulseFor({ moment: 'VOTE_RESPONSES', players: 3, voted: 3 }).room).toMatchObject({ everyoneIn: true, sub: "Everyone's in" });
+    expect(pulseFor({ moment: 'VOTE_RESPONSES', players: 3, answered: 3, voted: 3 }).room).toMatchObject({ everyoneIn: true, nudge: "Everyone's in" });
   });
-  test('no vote stamp: elapsed since the round opened', () => {
-    expect(pulseFor({ moment: 'VOTING', players: 3, voted: 1, openedAt: at(0), now: at(65) }).time).toMatchObject({ value: 'Open 1:05', sub: 'No limit set' });
-  });
-});
-
-describe('RESULTS: the round in both counts, and how long it took', () => {
-  test('took and voting took', () => {
-    const p = pulseFor({ moment: 'RESULTS', players: 12, answered: 12, voted: 11, openedAt: at(0), voteAt: at(134), resultsAt: at(215), now: at(300) });
-    expect(p.room).toMatchObject({ eyebrow: 'This round', value: '12', of: 'answered', sub: '11 voted', bar: null, everyoneIn: false });
-    expect(p.time).toMatchObject({ value: 'Took 2:14', sub: 'Voting took 1:21' });
-  });
-  test('no stamps: closed, no made-up time', () => {
-    expect(pulseFor({ moment: 'READ', players: 2, answered: 2, voted: 2 }).time).toMatchObject({ value: 'Round closed', sub: '' });
+  test('no vote stamp: no clock (never the round\'s, never this tab\'s load time)', () => {
+    expect(pulseFor({ moment: 'VOTING', players: 3, voted: 1, openedAt: at(0), now: at(65) }).time).toBeNull();
   });
 });
 
-describe('since this round opened', () => {
+describe('AFTER THE ROUND: the record, no clock', () => {
+  test('"15/15 answered · 12/15 voted"', () => {
+    const p = pulseFor({ moment: 'RESULTS', players: 15, answered: 15, voted: 12, openedAt: at(0), voteAt: at(134), now: at(300) });
+    expect(p.room).toMatchObject({ eyebrow: 'This round', record: '15/15 answered · 12/15 voted', bar: null, everyoneIn: false });
+    // rejects: "Took 10:30:37" (4 Nov), a page stamp against a server one.
+    expect(p.time).toBeNull();
+  });
+  test('a vote count the page cannot know (0 after a reload) is left out', () => {
+    expect(pulseFor({ moment: 'READ', players: 2, answered: 2, voted: 0 }).room.record).toBe('2/2 answered');
+  });
+  test('a no-vote format: answered only', () => {
+    expect(pulseFor({ moment: 'RESULTS', players: 12, answered: 10, noVote: true }).room.record).toBe('10/12 answered');
+  });
+});
+
+describe('joiners since the round opened, only when there are some', () => {
   const players = [
     { name: 'Priya', joinedAt: new Date(at(-600)).toISOString() },
     { name: 'Lee Park', joinedAt: new Date(at(40)).toISOString() },
@@ -89,22 +101,22 @@ describe('since this round opened', () => {
     expect(arrivalsSince(players, at(0))).toEqual(['Ana Gomez', 'Lee Park']);
     expect(arrivalsSince(players, null)).toEqual([]);
   });
-  test('+N joined with the names; late count as its own line', () => {
-    const p = pulseFor({ moment: 'ANSWERING', players: 4, arrivals: ['Ana Gomez', 'Lee Park'], late: 2, openedAt: at(0), now: at(60) });
-    expect(p.since).toMatchObject({ value: '+2 joined', sub: 'Ana Gomez, Lee Park' });
-    expect(p.since.late).toEqual({ count: 2, text: '2 late items not reviewed' });
+  test('+N joined with the names', () => {
+    const p = pulseFor({ moment: 'ANSWERING', players: 4, arrivals: ['Ana Gomez', 'Lee Park'], openedAt: at(0), now: at(60) });
+    expect(p.joined).toBe('+2 joined · Ana Gomez, Lee Park');
   });
-  test('nobody new, nothing late', () => {
-    const p = pulseFor({ moment: 'VOTING', players: 4, arrivals: [] });
-    expect(p.since).toMatchObject({ value: 'No one new', sub: '', late: null });
+  test('nobody new: nothing at all (rejects "No one new")', () => {
+    expect(pulseFor({ moment: 'VOTING', players: 4, arrivals: [] }).joined).toBe('');
   });
-  test('the lobby has no round yet', () => {
-    expect(pulseFor({ moment: 'LOBBY', players: 3, arrivals: ['x'] }).since.value).toBe('No round yet');
+  test('the lobby says how many are here, and no joiners line', () => {
+    const p = pulseFor({ moment: 'LOBBY', players: 3, arrivals: ['x'] });
+    expect(p.room).toMatchObject({ value: '3', verb: 'here' });
+    expect(p.joined).toBe('');
   });
 });
 
 describe('one count, once: the card\'s status drops the room\'s count while the pulse shows it', () => {
-  test('answering: the count and the late count both go (tiles 1 and 3 say them)', () => {
+  test('answering: the count and the late count both go (the room tile and the Needs-you line say them)', () => {
     const s = { text: '3 of 4 answered · 1 late answer kept', tone: 'pending', late: { line: '1 late answer kept', link: '1 late answer kept' } };
     expect(withoutRoomCount(s, 'ANSWERING')).toEqual({ text: '', tone: '' });
   });
@@ -122,6 +134,9 @@ describe('one count, once: the card\'s status drops the room\'s count while the 
   test('only the count: nothing left, no tone', () => {
     expect(withoutRoomCount({ text: '2 of 5 answered', tone: 'pending' }, 'ANSWERING')).toEqual({ text: '', tone: '' });
   });
+  test('the room\'s question: its count goes too (D2: it was said three times)', () => {
+    expect(withoutRoomCount({ text: 'All 2 answered', tone: 'success' }, 'ROOM_QUESTION')).toEqual({ text: '', tone: '' });
+  });
   test('other phases and other words are left alone', () => {
     const r = { text: 'Results on screen', tone: 'info' };
     expect(withoutRoomCount(r, 'RESULTS')).toBe(r);
@@ -134,6 +149,7 @@ test('phases map as D3\'s table', () => {
   expect(pulsePhase('ANSWERING')).toBe('answer');
   expect(pulsePhase('VOTE_RESPONSES')).toBe('vote');
   expect(pulsePhase('READ')).toBe('after');
+  expect(pulsePhase('ROOM_QUESTION')).toBe('ask');
   expect(pulsePhase('LOBBY')).toBe('lobby');
   expect(pulsePhase('NONSENSE')).toBe('lobby');
 });

@@ -1,0 +1,33 @@
+/* ============================================================================
+   THE ⋯ BESIDE THE MAIN BUTTON — components/HostActionBar.jsx BarMore (owner,
+   5 Nov 2026, cut 8: Skip this round leaves the main line). One square
+   secondary button, ui/Button's own ink and outline, and a small menu that
+   opens downwards and to the left (the bar sits under the top bar on the
+   console and on one screen, at the right edge).
+
+   Roles only (styles/roles.css), on whatever theme the bar's surface
+   declares (dusk on the console and the stage). Measured on dusk
+   --surface-2 #25375A: --text 10.06:1, --muted 4.93:1 (the disabled item).
+   Laptop ladder: the item at 15px (body), 36px rows.
+   ========================================================================== */
+.hab-more { position: relative; display: inline-flex; flex: none; }
+.hab-more .hab-more-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; padding: 0;
+}
+.hab-more .hab-more-toggle[aria-expanded="true"] { background: var(--surface-2); }
+.hab-more .hab-more-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  display: flex; flex-direction: column; min-width: 220px; padding: 6px;
+  background: var(--surface-2); border: 1px solid var(--rule-strong); border-radius: 10px;
+}
+.hab-more .hab-more-item {
+  display: flex; align-items: center; gap: 8px;
+  font: inherit; font-size: 15px; font-weight: 600; text-align: left; white-space: nowrap;
+  min-height: 36px; padding: 0 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.hab-more .hab-more-item:hover:not(:disabled),
+.hab-more .hab-more-item:focus-visible { background: var(--surface); }
+.hab-more .hab-more-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hab-more .hab-more-item:disabled { color: var(--muted); cursor: default; }

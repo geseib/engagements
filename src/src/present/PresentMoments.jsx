@@ -23,6 +23,7 @@ import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
 import RoomTimeLine from '../components/RoomTimeLine';
 import TallyRow from '../components/ui/TallyRow';
+import { BLUFF_WORDS } from '../config/bluffRound';
 import PollBoard from '../components/stage/PollBoard';
 import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWords';
 import {
@@ -173,14 +174,15 @@ export function PresentLobby({ model }) {
 }
 
 /**
- * A QUESTION OR A LESSON IS UP (owner, 18 Oct 2026: "the instructions is the
- * optional one. the title often is nice to have big too";
- * docs/design/room-content-v2 frames 1-3). What shows and how large is
- * config/roomContent.js's: the category a small eyebrow, the title the lead
- * (hero when short), the lesson under it at the secondary step (never dropped:
- * the fitter shrinks it toward --fit-min), and the question's own instruction
- * in one "Your turn" band. A generic instruction is off Room, TV and Table;
- * on Call it is one slim line that may give way.
+ * A QUESTION OR A LESSON IS UP: THE TITLE AND THE LESSON, NOTHING ELSE (owner,
+ * 5 Nov 2026: "taking the instructions out and making the main body larger is
+ * more useful"). What shows and how large is config/roomContent.js's: the
+ * category a small eyebrow, the title the lead (hero when short), the whole
+ * lesson under it (never dropped: primary when short, else secondary). No
+ * "Your turn" band and no how-to-answer line on any profile: the phones carry
+ * it. The space goes to the body: the moment's main carries a data-grow
+ * (PRESENT_GROW) the fitter may scale the type up to. With no title the
+ * lesson leads; with neither, the task.
  */
 export function RoomQuestion({ model }) {
   const rc = model.room;
@@ -188,41 +190,56 @@ export function RoomQuestion({ model }) {
   const lead = (key) => (
     <p className={`present-rc-lead is-${sizeOf(rc, key)}`} data-rc-size={sizeOf(rc, key)} {...rcAttrs(rc, key)}>{textOf(rc, key)}</p>
   );
-  const taskRole = roleOf(rc, 'task');
-  const taskDrop = dropRank(rc, 'task');
   return (
     <>
       {shows(rc, 'category') ? <Eyebrow className="present-eyebrow" {...rcAttrs(rc, 'category')}>{textOf(rc, 'category')}</Eyebrow> : null}
-      {titleRole === ROLE.KICKER ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Eyebrow> : null}
-      {titleRole === ROLE.SUPPORT ? <Heading level={2} size="primary" balance className="present-h2 present-rc-title" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Heading> : null}
       {titleRole === ROLE.LEAD ? lead('title') : null}
       {roleOf(rc, 'story') === ROLE.LEAD ? lead('story') : null}
       {roleOf(rc, 'story') === ROLE.SUPPORT ? (
-        <p className="present-rc-story" data-rc-size={sizeOf(rc, 'story')} {...rcAttrs(rc, 'story')}>{textOf(rc, 'story')}</p>
+        <p className={`present-rc-story is-${sizeOf(rc, 'story')}`} data-rc-size={sizeOf(rc, 'story')} {...rcAttrs(rc, 'story')}>{textOf(rc, 'story')}</p>
       ) : null}
-      {taskRole === ROLE.LEAD ? lead('task') : null}
-      {taskRole === ROLE.SUPPORT && !taskDrop ? (
-        // "Your turn": the question the room answers (its own instruction, or
-        // the question pulled from the front of the lesson). Never dropped.
-        <div className="present-turn" {...rcAttrs(rc, 'task')}>
-          <span className="present-turn-ey">Your turn</span>
-          <p className="present-turn-text">{textOf(rc, 'task')}</p>
-        </div>
-      ) : null}
-      {taskRole === ROLE.SUPPORT && taskDrop ? (
-        // Call only: the set's or the type's generic instruction, slim, first to give way.
-        <p className="present-task is-slim present-rc-task" data-drop={String(taskDrop)} {...rcAttrs(rc, 'task')}>{textOf(rc, 'task')}</p>
-      ) : null}
+      {roleOf(rc, 'task') === ROLE.LEAD ? lead('task') : null}
     </>
   );
 }
+
+/**
+ * A BLUFF ROUND'S LINE (docs/design/bluff-round/README.md): a bluff is in play,
+ * or why not, and never who. Dressed as the talk line (eyebrow + words), so it
+ * is the room's furniture and needs no style of its own.
+ */
+export function BluffNote({ line }) {
+  if (!line) return null;
+  return (
+    <p className="present-talk" data-testid="present-bluff">
+      <span className="present-talk-ey">{BLUFF_WORDS.eyebrow}</span>
+      {line}
+    </p>
+  );
+}
+
+/** The reveal at results: the real answer and its number on the ballot. No name. */
+export function BluffReveal({ reveal }) {
+  if (!reveal || !reveal.realAnswer) return null;
+  return (
+    <p className="present-talk" data-testid="present-bluff-reveal">
+      <span className="present-talk-ey">{BLUFF_WORDS.revealHeading}</span>
+      {reveal.realAnswer}
+      {reveal.realBallot ? ` · ${BLUFF_WORDS.ballotNumber(reveal.realBallot)}` : ''}
+    </p>
+  );
+}
+
+/** How far above the ladder a question-up moment may grow (the stage's ASK: 1.35). */
+export const PRESENT_GROW = '1.3';
 
 export function PresentAnswering({ model }) {
   return (
     <div className="present-moment present-frame">
       <Top model={model} right="Answering" />
-      <div className="present-main">
+      <div className="present-main" data-grow={PRESENT_GROW}>
         <RoomQuestion model={model} />
+        <BluffNote line={model.bluffLine} />
       </div>
       <CountsFoot counts={model.counts} time={model.time} />
     </div>
@@ -257,6 +274,7 @@ export function PresentVoting({ model }) {
               </li>
             ))}
           </ol>
+          <BluffNote line={model.bluffLine} />
         </div>
         <div className="present-foot is-start">
           <Meter done={model.counts.done} of={model.counts.of} />
@@ -275,6 +293,7 @@ export function PresentVoting({ model }) {
         {shows(rc, 'title') ? <Heading level={1} size="primary" balance className="present-h2" {...rcAttrs(rc, 'title')}>{model.title}</Heading> : null}
         <TaskLine task={model.task} rc={rc} />
         <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(rc, 'cue')}>{model.lead}</p>
+        <BluffNote line={model.bluffLine} />
       </div>
       <CountsFoot counts={model.counts} time={model.time} />
     </div>
@@ -313,7 +332,7 @@ export function PresentTally({ model }) {
                 rank={row.top ? null : row.n}
                 label={row.top ? (
                   <>
-                    <span className="present-pick-ey">{"The room's pick"}</span>
+                    <span className="present-pick-ey">{row.pickLabel || "The room's pick"}</span>
                     <span className="present-idea">{row.idea}</span>
                   </>
                 ) : <span className="present-idea">{row.idea}</span>}
@@ -329,6 +348,7 @@ export function PresentTally({ model }) {
         <p className="present-more" data-more={model.more || 0} hidden={!(model.more > 0)}>
           {model.more > 0 ? moreAnswers(model.more) : ''}
         </p>
+        <BluffReveal reveal={model.bluffReveal} />
         {talk ? (
           <p className="present-talk" data-drop={String((rc && dropRank(rc, 'talk')) || 1)} {...(rc ? rcAttrs(rc, 'talk') : {})}>
             <span className="present-talk-ey">Talk about it</span>
@@ -399,6 +419,7 @@ export function ResultFocus({ model }) {
             <p className="present-fit-text">{model.text}</p>
             {model.credit ? <p className="present-credit">{model.credit}</p> : null}
             {model.parts > 1 ? <div className="present-part">{RW.partOf(model.part + 1, model.parts)}</div> : null}
+            <BluffReveal reveal={model.bluffReveal} />
           </div>
           <ol className="present-ladder" aria-label="Where it sits">
             {(model.ladder || []).map((r) => (
@@ -521,7 +542,7 @@ export function PresentQuestionFocus({ model }) {
   return (
     <div className="present-moment present-frame">
       <Top model={model} right="The question" />
-      <div className="present-main">
+      <div className="present-main" data-grow={PRESENT_GROW}>
         <RoomQuestion model={model} />
       </div>
       <div className="present-foot"><span>{model.roundLabel}</span></div>

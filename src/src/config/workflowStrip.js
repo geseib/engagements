@@ -130,7 +130,8 @@ function partKey(moment, step, ctx = {}) {
  *              roundNoun, roundNumber/state, totalRounds, notes, focus,
  *              asksReady
  * @returns {{ live, round, steps, part, action } | null}
- *   `steps`: [{ id, label, state: 'done'|'live'|'todo', optional, sub, explain }]
+ *   `steps`: [{ id, label, state: 'done'|'live'|'todo', optional, sub, explain }];
+ *            an optional step only once it can happen (cut 7, below)
  *   `part`:  "Your part now" as { before, action, after }, or null
  */
 export function workflowStrip(step, rawCtx = {}) {
@@ -171,6 +172,23 @@ export function workflowStrip(step, rawCtx = {}) {
     };
   });
 
+  /*
+    AN OPTIONAL STEP SHOWS ONLY WHEN IT CAN HAPPEN (owner, 5 Nov 2026, cut 7:
+    "say each thing once"). There is no "planned for this round" signal, so
+    Ask (and Trivia's Scores) is drawn once it is reachable: from What we
+    heard on, while the room's questions are on for this session
+    (`asksEnabled`) or Workie has some ready, and always while it is live.
+    Before then (Setup, Answer, Vote) and at Finish it is left out, so a
+    round that will not ask the room never shows a step it will skip.
+  */
+  const heardAt = ids.indexOf('heard');
+  const reachable = (id) => (id === 'ask' ? Boolean(ctx.asksEnabled) || asksReady > 0 : true);
+  const shown = steps.filter((st, i) => {
+    if (!st.optional || st.state === 'live') return true;
+    if (ended || moment === 'LOBBY' || heardAt < 0 || liveAt < heardAt) return false;
+    return i > liveAt ? reachable(st.id) : false;
+  });
+
   const n = Number(ctx.roundNumber) > 0 ? Number(ctx.roundNumber) : null;
   const round = n ? { n, of: Number(ctx.totalRounds) > 0 ? Number(ctx.totalRounds) : null } : null;
   if (round) round.label = RW.stripRound(ctx.roundNoun, round.n, round.of);
@@ -191,7 +209,7 @@ export function workflowStrip(step, rawCtx = {}) {
     }
   }
 
-  return { live, round, steps, part, roundNoun: ctx.roundNoun };
+  return { live, round, steps: shown, part, roundNoun: ctx.roundNoun };
 }
 
 /** Where the room is, for the "Viewing …" bar: "Round 2, What we heard". */

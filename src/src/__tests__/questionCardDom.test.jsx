@@ -148,40 +148,58 @@ const ART = {
 };
 const HOW = 'Select the best answer:';
 
-describe('ASK — the card is the markup the stage rendered inline', () => {
-  test.each([
-    ['trivia', TRIVIA, 'trivia'],
-    ['trivia whose filled slots skip a letter', GAPPED, 'trivia'],
-    ['a question with an image', ART, 'call-and-answer'],
-    ['wavelength, whose stored detail never renders', { ...ART, image: '' }, 'wavelength'],
-    ['a question with no detail at all', { id: 'x', title: 'Bare' }, 'poll'],
-    ['a question carrying only the wire\'s legacy `question` field', { id: 'y', question: 'Legacy' }, 'call-and-answer'],
-  ])('%s, with the stage\'s expand handler', (_label, question, gameType) => {
-    const onExpand = () => {};
-    expect(html(<QuestionCard phase="ASK" question={question} gameType={gameType} instruction={HOW} onExpand={onExpand} />))
-      .toBe(html(<OracleAsk currentQuestion={question} currentGameType={gameType} instructionText={HOW} expandQuestion={onExpand} />));
+/*
+ * TWO DELIBERATE DEPARTURES FROM THE ORACLE (owner, 5 Nov 2026: "i dont think
+ * the enlarge the question button is useful ... lets get rid of it. If anything
+ * i think taking the instructions out and making the main body larger is more
+ * useful"). Both are made on a detached copy of what the frozen oracle drew,
+ * so the comparison is still the 29a055a7 markup, less exactly these:
+ *   1. the heading's expand affordance (data-expandable, title, the click):
+ *      the card opens nothing now, on any caller;
+ *   2. the how-to-answer line when no instruction is handed in: the stage
+ *      hands none (the phones carry it); the set editor's preview still hands
+ *      one, and then the line is the oracle's.
+ */
+function oracleAsk(question, gameType, { instruction = true } = {}) {
+  const copy = render(
+    <OracleAsk currentQuestion={question} currentGameType={gameType} instructionText={HOW} expandQuestion={() => {}} />
+  ).container.cloneNode(true);
+  const heading = copy.querySelector('h1.q');
+  heading.removeAttribute('data-expandable');
+  heading.removeAttribute('title');
+  if (!instruction) copy.querySelector('[data-drop-note="How to answer"]').remove();
+  return copy.innerHTML;
+}
+
+const ASK_CASES = [
+  ['trivia', TRIVIA, 'trivia'],
+  ['trivia whose filled slots skip a letter', GAPPED, 'trivia'],
+  ['a question with an image', ART, 'call-and-answer'],
+  ['wavelength, whose stored detail never renders', { ...ART, image: '' }, 'wavelength'],
+  ['a question with no detail at all', { id: 'x', title: 'Bare' }, 'poll'],
+  ['a question carrying only the wire\'s legacy `question` field', { id: 'y', question: 'Legacy' }, 'call-and-answer'],
+];
+
+describe('ASK — the card is the markup the stage rendered inline, less the two departures', () => {
+  test.each(ASK_CASES)('%s, with an instruction (the set editor\'s preview)', (_label, question, gameType) => {
+    expect(html(<QuestionCard phase="ASK" question={question} gameType={gameType} instruction={HOW} />))
+      .toBe(oracleAsk(question, gameType));
   });
 
-  test('without a handler, the heading carries none of the expand affordance and nothing else changes', () => {
-    // rejects: a heading that shows the zoom cursor and "Show the full
-    // question" and then does nothing when pressed — a dead control.
+  test.each(ASK_CASES)('%s, with none (the room\'s screen): no how-to-answer line, and nothing else changes', (_label, question, gameType) => {
+    // rejects: the instruction still on the room's screen (owner, 5 Nov 2026);
+    // trivia's options, the picture or the prompt lost with it.
+    expect(html(<QuestionCard phase="ASK" question={question} gameType={gameType} />))
+      .toBe(oracleAsk(question, gameType, { instruction: false }));
+  });
+
+  test('the heading carries no expand affordance and opens nothing', () => {
+    // rejects: the retired "enlarge the question" control on the room's screen.
     const card = render(<QuestionCard phase="ASK" question={TRIVIA} gameType="trivia" instruction={HOW} />).container;
     const h1 = card.querySelector('h1.q');
     expect(h1.hasAttribute('data-expandable')).toBe(false);
     expect(h1.hasAttribute('title')).toBe(false);
-
-    const oracle = render(<OracleAsk currentQuestion={TRIVIA} currentGameType="trivia" instructionText={HOW} expandQuestion={() => {}} />).container;
-    const oracleH1 = oracle.querySelector('h1.q');
-    oracleH1.removeAttribute('data-expandable');
-    oracleH1.removeAttribute('title');
-    expect(card.innerHTML).toBe(oracle.innerHTML);
-  });
-
-  test('the heading calls the handler it was given', () => {
-    const onExpand = jest.fn();
-    const { container } = render(<QuestionCard phase="ASK" question={TRIVIA} gameType="trivia" instruction={HOW} onExpand={onExpand} />);
-    fireEvent.click(container.querySelector('h1.q'));
-    expect(onExpand).toHaveBeenCalledTimes(1);
+    expect(card.querySelector('[data-expandable]')).toBeNull();
   });
 
   test('a broken image hides itself, as the stage\'s does', () => {
@@ -393,9 +411,8 @@ describe('REVEAL withQuestion — the question above its answer, in the stage\'s
   });
 
   test('ASK already draws its question, so asking for it there changes nothing', () => {
-    const onExpand = () => {};
-    expect(html(<QuestionCard phase="ASK" question={PICTURED} gameType="trivia" instruction={HOW} onExpand={onExpand} withQuestion />))
-      .toBe(html(<OracleAsk currentQuestion={PICTURED} currentGameType="trivia" instructionText={HOW} expandQuestion={onExpand} />));
+    expect(html(<QuestionCard phase="ASK" question={PICTURED} gameType="trivia" instruction={HOW} withQuestion />))
+      .toBe(html(<QuestionCard phase="ASK" question={PICTURED} gameType="trivia" instruction={HOW} />));
   });
 
   test('it adds a question to a Reveal and never makes one: no question, or no trivia, draws what it drew before', () => {
@@ -419,17 +436,22 @@ describe('the stage really renders it', () => {
     .replace(/\/\*[\s\S]*?\*\//g, '');
   const cards = source.match(/<QuestionCard\b[^>]*\/>/g) || [];
 
-  test('it imports the card and renders it twice: ASK and trivia RESULTS', () => {
+  test('it imports the card and renders it three times: ASK, the question back up, and trivia RESULTS', () => {
     expect(source).toMatch(/import QuestionCard from '\.\/components\/QuestionCard';/);
-    expect(cards).toHaveLength(2);
+    expect(cards).toHaveLength(3);
+    expect(cards.filter((c) => /phase="ASK"/.test(c))).toHaveLength(2);
   });
 
-  test('ASK hands over the question, the expand handler and the host\'s instruction', () => {
-    const ask = cards.find((c) => /phase="ASK"/.test(c));
-    expect(ask).toMatch(/question=\{currentQuestion\}/);
-    expect(ask).toMatch(/onExpand=\{expandQuestion\}/);
-    expect(ask).toMatch(/instruction=\{getHostInstructionText\(currentQuestionOf\(questions, currentQuestionId\)\)\}/);
-    expect(ask).toMatch(/gameType=\{currentGameType\}/);
+  test('ASK hands over the question and its type, and no instruction and no expand handler', () => {
+    // rejects (owner, 5 Nov 2026): the instruction on the room's screen, and
+    // the "enlarge the question" control.
+    cards.filter((c) => /phase="ASK"/.test(c)).forEach((ask) => {
+      expect(ask).toMatch(/question=\{currentQuestion\}/);
+      expect(ask).toMatch(/gameType=\{currentGameType\}/);
+      expect(ask).not.toMatch(/instruction=/);
+      expect(ask).not.toMatch(/onExpand=/);
+    });
+    expect(source).not.toMatch(/expandQuestion/);
   });
 
   test('RESULTS hands over the question, its type and the room\'s answers', () => {

@@ -62,6 +62,26 @@ import { wallCreditFor } from '../config/comments';
 import { podiumEntries } from '../config/podium';
 import { isSurveyType } from '../config/hostControls';
 import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/questionCard';
+import { bluffStageLine, isBluffRound, isBluffResult, BLUFF_WORDS } from '../config/bluffRound';
+
+/*
+  A BLUFF ROUND ON THE WALL (docs/design/bluff-round/README.md; QA 2026-11-07).
+  While the room answers and votes, one line: a bluff is in play (or why not),
+  never who. At results the real answer and its ballot number, and the tally
+  without a single name or point: the wall never names a person, and an
+  answer's points are not any one player's. The talk line, which asks what the
+  top two have in common, does not fit a room that was being fooled.
+*/
+const bluffLineOf = (q) => bluffStageLine(q) || '';
+const bluffNow = (q, results) => isBluffRound(q) || isBluffResult(results);
+function bluffRevealOf(results) {
+  if (!isBluffResult(results)) return null;
+  const b = results.bluff;
+  return {
+    realAnswer: String(b.realAnswer),
+    realBallot: Number.isInteger(b.realBallot) ? b.realBallot : null,
+  };
+}
 
 /** The results tally shows five; up to six fit whole (NOTES §5). */
 export const TALLY_TOP = 5;
@@ -165,15 +185,23 @@ export function voteChipsOf(total, index) {
 
 /** The tally rows, named or not, each with its own text. */
 function tallyRows(snapshot, results) {
-  const hidden = hiddenNow(snapshot);
+  const bluff = bluffNow(snapshot.currentQuestionData || {}, results);
+  const hidden = bluff || hiddenNow(snapshot);
   const order = tallyOrder(results && results.voteTallies, []);
   // The share bar is the room's backing relative to the top idea: a proportion,
   // never a score, so it stays in a round whose names (and points) are hidden.
-  const top = order.reduce((m, r) => Math.max(m, int(r.points)), 0);
+  // In a bluff round it is the picks an answer drew, not its points.
+  const backing = (r) => (bluff ? int(r.votes) : int(r.points));
+  const top = order.reduce((m, r) => Math.max(m, backing(r)), 0);
+  const firstBluff = bluff ? order.findIndex((r) => r.bluffRole !== 'real' && int(r.votes) > 0) : -1;
   return order.map((row, i) => {
     const named = !hidden && row.playerName;
     const points = hidden ? null : int(row.points);
+    const real = bluff && row.bluffRole === 'real';
     return {
+      // A bluff round's own label for a row: the real one, and the made-up
+      // answer that fooled the most (never "The room's pick").
+      ...(bluff ? { pickLabel: real ? BLUFF_WORDS.realLabel : (i === firstBluff ? BLUFF_WORDS.fooledLabel : null), real } : {}),
       n: i + 1,
       label: named ? String(row.playerName) : `Response ${i + 1}`,
       text: String(row.answer || ''),
@@ -183,8 +211,8 @@ function tallyRows(snapshot, results) {
       // A score beside a response is attribution by arithmetic: it goes where the names go.
       points,
       credit: points === null ? null : RW.backedCredit(points, named ? String(row.playerName) : ''),
-      share: top > 0 ? int(row.points) / top : 0,
-      top: i === 0 && top > 0,
+      share: top > 0 ? backing(row) / top : 0,
+      top: bluff ? Boolean(real || i === firstBluff) : i === 0 && top > 0,
       place: ordinal(i + 1),
       named: Boolean(named),
     };
@@ -399,7 +427,8 @@ function momentModel(snapshot, reads = {}) {
           overview: true,
           answers: rows.map((r) => ({ n: r.n, text: r.text })),
           total: rows.length,
-          lead: RW.voteOnDevice,
+          lead: isBluffRound(q) ? BLUFF_WORDS.voteCue : RW.voteOnDevice,
+          bluffLine: bluffLineOf(q),
           counts,
         };
       }
@@ -412,6 +441,7 @@ function momentModel(snapshot, reads = {}) {
         ...nav,
         overview,
         chips: voteChipsOf(nav.total, nav.index),
+        bluffLine: bluffLineOf(q),
         counts,
       };
     }
@@ -445,6 +475,7 @@ function momentModel(snapshot, reads = {}) {
         title: String(q.title || ''),
         task: taskOf(q, snapshot),
         story: storyOf(q),
+        bluffLine: bluffLineOf(q),
         counts: countsOf(snapshot, 'answered'),
         // The round timer as words and a bar (experience plan 2f), only when
         // the host left "show the time" on; /state carries none otherwise.
@@ -458,6 +489,7 @@ function momentModel(snapshot, reads = {}) {
         title: String(q.title || ''),
         ...contextOf(q, snapshot),
         lead: RW.answersOnDevices(answered),
+        bluffLine: bluffLineOf(q),
         counts: countsOf(snapshot, 'voted'),
         ...(snapshot.time ? { time: snapshot.time } : {}),
       };
@@ -469,13 +501,16 @@ function momentModel(snapshot, reads = {}) {
         moment,
         ...common,
         title: String(q.title || ''),
-        heading: RW.whatTheRoomBacked,
+        heading: bluffNow(q, reads.results) ? BLUFF_WORDS.eyebrow : RW.whatTheRoomBacked,
         ...contextOf(q, snapshot),
         loading: !reads.results,
         rows: rows.slice(0, show),
         more: rows.length - show,
         total: rows.length,
-        hidden: hiddenNow(snapshot),
+        hidden: bluffNow(q, reads.results) || hiddenNow(snapshot),
+        bluff: bluffNow(q, reads.results),
+        bluffReveal: bluffRevealOf(reads.results),
+
         voted: int(snapshot.roomCounts && snapshot.roomCounts.voted),
         // A comment the host put up shows here too, as on the stage (19 Oct 2026).
         featured: featuredOf(reads.comments),
@@ -495,7 +530,8 @@ function momentModel(snapshot, reads = {}) {
         ...nav,
         place: row.place,
         credit: row.credit,
-        hidden: hiddenNow(snapshot),
+        hidden: bluffNow(q, reads.results) || hiddenNow(snapshot),
+        bluffReveal: bluffRevealOf(reads.results),
         ladder: ladderOf(rows, nav.index),
         voted: int(snapshot.roomCounts && snapshot.roomCounts.voted),
       };
@@ -599,7 +635,7 @@ export function presentModel(snapshot, reads = {}) {
     cue,
   }));
   // The host's way into the discussion (config/roomContent.js TALK_LINE).
-  const talk = model.moment === 'RESULTS' ? textOf(room, 'talk') || '' : undefined;
+  const talk = model.moment === 'RESULTS' ? (model.bluff ? '' : textOf(room, 'talk') || '') : undefined;
   return talk === undefined ? { ...model, room } : { ...model, room, talk };
 }
 

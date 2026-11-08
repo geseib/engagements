@@ -1463,7 +1463,7 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     // Only the room's window heard about the Stage (B7): the ask was not touched.
     expect(posts().filter((c) => !c.url.endsWith('/build/wall'))).toHaveLength(0);
     expect(within(dockEl).getByRole('button', { name: 'Show results anyway' })).toHaveClass('is-armed');
-    expect(within(dockEl).getByRole('alert')).toHaveTextContent('1 of 4 still answering. Press again to show results.');
+    expect(within(dockEl).getByTestId('bar-armed')).toHaveTextContent('1 of 4 still answering. Press again to show results.');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`));
     expect(lastPost().body).toEqual({ action: 'close' });

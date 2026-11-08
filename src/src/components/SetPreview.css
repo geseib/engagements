@@ -1,0 +1,130 @@
+/* ==========================================================================
+   SET PREVIEW — components/SetPreview.jsx: a read-only look at one question
+   set, layered over the New engagement dialog (its afterContent sibling).
+
+   The shell is the shared modal look (components/ui/Dialog.css, .ui-scrim /
+   .ui-dialog--full: the body scrolls, the head and foot stay put); this
+   sheet adds only the set's lines and its questions. Dusk, declared on the
+   overlay (theme="dark"), because the overlay hangs under a paper <html>.
+
+   --setpv-* locals read the shared roles only (styles/roles.css), so every
+   skin paints it. MEASURED CONTRAST: setPreviewPalette.test.js composites
+   each pairing on the dusk roles in every skin.
+
+   Ladder: the laptop ladder, 12/13/15/19; nothing below 12px.
+   ========================================================================== */
+
+/* Over the create card (10000), level with "Your question sets". */
+.setpv-scrim { --ui-scrim-z: 10001; }
+
+.setpv {
+  --setpv-card: var(--surface);
+  --setpv-field: var(--surface-2);
+  --setpv-text: var(--text);
+  --setpv-muted: var(--muted);
+  --setpv-rule: var(--rule);
+  --setpv-right: var(--success-text);
+  --setpv-right-wash: rgb(var(--success-rgb) / 0.14);
+  --setpv-t-floor: 12px;
+  --setpv-t-label: 13px;
+  --setpv-t-body: 15px;
+  --setpv-t-head: 19px;
+  color: var(--setpv-text);
+}
+
+.setpv .setpv-eyebrow { color: var(--setpv-muted); }
+.setpv .setpv-sub { color: var(--setpv-muted); font-size: var(--setpv-t-label); }
+.setpv .ui-dialog-title:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.setpv .setpv-dim { color: var(--setpv-muted); font-size: var(--setpv-t-label); }
+.setpv .setpv-body { display: flex; flex-direction: column; gap: 16px; padding-bottom: 8px; }
+
+.setpv .setpv-meta { display: flex; flex-direction: column; gap: 8px; }
+.setpv .setpv-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.setpv .setpv-line b { color: var(--setpv-text); font-weight: 600; }
+.setpv .setpv-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--setpv-rule);
+  border-radius: 6px;
+  font-size: var(--setpv-t-floor);
+  color: var(--setpv-text);
+}
+.setpv .setpv-desc { margin: 0; font-size: var(--setpv-t-body); line-height: 1.5; color: var(--setpv-text); }
+
+.setpv .setpv-refusal,
+.setpv .setpv-error {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--setpv-rule);
+  border-radius: 10px;
+  background: var(--setpv-field);
+  color: var(--setpv-text);
+}
+.setpv .setpv-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.setpv .setpv-error p { flex: 1 1 240px; margin: 0; }
+
+.setpv .setpv-cat { display: flex; flex-direction: column; gap: 6px; }
+.setpv .setpv-cat-h {
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--setpv-rule);
+  font-size: var(--setpv-t-head);
+  font-weight: 700;
+  color: var(--setpv-text);
+}
+.setpv .setpv-qs { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.setpv .setpv-q {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--setpv-rule);
+}
+.setpv .setpv-q:last-child { border-bottom: 0; }
+.setpv .setpv-thumb {
+  flex: none;
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--setpv-field);
+}
+.setpv .setpv-qbody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.setpv .setpv-qtitle { margin: 0; font-size: var(--setpv-t-body); font-weight: 600; color: var(--setpv-text); }
+.setpv .setpv-qdetail { margin: 0; font-size: var(--setpv-t-label); line-height: 1.5; color: var(--setpv-muted); }
+.setpv .setpv-kind {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--setpv-rule);
+  border-radius: 999px;
+  font-size: var(--setpv-t-floor);
+  font-weight: 600;
+  color: var(--setpv-muted);
+  vertical-align: 1px;
+}
+.setpv .setpv-opts { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0; padding: 0; list-style: none; }
+.setpv .setpv-opts li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: var(--setpv-t-label);
+  color: var(--setpv-text);
+}
+.setpv .setpv-opts li.is-correct { background: var(--setpv-right-wash); }
+.setpv .setpv-letter { flex: none; width: 16px; color: var(--setpv-muted); }
+.setpv .setpv-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  font-size: var(--setpv-t-floor);
+  font-weight: 700;
+  color: var(--setpv-right);
+}
+
+@media (max-width: 600px) {
+  .setpv .setpv-thumb { width: 64px; height: 48px; }
+}

@@ -1,5 +1,11 @@
 # Resume
 
+> ## 🆕 5 Nov 2026 — START WITH `docs/handoff/noise-review-2026-11-05.md`
+> `dev` was pushed to `9149c060` (player identity fix, laptop layout, nine noise cuts) and the
+> pipeline run was NOT verified: no AWS access in that session. That file lists what needs AWS
+> (verify the deploy; Safari Google account chooser = Cognito managed login), what needs the
+> owner, the backend-test package list, and the screenshot harness in `scripts/qa-shots/`.
+>
 > ## ⚠️ SUPERSEDED IN PART — read `docs/handoff/2026-08-14-session-handoff.md` FIRST,
 > ## then `2026-08-11-session-handoff.md`.
 >

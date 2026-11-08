@@ -56,9 +56,9 @@ const running = {
           t: 'list',
           items: [
             { title: 'The top bar', text: 'The two-screen console\'s bar: **Main menu**, the name, **Show join code**, **The room sees this screen**, **Needs you** (a count, never a name), **?** and **Session menu**.' },
-            { title: 'Your part now', text: 'Under the top bar, where it is on two screens: a status line and the main button, with a small **Space** on it (that key presses it too).' },
-            { title: 'The Needs-you line', text: 'Under that: **Nothing needs you now.**, or a count by kind ("1 name request") with **Open**. Never a name, never **Let them** or **Not now**.' },
-            { title: 'The rail', text: 'Where the session is (Lobby, Answering, Voting, Results), the round, and JOIN with the code for the room.' },
+            { title: 'Your part now', text: 'Under the top bar, where it is on two screens: a status line and the main button, with a small **Space** on it (that key presses it too). **Skip this round** is behind **⋯** just left of it.' },
+            { title: 'The Needs-you line', text: 'Under that, only while something needs you: a count by kind ("1 name request") with **Open**. Never a name, never **Let them** or **Not now**. With nothing waiting there is no line.' },
+            { title: 'The rail', text: 'Where the session is (Lobby, Answering, Voting, Results), the round, and JOIN with the code. A session goal is not shown to the room.' },
             { title: 'No step strip', text: 'On one screen the rail and the question\'s own heading say where the round is; the steps (Answer, Vote, What we heard) are on your laptop only on two screens.' },
             { title: 'The room meter', text: 'How many have answered or voted. Click it, or press U, to list who is still to answer.' },
           ],
@@ -122,12 +122,14 @@ const running = {
       ],
     },
     /*
-      ASK: QuestionCard (title leads, the lesson under it, "Your turn" band from
-      the question's own instruction; title "Show the full question" expands).
+      ASK: QuestionCard (title leads, the whole lesson under it; no instruction
+      on the room's screen since 5 Nov 2026 — the phones carry it; the card
+      opens nothing, the white enlarge overlay is gone).
       Meter "Answered x / n". Primary RW.startVoting (C&A) or RW.showResults
       (no-vote types, hostRunsVotePhase); disabled with RW.nobodyAnswered;
       early press arms in place (RW.armVote/armResults, RW.anyway). Secondary
-      "Skip this round" (RW.skipRound) with skipConfirm in hostControls.js:
+      "Skip this round" (RW.skipRound), behind the bar's ⋯ (HostActionBar
+      BarMore, cut 8), with skipConfirm in hostControls.js:
       "The room loses this round: answers and votes so far are not counted."
     */
     {
@@ -137,15 +139,15 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The question goes up with its title first, any background under it, and a "Your turn" band when the question says what to do. Click the title to show the whole question in a larger window. Read it out; the room answers on their own devices.',
+          text: 'The question goes up with its title first and any background under it, as large as the screen allows. How to answer is not on the room\'s screen: every phone shows it above the answer box. Read the question out; the room answers on their own devices.',
         },
         {
           t: 'list',
           items: [
             'The meter counts the answers ("Answered 1 / 4"). Your part now says "Some are still answering", then **Safe to move on** when everyone is in.',
             'The main button is **Start voting** for Call & Answer and **Show results** for the other types. It stays grey until someone has answered.',
-            'Pressed early, it does not open a dialog: it changes to "Start voting anyway" and says who is still writing ("1 of 3 still writing"). Press again within a few seconds to go on; wait and it settles back.',
-            '"Skip this round" asks first: the room loses the round, and its answers are not counted.',
+            'Pressed early, it does not open a dialog: it changes to "Start voting anyway" and says who is still writing ("1 of 3 still writing"). It waits, ringed, with the reason beside it, until you press again to go on; Esc, another button, or the room moving on lets it go. "Start round 2" asks the same way while questions you planned are not asked yet.',
+            '**Skip this round** is behind **⋯** beside the main button. It asks first: the room loses the round, and its answers are not counted.',
           ],
         },
       ],
@@ -154,7 +156,7 @@ const running = {
       THE ROUND TIMER (experience plan 2f; session-start D4, F2-F4):
       components/console/TimeChip.jsx before the opening move (presets
       config/roundTimer.js TIME_PRESETS, remembered in localStorage); the
-      pulse's Time tile (config/consolePulse.js); +1 min button, + / = key
+      room tile's time (config/consolePulse.js); +1 min button, + / = key
       (HostActionBar onAddTime), Remote card (components/RemoteTimeCard.jsx);
       wall and phone words (components/RoomTimeLine.jsx, roomTimeWords);
       close at zero opt-in through start-vote { timeUp } (round-timer.js).
@@ -171,8 +173,8 @@ const running = {
         {
           t: 'list',
           items: [
-            'The time is a guide, not a lock. At zero nothing closes: the **Time** tile turns amber and counts over ("Time\'s up · 0:18 over 2:00"), and Your part now says "Time\'s up. Start voting, or give them another minute." Once everyone has answered it says "Everyone\'s in" instead.',
-            '**+1 min** on the Time tile (on one screen, beside the main button), the **+** or **=** key, or **+1 min** on your phone Remote gives the room another minute. Once time is up it is a minute from now.',
+            'The time is a guide, not a lock. At zero nothing closes: the time in the room tile (on two screens) turns amber and counts over ("Time\'s up · 0:18 over 2:00"), and Your part now says "Time\'s up. Start voting, or give them another minute." Once everyone has answered it says "Everyone\'s in" instead.',
+            '**+1 min** beside the time in the room tile (on one screen, beside the main button), the **+** or **=** key, or **+1 min** on your phone Remote gives the room another minute. Once time is up it is a minute from now.',
           ],
         },
       ],
@@ -187,7 +189,7 @@ const running = {
           items: [
             '**Show the time on the room\'s window** is ticked at first. The room\'s window and everyone\'s phone then show words and a thin bar, never seconds: "About 2 minutes left", "About a minute left", "Nearly time", "Time\'s up". Untick it to keep the time to yourself.',
             '**Close answering at zero** is off unless you tick it. With it on, voting opens by itself when time is up, as long as this page or your phone Remote is open and someone has answered. Start voting still works at any moment.',
-            'With **No limit** the Time tile shows how long the round has been open, as before.',
+            'With **No limit** the room tile on two screens shows how long the round has been open ("open 1:24").',
             'The time is kept by the server, so a laptop or phone whose clock is wrong still shows the right time left.',
           ],
         },
@@ -242,7 +244,7 @@ const running = {
           t: 'list',
           items: [
             'Click an answer to read it in full, or use "Show response 1 of 6" in Your part now, then **Next response**, then **Stop showing**.',
-            'Click the question line above the answers to put the question back up.',
+            'To put the question back up, use **Show the question** in your phone\'s **This round** card. The question replaces the answers until you press **Back to the responses** (or **Back to the results**), Esc, or **Stop showing the question** on the phone.',
             'Stay as long as the conversation is good; nothing times out.',
             '**What we heard** moves on to Workie\'s read of the round: see What we heard and Ask the room.',
           ],
@@ -286,6 +288,7 @@ const running = {
             { keys: 'S', text: 'Show or hide the scoreboard (Trivia and Call & Answer).' },
             { keys: 'V', text: 'Change the scoreboard\'s look while it is up.' },
             { keys: '\\', text: 'Open and close the Session panel.' },
+            { keys: 'C', text: 'Choose a question.' },
             { keys: 'Q', text: 'Write your own question.' },
             { keys: 'F', text: 'Full screen, and back again. Esc also leaves.' },
             { keys: 'Esc', text: 'Close whatever is open.' },
@@ -402,7 +405,7 @@ const sessionPanel = {
           t: 'table',
           head: ['Section', 'What it is for'],
           rows: [
-            ['**Up next**', 'The running order, **Write a question**, **Choose from the set**, the categories.'],
+            ['**Up next**', 'The running order, **Write a question**, **Choose a question**, the categories.'],
             ['**Rounds so far**', 'The report first, the late answers, then every round played.'],
             ['**People**', 'Everyone, and who left.'],
             ['**Screens**', 'One screen or two, the room\'s window, your phone, the scoreboard.'],
@@ -424,11 +427,13 @@ const sessionPanel = {
       Questions tab: SessionSetupPanel ~633 (Categories, "N left", on/off,
       "N questions remaining"), QueueList.jsx ("Running order", "Nothing queued
       — automatic order below", "Coming up — automatic order", Disabled this
-      session, queue full), browser ("Choose the next question", search,
-      chips All / categories / "Unasked only" / "Enabled only", tags Asked /
-      Off / Queued #n, buttons Queue/Unqueue, Ask next, Ask now / Ask again
-      now with their titles). Lobby "Set the running order" (runningOrder.js)
-      in an event preview only.
+      session, queue full), the question picker (components/stage/
+      QuestionPicker.jsx, config/questionPicker.js PICKER_WORDS: Choose a
+      question, The set would serve next, Not asked / All, category boxes,
+      tags Asked / Off / Next / Queued #n, Queue/Unqueue, Ask next, Ask now /
+      Ask again now in ⋯, Done, the one-screen choice and room line; the
+      doors C, rail, Change what's next, Up next; PickLine's Next: … · Undo).
+      Lobby "Set the running order" (runningOrder.js) in an event preview only.
     */
     {
       id: 'choosing-ask-next',
@@ -443,7 +448,7 @@ const sessionPanel = {
           t: 'list',
           items: [
             { title: '**Running order**', text: 'The round on screen, then your queued questions, then the automatic order; five rows, then **Show all**. Each row has ↑ ↓ to move it, and ⋯ for **Ask next**, **Ask now**, **Put aside for this session** and taking it out of the queue (Edit and Remove on a question of yours).' },
-            { title: '**Write a question** and **Choose from the set**', text: 'Two ways to add a round. Choose from the set opens every question in the set in place, with a title search, one Category select (all, the categories that are on, or one) and **Hide asked** on. Tags say **Asked**, Off or Queued. **‹ Up next** goes back.' },
+            { title: '**Write a question** and **Choose a question**', text: 'Two ways to add a round. Choose a question opens the question picker (below); its back control returns to Up next.' },
             { title: '**Categories**', text: 'One line: how many are on and how many questions are left. **Change** opens the switches under More options, where **Put aside this session** (with Restore) and the session\'s goal are too.' },
           ],
         },
@@ -454,6 +459,33 @@ const sessionPanel = {
             ['**Queue**', 'Adds it to the end of the running order. The round on screen carries on.'],
             ['**Ask next**', 'Puts it at the top of the running order. It is asked when the current round ends.'],
             ['**Ask now** (in ⋯)', 'Puts it on the stage, or the room\'s window, straight away; the round on screen ends. For a question already asked it reads **Ask again now**.'],
+          ],
+        },
+      ],
+    },
+    /*
+      THE QUESTION PICKER (docs/design/question-picker, approved 5 Nov 2026):
+      components/stage/QuestionPicker.jsx and its doors (useQuestionPickerKey
+      C, ConsoleRail's Choose a question and planned rows, PickLine's Change
+      what's next, SessionSetupPanel's Up next), PrivateChoice on one screen,
+      HostRemote's picker sheet.
+    */
+    {
+      id: 'question-picker',
+      title: 'Choosing a question',
+      icon: 'MagnifyingGlass',
+      blocks: [
+        {
+          t: 'p',
+          text: 'One picker, wherever you open it: **C**, the rail\'s **Round queue** (or a round not yet played), **Change what\'s next** in Your part now, or **Up next** in the Session menu. It covers the main area only; the rail, Your part now and Space keep working. Call & Answer, Trivia and Poll.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'What it lists', text: 'First **The set would serve next**, what comes if you change nothing, then every question not asked. The search reads the question text too. **Not asked** or **All**, and category boxes, narrow the list only: to stop a category for the session, use **Up next › Categories**. The preview never shows the answer.' },
+            { title: 'Ask next and Queue', text: '**Ask next** (or Enter) puts it at the top of the running order and returns you to the round, where Your part now says **Next:** with **Undo** until the round moves on. **Queue** adds it to the end and keeps the picker open.' },
+            { title: 'The way back', text: 'The back control names where it goes. **Esc** and **Done** close it in one press and put focus back where you were; in the search box Esc clears the search first. Your search and boxes are kept for the session.' },
+            { title: 'On one screen', text: 'Every door asks first: **Choose on your phone**, or **Show them here**. Shown here, a line says **The room can see this list**, with **Hide** and **Use my phone instead**. It asks every time.' },
           ],
         },
       ],
@@ -576,7 +608,7 @@ const sessionPanel = {
             { title: '**Screens**', text: 'One screen or two and the room\'s window (see Two screens and your phone), **Your phone as a remote** with **Connect your phone**, and the scoreboard\'s button (Trivia and Call & Answer). More options: room screen size, **Scoreboard look**, **Show how this works on the room\'s screen →**, and the keys.' },
             { title: '**Joining**', text: 'The join address, its QR and the code, **Copy join link** and **Show join code**. More options: **Invite…**, a calendar invite.' },
             { title: '**How it runs**: Names', text: '**Show who wrote each response from the start** (Call & Answer). Off (the default), answers are numbered until voting closes, then show their writers. Turning it on cannot be taken back.' },
-            { title: '**How it runs**: Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. Opening anything pauses it.' },
+            { title: '**How it runs**: Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. It never waits long on Workie: a read that fails, or is not written within about 25 seconds, is skipped. Opening anything pauses it.' },
             { title: '**How it runs**: More options', text: '**Name who is still waiting** (the room meter can list who has not answered), whether comments show on the room\'s screen as they arrive, and Workie\'s voice and approach for the next round. While a read is on screen, **Redo the read on screen** is here too; on two screens it is also beside the read itself, as **Redo Workie\'s read**.' },
           ],
         },
@@ -611,7 +643,7 @@ const byType = {
         { t: 'phases', gameType: 'call-and-answer' },
         {
           t: 'p',
-          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote and the only one with Ask the room after Workie\'s read, where it is offered (What we heard and Ask the room › Asking the room a quick question). How points are earned is in the players\' Scoring guide.',
+          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote and the only one with Ask the room after Workie\'s read, where it is offered (What we heard and Ask the room › Asking the room a quick question). How points are earned is in the players\' Scoring guide. In a bluff round the stage says one player has the real answer, never who, the vote asks which one is real, and the results show the real answer (Setting up › Bluff round).',
         },
       ],
     },
@@ -732,8 +764,8 @@ const playerManagement = {
   summary: 'Handing a name over, removing someone who left, and what neither of those destroys.',
   sections: [
     /*
-      components/stage/PlayersList.jsx. Since 1 Nov 2026 (experience plan 1a)
-      the Session panel passes onRefuse/onLock/askingFirst for every round
+      components/stage/SessionPeople.jsx and components/people/PersonRow.jsx.
+      Since 1 Nov 2026 (experience plan 1a) the Session panel passes onRefuse/onLock/askingFirst for every round
       type, as the Build Room's always did (grant-handover.js refuse/lock).
       On one screen the flags wait behind Show on this screen
       (components/needs/PrivateReveal.jsx).
@@ -762,7 +794,8 @@ const playerManagement = {
         THE FEATURE'S OWN RATIONALE, IN THE HOST'S WORDS RATHER THAN THE
         implementer's. The owner's reason for the host being in the loop at all:
         *"they need the choice though because they may have just mistakenly
-        picked the same name."* Labels: components/stage/PlayersList.jsx.
+        picked the same name."* Labels: components/people/PersonRow.jsx
+        (PERSON_WORDS).
       */
       id: 'handing-name-over',
       title: 'Handing a name over',
@@ -838,7 +871,7 @@ const playerManagement = {
           t: 'note',
           tone: 'info',
           title: 'On one screen the room can see the laptop',
-          text: 'The bell on the top bar (**Needs you**) shows a count, never a name, and the line under Your part now says the same by kind ("1 name request") with **Open**; with nothing waiting it says **Nothing needs you now.** The bell and **Open** open one sheet, which starts **The room can see this screen** and lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way. While the bar is faded, a dot with the count shows top right.',
+          text: 'The bell on the top bar (**Needs you**) shows a count, never a name, and the line under Your part now says the same by kind ("1 name request") with **Open**; with nothing waiting there is no line. The bell and **Open** open one sheet, which starts **The room can see this screen** and lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way. While the bar is faded, a dot with the count shows top right.',
         },
       ],
     },

@@ -131,12 +131,21 @@ export default function PersonRow({
   const rail = density === 'rail';
   const cls = ['prow', rail ? 'prow--rail' : '', asking ? 'is-asking' : ''].filter(Boolean).join(' ');
   const shown = rail && note ? `${name} · ${note}` : name;
+  /* AWAY, SAID IN THE ROW (dev QA 5 Nov: the rail marked it only with a grey
+     dot while the room tile listed "away: Ben"). In the rail's doing-now slot
+     a person with no page open reads "away", muted, in place of the … or the
+     blank, the same word and the same people as the room tile. Someone who
+     has already acted keeps their ✓: the room is not waiting on them. */
+  const awayWord = rail && status === 'away' && mark !== 'done';
+  const rowCls = awayWord ? `${cls} is-away-word` : cls;
   return (
-    <li className={cls} data-status={status} data-state={state} data-testid={asking ? 'person-asking' : undefined}>
+    <li className={rowCls} data-status={status} data-state={state} data-testid={asking ? 'person-asking' : undefined}>
       <span className={`prow-dot is-${status}`} role="img" aria-label={PERSON_WORDS[status] || status} />
       <span className="prow-name" title={shown}>{shown}</span>
       {rail ? (
-        mark && DOING_GLYPH[mark] ? (
+        awayWord ? (
+          <span className="prow-doing is-away" title={doing ? `${PERSON_WORDS.away} · ${doing}` : PERSON_WORDS.away} data-testid="person-doing">{PERSON_WORDS.away}</span>
+        ) : mark && DOING_GLYPH[mark] ? (
           <span className={`prow-doing is-${mark}`} role="img" aria-label={doing} title={doing} data-testid="person-doing">{DOING_GLYPH[mark]}</span>
         ) : <span className="prow-doing" />
       ) : <span className="prow-doing">{doing}</span>}

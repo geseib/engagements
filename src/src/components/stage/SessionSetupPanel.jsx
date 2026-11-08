@@ -4,14 +4,13 @@ import Icon from '../Icon';
 import Button from '../ui/Button';
 import {
   setupPanelTabs, sessionMenuSection, categoryRows, questionsRemaining, categoriesSummary,
-  browserRow, filterBrowserRows, rosterRows, departedRows, questionKey,
+  rosterRows, departedRows, questionKey,
   scoreboardButton, eventPlace,
 } from '../../config/setupPanel';
 import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
-import { queuePosition } from '../../config/questionQueue';
 import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
 import { canEndSession, isLobbyState, isSurveyType } from '../../config/hostControls';
 import QueueList, { PutAsideList } from './QueueList';
@@ -32,7 +31,6 @@ import PrivateReveal from '../needs/PrivateReveal';
 import HW, { SESSION_MENU_WORDS as SMW } from '../../config/hostWords';
 import { EVENT_WORDS } from '../../config/eventAgenda';
 import MoreOptions, { moreOptionsStored } from './MoreOptions';
-import RowMenu from './RowMenu';
 import SessionPeople from './SessionPeople';
 import './SessionMenu.css';
 
@@ -60,8 +58,7 @@ export const TAB_HELP = {
 /** The words this menu says that no other surface does. */
 export const MENU_WORDS = Object.freeze({
   upNext: 'Up next',
-  backToUpNext: '‹ Up next',
-  choose: 'Choose from the set',
+  choose: 'Choose a question',
   categories: 'Categories',
   change: 'Change',
   categorySwitches: 'Category switches',
@@ -142,9 +139,6 @@ export const MENU_WORDS = Object.freeze({
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]';
 
-/* Why an asked question's Queue and Ask next are held — see the browser row. */
-const ALREADY_ASKED = 'Already asked this session. The running order skips asked questions — use Ask again now.';
-
 /* The running order's default view: the round on screen and four more. */
 const ORDER_ROWS = 4;
 
@@ -189,6 +183,9 @@ export default function SessionSetupPanel({
   loadingQuestions = false,
   usedQuestionIds = [],
   onSelectQuestion = () => {},
+  /* CHOOSE A QUESTION (docs/design/question-picker D3): Up next's door to
+     the one picker. Null draws no door. */
+  onChoose = null,
 
   /*
     Questions — THE QUEUE.
@@ -419,8 +416,6 @@ export default function SessionSetupPanel({
   const tabs = setupPanelTabs({ survey });
   const ended = gameState === 'ENDED';
   const [tab, setTab] = useState(() => sessionMenuSection(initialTab, tabs, { ended: ended || Boolean(survey && surveyActs && surveyActs.closed) }));
-  /* Up next › Choose from the set: an inline step with "‹ Up next" (D4). */
-  const [choosing, setChoosing] = useState(false);
   /* Up next's More options, controlled: "Change" opens it on the switches. */
   const [upMore, setUpMore] = useState(() => moreOptionsStored('up-next'));
   const [focusCats, setFocusCats] = useState(false);
@@ -428,7 +423,6 @@ export default function SessionSetupPanel({
   const [phoneOpen, setPhoneOpen] = useState(() => ['remote', 'phone'].includes(initialTab));
   /* Rounds so far's late line: Review opens the list in place. */
   const [lateOpen, setLateOpen] = useState(false);
-  const [search, setSearch] = useState('');
   /* "Include items not reviewed" said it failed, rather than flipping back in silence. */
   const [includeFailed, setIncludeFailed] = useState(false);
   const changeInclude = async (include) => {
@@ -436,11 +430,6 @@ export default function SessionSetupPanel({
     const r = await onIncludeNotReviewedChange(include);
     if (r && r.ok === false) setIncludeFailed(true);
   };
-  /* The Choose step's one Category select: '' all, '__on' the categories
-     that are on (the old "Enabled only"), or one category's name. */
-  const [filterCategory, setFilterCategory] = useState('');
-  /* "Hide asked", on by default in the Choose step (README §3 row). */
-  const [hideAsked, setHideAsked] = useState(true);
 
   const panelRef = useRef(null);
   // Where focus came from, so it can go back. A keyboard host who opens this
@@ -457,18 +446,12 @@ export default function SessionSetupPanel({
     };
   }, []);
 
-  // Esc and `\` both close, because `\` is what opened it. Inside the Choose
-  // step Escape goes back to Up next first, as the composer's does.
+  // Esc and `\` both close, because `\` is what opened it.
   useEffect(() => {
     const onKeyDown = (e) => {
       // A dialog this panel opened is on top: its Escape is its own.
       if (suppressKeys) return;
       if (composing) return;
-      if (e.key === 'Escape' && choosing) {
-        e.preventDefault();
-        setChoosing(false);
-        return;
-      }
       if (e.key === 'Escape' || e.key === '\\') {
         if (e.key === '\\' && e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
         e.preventDefault();
@@ -477,7 +460,7 @@ export default function SessionSetupPanel({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose, suppressKeys, composing, choosing]);
+  }, [onClose, suppressKeys, composing]);
 
   /**
    * Focus stays inside while it is open. Without this, Tab walks out of the
@@ -529,37 +512,6 @@ export default function SessionSetupPanel({
   );
   const remaining = questionsRemaining(catRows);
 
-  /*
-    WHICH CATEGORIES ARE ON, derived from the rows the switches use so the tag
-    and the switch can never disagree. `null` when there is nothing live to
-    read (before a game starts there are no masks): `browserRow` treats an
-    absent set as "cannot tell" rather than "everything is off".
-  */
-  const activeCategoryNames = useMemo(() => {
-    if (!catRows.length) return null;
-    return new Set(catRows.filter((r) => r.enabled).map((r) => r.name));
-  }, [catRows]);
-
-  // The projection is what reaches the DOM; the original is what goes back to
-  // the caller. Keeping them paired is what lets `Ask now` hand
-  // `selectQuestion` a question the endpoint accepts while the row on screen
-  // carries no answer.
-  const rows = useMemo(
-    () => questions.map((question) => ({
-      row: browserRow(question, {
-        usedIds: usedQuestionIds, activeCategories: activeCategoryNames,
-      }),
-      question,
-    })),
-    [questions, usedQuestionIds, activeCategoryNames],
-  );
-  /* The rows with a queue request in flight, canonicalised through the same
-     `questionKey` the queue uses (both spellings are on the wire). */
-  const queueBusy = useMemo(
-    () => new Set(queueBusyKeys.map((key) => questionKey(String(key)))),
-    [queueBusyKeys],
-  );
-
   /* "Ask now" from the running order hands `onSelectQuestion` a question, as
      the browser rows do, so the page has one ask-now path. */
   const askNowByKey = (key, { title = '' } = {}) => {
@@ -567,23 +519,11 @@ export default function SessionSetupPanel({
     onSelectQuestion(found || { id: key, title });
   };
 
-  const visible = useMemo(() => {
-    const onlyOn = filterCategory === '__on';
-    const filtered = filterBrowserRows(rows.map((r) => r.row), {
-      search,
-      category: onlyOn ? '' : filterCategory,
-      unaskedOnly: hideAsked,
-      enabledOnly: onlyOn,
-    });
-    const keep = new Set(filtered.map((r) => r.id));
-    return rows.filter(({ row }) => keep.has(row.id));
-  }, [rows, search, filterCategory, hideAsked]);
-
   const lateCount = (late && Array.isArray(late.rounds) ? late.rounds : [])
     .flatMap((r) => (Array.isArray(r.items) ? r.items : []))
     .filter((it) => !it.reviewed).length;
 
-  const goWrite = () => { setChoosing(false); if (onWriteQuestion) onWriteQuestion(); };
+  const goWrite = () => { if (onWriteQuestion) onWriteQuestion(); };
 
   /* ------------------------------------------------------------ the parts */
 
@@ -748,7 +688,13 @@ export default function SessionSetupPanel({
       </div>
       {phoneOpen ? (
         <div className="smenu-phone" data-testid="phone-qr">
-          <QRCodeSVG value={remoteUrl} size={160} />
+          {/* SCANNABLE BY MORE THAN THE iPHONE CAMERA (owner, 4 Nov 2026: Google
+              Lens on an iPhone 15 could not read this off a 14in MacBook until
+              the screen was zoomed 1.5x). At 160px with an 8px pad the code had
+              ~5.5px modules and a third of the quiet zone the spec asks for, on
+              a dark panel; Lens needs both. Now 256px with the four-module
+              white margin drawn inside the code. */}
+          <QRCodeSVG value={remoteUrl} size={256} marginSize={4} />
           <p className="setup-note">Scan with your own phone to drive the room from it.</p>
           <p className="setup-url">{remoteUrl}</p>
           {remoteWho ? (
@@ -771,137 +717,6 @@ export default function SessionSetupPanel({
       return (
         <section className="setup-questions setup-own" aria-label="Write a question">
           <OwnQuestionComposer {...ownComposer} />
-        </section>
-      );
-    }
-    if (choosing) {
-      return (
-        <section className="setup-choose" aria-label={MENU_WORDS.choose} data-testid="choose-step">
-          <Button variant="tertiary" size={36} className="smenu-back" onClick={() => setChoosing(false)} data-testid="choose-back">
-            {MENU_WORDS.backToUpNext}
-          </Button>
-          <PrivateReveal
-            oneScreen={oneScreen}
-            testId="private-browser"
-            summary={`${rows.length} questions in the set`}
-          >
-            <div className="setup-qb__tools">
-              <label className="setup-qb__searchlbl">
-                <span className="setup-visually-hidden">Search titles</span>
-                <input
-                  className="setup-qb__search"
-                  type="search"
-                  placeholder="Search titles…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </label>
-              <label className="smenu-select">
-                <span className="setup-visually-hidden">Category</span>
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} data-testid="choose-category">
-                  <option value="">All categories</option>
-                  {activeCategoryNames ? <option value="__on">Categories that are on</option> : null}
-                  {catRows.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}
-                </select>
-              </label>
-            </div>
-            <label className="setup-toggle smenu-hide-asked">
-              <input type="checkbox" checked={hideAsked} onChange={(e) => setHideAsked(e.target.checked)} data-testid="hide-asked" />
-              <span data-testid="browser-count">{`Hide asked · showing ${visible.length} of ${rows.length}`}</span>
-            </label>
-            {/* Enforced, not promised: browserRow is an allow-list and
-                setupPanel.test.js fails if a row carries the answer. */}
-            <p className="setup-qb__privacy">
-              <b>Correct answers are not on this screen.</b> The room may be watching it.
-            </p>
-            {loadingQuestions ? (
-              <div className="setup-loading"><span className="spinner" /> Loading questions…</div>
-            ) : rows.length === 0 ? (
-              <p className="setup-empty">No questions are available for this set.</p>
-            ) : (
-              <div className="setup-qb__list">
-                {visible.map(({ row, question }) => {
-                  const pos = queuePosition(questionQueue, row.id);
-                  const key = questionKey(String(row.id));
-                  return (
-                    <div
-                      key={row.id}
-                      className={`setup-qb__row ${row.used ? 'is-used' : ''} ${row.disabled ? 'is-disabled' : ''}`}
-                      data-testid="browser-row"
-                    >
-                      <div className="setup-qb__main">
-                        <div className="setup-qb__title">
-                          {row.title}
-                          {/* Tags in the admin question sets' shape, beside the title. */}
-                          {row.used && (
-                            <span className="setup-qb__tag setup-qb__tag--asked" title="Already asked this session">Asked</span>
-                          )}
-                          {row.disabled && (
-                            <span className="setup-qb__tag setup-qb__tag--off" title="This category is switched off, so the game will not serve it">Off</span>
-                          )}
-                          {pos > 0 && (
-                            <span className="setup-qb__tag setup-qb__tag--queued" title="This question is in the running order" data-testid="browser-queued-tag">
-                              {`Queued #${pos}`}
-                            </span>
-                          )}
-                        </div>
-                        {row.detail && <div className="setup-qb__detail">{row.detail}</div>}
-                        <div className="setup-qb__meta">
-                          {row.category && <span className="setup-qb__cat">{row.category}</span>}
-                          {row.difficulty && <span className="setup-qb__diff">{row.difficulty}</span>}
-                          <span className="setup-qb__kind">{row.responseKind}</span>
-                        </div>
-                      </div>
-                      {/* QUEUE AND ASK NEXT ON THE ROW, the point of this step;
-                          Ask now, the one that interrupts, behind ⋯ (fork F3).
-                          An asked question cannot be queued, only asked again
-                          now: the drain drops a queued asked entry. */}
-                      <div className="setup-qb__acts">
-                        <button
-                          type="button"
-                          className="setup-qb__queue"
-                          disabled={queueBusy.has(key) || (row.used && pos === 0)}
-                          title={row.used ? ALREADY_ASKED : 'Add it to the end of the running order.'}
-                          onClick={() => (pos > 0 ? onQueueRemove(row.id) : onQueueQuestion(question))}
-                        >
-                          {pos > 0 ? 'Unqueue' : 'Queue'}
-                        </button>
-                        <button
-                          type="button"
-                          className="setup-qb__next setup-ask setup-ask--next"
-                          disabled={queueBusy.has(key) || row.used || pos === 1}
-                          title={row.used
-                            ? ALREADY_ASKED
-                            : 'Put it at the top of the running order. The round on screen carries on; this is asked when you end it.'}
-                          onClick={() => onQueueFirst(key)}
-                        >
-                          Ask next
-                        </button>
-                        <RowMenu
-                          label={`More for ${row.title}`}
-                          testId="browser-row-menu"
-                          items={[
-                            {
-                              id: 'ask-now',
-                              label: row.used ? 'Ask again now' : 'Ask now',
-                              note: 'Ends the round on screen and asks this.',
-                              onSelect: () => onSelectQuestion(question),
-                            },
-                            !row.used && {
-                              id: 'put-aside',
-                              label: 'Put aside for this session',
-                              disabled: queueBusy.has(key),
-                              onSelect: () => onDisableQuestion(key, { queued: pos > 0 }),
-                            },
-                          ]}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </PrivateReveal>
         </section>
       );
     }
@@ -965,10 +780,15 @@ export default function SessionSetupPanel({
               {OQW.write}
             </Button>
           ) : null}
-          <Button variant="secondary" size={36} onClick={() => setChoosing(true)} data-testid="up-next-choose">
-            <Icon name="MagnifyingGlass" weight="bold" size={14} color="currentColor" />
-            {MENU_WORDS.choose}
-          </Button>
+          {/* THE MENU'S DOOR TO THE QUESTION PICKER (question picker D3): a
+              link, not a copy. The page closes this sheet and opens the one
+              picker every door opens; its way back returns here. */}
+          {onChoose ? (
+            <Button variant="secondary" size={36} onClick={onChoose} data-testid="up-next-choose">
+              <Icon name="MagnifyingGlass" weight="bold" size={14} color="currentColor" />
+              {MENU_WORDS.choose}
+            </Button>
+          ) : null}
         </div>
         {oneScreen && onWriteQuestion ? <p className="setup-note">{MENU_WORDS.oneScreenWrite}</p> : null}
         {catRows.length && !upMore ? (
@@ -1301,6 +1121,7 @@ export default function SessionSetupPanel({
         players={players}
         gameState={gameState}
         oneScreen={oneScreen}
+        gameId={gameId}
         peopleColumn={peopleColumn}
         onGrant={onGrantHandover}
         onRefuse={onRefuseHandover}
@@ -1355,13 +1176,12 @@ export default function SessionSetupPanel({
   return (
     <>
       <div className="setup-panel-scrim" onClick={onClose} aria-hidden="true" />
-      {/* Wide only in the Choose step: a question's text wraps rather than
-          truncating (18-question-browser.html's `console--wide`). The other
-          sections are short rows, and every pixel of panel is a pixel of
-          projected stage the room loses. data-theme="dark": the panel is
-          painted dusk, so its tokens must be dusk too. */}
+      {/* Never wide now: choosing a question is the question picker
+          (components/stage/QuestionPicker.jsx), over the content area, not a
+          step in here. data-theme="dark": the panel is painted dusk, so its
+          tokens must be dusk too. */}
       <aside
-        className={`setup-panel smenu${choosing && tab === 'up-next' ? ' setup-panel--wide' : ''}`}
+        className="setup-panel smenu"
         data-theme="dark"
         ref={panelRef}
         role="dialog"
@@ -1447,7 +1267,7 @@ export default function SessionSetupPanel({
               aria-selected={tab === t.id}
               aria-controls={`setup-panel-${t.id}`}
               className={`setup-panel__tab ${tab === t.id ? 'is-active' : ''}`}
-              onClick={() => { setTab(t.id); setChoosing(false); }}
+              onClick={() => setTab(t.id)}
             >
               {t.label}
             </button>

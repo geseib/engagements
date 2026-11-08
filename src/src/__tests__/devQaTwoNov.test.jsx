@@ -133,13 +133,14 @@ describe('after the reveal, each type speaks its own words (finding 3)', () => {
     expect(answersAreChoices('poll', { options: ['Mon', 'Fri'] })).toBe(true);
     expect(answersAreChoices('poll', { kind: 'text' })).toBe(false);
     expect(answersAreChoices('call-and-answer')).toBe(false);
-    expect(pulseFor({ moment: 'ANSWERING', players: 3, answered: 1, choice: true }).room.sub).toBe('2 still answering');
-    expect(pulseFor({ moment: 'ANSWERING', players: 3, answered: 1 }).room.sub).toBe('2 still writing');
+    expect(pulseFor({ moment: 'ANSWERING', players: 3, answered: 1, choice: true }).room.nudge).toBe('2 still answering');
+    expect(pulseFor({ moment: 'ANSWERING', players: 3, answered: 1 }).room.nudge).toBe('2 still writing');
     const rows = consolePeopleFor({
       moment: 'ANSWERING', players: [{ name: 'Ada' }, { name: 'Bo' }], answeredNames: ['Ada'], answeredCount: 1,
       gameType: 'trivia', choice: true,
     });
-    expect(rows.map((r) => r.state)).toEqual(['answered', 'answering']);
+    // The people still out sort first (cut 6).
+    expect(rows.map((r) => r.state)).toEqual(['answering', 'answered']);
     expect(read('components', 'console', 'ConsoleRail.jsx')).toMatch(/answering: CW\.stillAnswering/);
     expect(read('GameHostPage.jsx')).toMatch(/choice=\{consoleChoice\}/);
   });

@@ -1,0 +1,1035 @@
+{
+  "title": "Tech, Toys & Tomorrow",
+  "description": "60 playful questions about gadgets, web wonders, game tech, computing, and AI. Six rounds of curiosity: no engineering degree required.",
+  "categories": [
+    "Origin Stories",
+    "Gadget Grab Bag",
+    "Web Wonders",
+    "Game Tech Arcade",
+    "Digital Nuts and Bolts",
+    "AI Without the Hype"
+  ],
+  "questions": [
+    {
+      "id": "technology-01",
+      "category": "Origin Stories",
+      "difficulty": "medium",
+      "question": "Before tiny flash drives, IBM sold its original floppy disk in what size?",
+      "options": [
+        "8 inches",
+        "3 inches",
+        "5 inches",
+        "12 inches"
+      ],
+      "correctIndex": 0,
+      "explanation": "The original IBM floppy was eight inches across. Your pocket would have needed an upgrade!",
+      "sources": [
+        "https://www.ibm.com/history/floppy-disk"
+      ]
+    },
+    {
+      "id": "technology-02",
+      "category": "Origin Stories",
+      "difficulty": "hard",
+      "question": "IBM began selling floppy disk drives in which year?",
+      "options": [
+        "1971",
+        "1951",
+        "1961",
+        "1981"
+      ],
+      "correctIndex": 0,
+      "explanation": "IBM started selling the drives in 1971. That is a lot earlier than the little disk icon many people still recognize.",
+      "sources": [
+        "https://www.ibm.com/history/floppy-disk"
+      ]
+    },
+    {
+      "id": "technology-03",
+      "category": "Origin Stories",
+      "difficulty": "hard",
+      "question": "What fishy code name did IBM give its floppy-disk project?",
+      "options": [
+        "Marlin",
+        "Minnow",
+        "Tuna",
+        "Salmon"
+      ],
+      "correctIndex": 1,
+      "explanation": "The project was called Minnow. A small-fish name helped launch a very big change in data storage.",
+      "sources": [
+        "https://www.ibm.com/history/floppy-disk"
+      ]
+    },
+    {
+      "id": "technology-04",
+      "category": "Origin Stories",
+      "difficulty": "easy",
+      "question": "Who invented the World Wide Web while working at CERN?",
+      "options": [
+        "Tim Berners-Lee",
+        "Grace Hopper",
+        "Bill Gates",
+        "Steve Wozniak"
+      ],
+      "correctIndex": 0,
+      "explanation": "Tim Berners-Lee invented the Web at CERN in 1989. The idea began with helping researchers share information.",
+      "sources": [
+        "https://home.cern/science/computing/the-birth-of-the-web/where-web-was-born/"
+      ]
+    },
+    {
+      "id": "technology-05",
+      "category": "Origin Stories",
+      "difficulty": "medium",
+      "question": "The first website was about what?",
+      "options": [
+        "Video-game reviews",
+        "Online pizza ordering",
+        "Weather forecasts",
+        "The World Wide Web project"
+      ],
+      "correctIndex": 3,
+      "explanation": "The first site explained the Web project itself. A website about websites: wonderfully on brand.",
+      "sources": [
+        "https://home.cern/science/computing/the-birth-of-the-web/where-web-was-born/"
+      ]
+    },
+    {
+      "id": "technology-06",
+      "category": "Origin Stories",
+      "difficulty": "hard",
+      "question": "Which computer hosted the first website?",
+      "options": [
+        "An Apple II",
+        "A Commodore 64",
+        "An IBM PCjr",
+        "A NeXT computer"
+      ],
+      "correctIndex": 3,
+      "explanation": "Berners-Lee hosted it on his NeXT computer. The Web had a surprisingly small starting address.",
+      "sources": [
+        "https://home.cern/science/computing/the-birth-of-the-web/where-web-was-born/"
+      ]
+    },
+    {
+      "id": "technology-07",
+      "category": "Origin Stories",
+      "difficulty": "medium",
+      "question": "The programming language Python got its name from what?",
+      "options": [
+        "A mountain range",
+        "A Greek telescope",
+        "A British comedy series",
+        "A snake research project"
+      ],
+      "correctIndex": 2,
+      "explanation": "Guido van Rossum was reading scripts from Monty Python’s Flying Circus. The language’s name is a comedy reference, not a reptile requirement.",
+      "sources": [
+        "https://docs.python.org/3/faq/general.html"
+      ]
+    },
+    {
+      "id": "technology-08",
+      "category": "Origin Stories",
+      "difficulty": "medium",
+      "question": "Who created the programming language Python?",
+      "options": [
+        "Tim Berners-Lee",
+        "Guido van Rossum",
+        "Alan Shepard",
+        "Shigeru Miyamoto"
+      ],
+      "correctIndex": 1,
+      "explanation": "Guido van Rossum began implementing Python. His choice of name gave programmers permission to have a little fun along the way.",
+      "sources": [
+        "https://docs.python.org/3/faq/general.html"
+      ]
+    },
+    {
+      "id": "technology-09",
+      "category": "Origin Stories",
+      "difficulty": "medium",
+      "question": "DENSO WAVE announced the QR Code in which year?",
+      "options": [
+        "1984",
+        "1994",
+        "2004",
+        "1974"
+      ],
+      "correctIndex": 1,
+      "explanation": "The QR Code was announced in 1994. Those little squares were working long before restaurant menus made them dinner companions.",
+      "sources": [
+        "https://www.qrcode.com/en/history/"
+      ]
+    },
+    {
+      "id": "technology-10",
+      "category": "Origin Stories",
+      "difficulty": "medium",
+      "question": "Nintendo’s original Game Boy launched in Japan in which year?",
+      "options": [
+        "1994",
+        "1984",
+        "1989",
+        "1979"
+      ],
+      "correctIndex": 2,
+      "explanation": "The original Game Boy arrived in Japan in 1989. Portable gaming suddenly had a very recognizable traveling companion.",
+      "sources": [
+        "https://www.nintendo.com/en-gb/Hardware/Nintendo-History/Game-Boy/Game-Boy-627031.html"
+      ]
+    },
+    {
+      "id": "technology-11",
+      "category": "Gadget Grab Bag",
+      "difficulty": "easy",
+      "question": "What does the QR in QR Code stand for?",
+      "options": [
+        "Quiet Radio",
+        "Quick Response",
+        "Quality Reading",
+        "Quantum Register"
+      ],
+      "correctIndex": 1,
+      "explanation": "QR means Quick Response. Fast reading was a central goal of its design.",
+      "sources": [
+        "https://www.qrcode.com/en/history/"
+      ]
+    },
+    {
+      "id": "technology-12",
+      "category": "Gadget Grab Bag",
+      "difficulty": "medium",
+      "question": "A QR Code stores information in which directions?",
+      "options": [
+        "Only around its border",
+        "Only left to right",
+        "Across and up/down",
+        "Only top to bottom"
+      ],
+      "correctIndex": 2,
+      "explanation": "QR Codes are two-dimensional codes. Their information uses both directions rather than just one.",
+      "sources": [
+        "https://www.qrcode.com/en/history/"
+      ]
+    },
+    {
+      "id": "technology-13",
+      "category": "Gadget Grab Bag",
+      "difficulty": "medium",
+      "question": "What is the job of the prominent square detection marks on a QR Code?",
+      "options": [
+        "Record the scanner’s battery level",
+        "Show the price of the item",
+        "Help the reader locate and orient it",
+        "Identify the phone’s brand"
+      ],
+      "correctIndex": 2,
+      "explanation": "The square patterns help a reader find the code and its orientation. Rotating the menu is not a secret decoding ritual.",
+      "sources": [
+        "https://www.qrcode.com/en/history/"
+      ]
+    },
+    {
+      "id": "technology-14",
+      "category": "Gadget Grab Bag",
+      "difficulty": "easy",
+      "question": "Apple’s 2001 iPod launch promised up to how many songs in your pocket?",
+      "options": [
+        "100",
+        "10,000",
+        "100,000",
+        "1,000"
+      ],
+      "correctIndex": 3,
+      "explanation": "Apple advertised up to 1,000 songs. That was a memorable pitch for a pocket-sized music collection.",
+      "sources": [
+        "https://www.apple.com/newsroom/2001/10/23Apple-Presents-iPod/"
+      ]
+    },
+    {
+      "id": "technology-15",
+      "category": "Gadget Grab Bag",
+      "difficulty": "hard",
+      "question": "What connection did the original 2001 iPod use to transfer music from a Mac?",
+      "options": [
+        "HDMI",
+        "USB-C",
+        "Lightning",
+        "FireWire"
+      ],
+      "correctIndex": 3,
+      "explanation": "The original iPod used FireWire. Lightning and USB-C belong to later chapters of Apple’s cable collection.",
+      "sources": [
+        "https://www.apple.com/newsroom/2001/10/23Apple-Presents-iPod/"
+      ]
+    },
+    {
+      "id": "technology-16",
+      "category": "Gadget Grab Bag",
+      "difficulty": "medium",
+      "question": "What kind of storage held music inside the original 2001 iPod?",
+      "options": [
+        "A hard drive",
+        "A miniature CD",
+        "A cassette tape",
+        "A floppy disk"
+      ],
+      "correctIndex": 0,
+      "explanation": "It contained a five-gigabyte hard drive. Your playlist was taking a tiny spinning-disk road trip.",
+      "sources": [
+        "https://www.apple.com/newsroom/2001/10/23Apple-Presents-iPod/"
+      ]
+    },
+    {
+      "id": "technology-17",
+      "category": "Gadget Grab Bag",
+      "difficulty": "medium",
+      "question": "Bluetooth technology is named after which historical figure?",
+      "options": [
+        "Leonardo da Vinci",
+        "King Harald Bluetooth",
+        "Ada Lovelace",
+        "Isaac Newton"
+      ],
+      "correctIndex": 1,
+      "explanation": "The name honors King Harald Bluetooth. The connection theme was about bringing different worlds together.",
+      "sources": [
+        "https://www.bluetooth.com/blog/from-handsets-to-hands-free/"
+      ]
+    },
+    {
+      "id": "technology-18",
+      "category": "Gadget Grab Bag",
+      "difficulty": "easy",
+      "question": "Bluetooth was originally conceived as a wireless replacement for what?",
+      "options": [
+        "Computer screens",
+        "Data cables",
+        "Rechargeable batteries",
+        "Camera lenses"
+      ],
+      "correctIndex": 1,
+      "explanation": "Bluetooth began as a way to replace data cables with short-range wireless links. Fewer tangled wires was the mission, not free battery power.",
+      "sources": [
+        "https://www.bluetooth.com/blog/from-handsets-to-hands-free/"
+      ]
+    },
+    {
+      "id": "technology-19",
+      "category": "Gadget Grab Bag",
+      "difficulty": "easy",
+      "question": "What did Sony’s original TPS-L2 Walkman play?",
+      "options": [
+        "Compact discs",
+        "MP3 files",
+        "MiniDiscs",
+        "Cassette tapes"
+      ],
+      "correctIndex": 3,
+      "explanation": "The TPS-L2 was a portable cassette player introduced in 1979. This playlist needed an actual tape, not a download.",
+      "sources": [
+        "https://www.si.edu/object/chndm_2017-51-4-a_c"
+      ]
+    },
+    {
+      "id": "technology-20",
+      "category": "Gadget Grab Bag",
+      "difficulty": "medium",
+      "question": "To estimate your position, GPS uses signals sent by what?",
+      "options": [
+        "Satellites",
+        "Undersea microphones",
+        "Traffic lights",
+        "Magnetic road signs"
+      ],
+      "correctIndex": 0,
+      "explanation": "GPS receivers use satellite signals and their travel times. Finding the snack stop involves some very precise timing.",
+      "sources": [
+        "https://www.gps.gov/trilateration"
+      ]
+    },
+    {
+      "id": "technology-21",
+      "category": "Web Wonders",
+      "difficulty": "easy",
+      "question": "Which web language describes the structure of a page?",
+      "options": [
+        "CSS",
+        "SQL",
+        "HTML",
+        "PNG"
+      ],
+      "correctIndex": 2,
+      "explanation": "HTML marks out a page’s structure. Think headings and paragraphs before choosing their party outfits.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/HTML"
+      ]
+    },
+    {
+      "id": "technology-22",
+      "category": "Web Wonders",
+      "difficulty": "easy",
+      "question": "Which web technology controls colors, spacing, and visual styling?",
+      "options": [
+        "CSS",
+        "HTTP",
+        "JPEG",
+        "DNS"
+      ],
+      "correctIndex": 0,
+      "explanation": "CSS controls how web content looks. It is the wardrobe department, not the address book.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/CSS"
+      ]
+    },
+    {
+      "id": "technology-23",
+      "category": "Web Wonders",
+      "difficulty": "medium",
+      "question": "What does HTTP stand for?",
+      "options": [
+        "HyperText Transfer Protocol",
+        "High Traffic Tracking Program",
+        "Home Terminal Transfer Port",
+        "Hyperlink Text Typing Process"
+      ],
+      "correctIndex": 0,
+      "explanation": "HTTP is the HyperText Transfer Protocol. It supplies rules for transferring web resources between systems such as browsers and servers.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/HTTP"
+      ]
+    },
+    {
+      "id": "technology-24",
+      "category": "Web Wonders",
+      "difficulty": "medium",
+      "question": "Compared with plain HTTP, what does HTTPS add to the connection?",
+      "options": [
+        "Guaranteed truth in every article",
+        "Unlimited download speed",
+        "Transport encryption using TLS",
+        "Automatic removal of all ads"
+      ],
+      "correctIndex": 2,
+      "explanation": "HTTPS carries HTTP over a secure TLS channel. It protects the connection; it does not make every claim on a page correct.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/HTTP"
+      ]
+    },
+    {
+      "id": "technology-25",
+      "category": "Web Wonders",
+      "difficulty": "medium",
+      "question": "Which internet system helps translate a name like example.com into an IP address?",
+      "options": [
+        "CSS",
+        "JPEG",
+        "DNS",
+        "USB"
+      ],
+      "correctIndex": 2,
+      "explanation": "DNS associates domain names with resources such as IP addresses. It saves humans from memorizing a lot of numbers.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/DNS"
+      ]
+    },
+    {
+      "id": "technology-26",
+      "category": "Web Wonders",
+      "difficulty": "easy",
+      "question": "A URL is most commonly known as what?",
+      "options": [
+        "A password hint",
+        "A screen resolution",
+        "A battery rating",
+        "A web address"
+      ],
+      "correctIndex": 3,
+      "explanation": "A URL tells software where a resource can be found. It is an address, not a guarantee that the destination is interesting.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/URL"
+      ]
+    },
+    {
+      "id": "technology-27",
+      "category": "Web Wonders",
+      "difficulty": "easy",
+      "question": "A website returns 404. What does that status mean?",
+      "options": [
+        "Your battery is low",
+        "The requested resource was not found",
+        "The password was accepted",
+        "The file downloaded successfully"
+      ],
+      "correctIndex": 1,
+      "explanation": "A 404 means the server cannot find the requested resource. The page may be missing; the entire internet has not vanished.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/404"
+      ]
+    },
+    {
+      "id": "technology-28",
+      "category": "Web Wonders",
+      "difficulty": "medium",
+      "question": "Which browser item can help a website remember your preferences?",
+      "options": [
+        "A pixel",
+        "A cookie",
+        "A heatsink",
+        "A motherboard"
+      ],
+      "correctIndex": 1,
+      "explanation": "A web cookie stores a small piece of information through the browser. This kind remembers preferences rather than leaving crumbs.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Cookie"
+      ]
+    },
+    {
+      "id": "technology-29",
+      "category": "Web Wonders",
+      "difficulty": "medium",
+      "question": "What does a web cache keep for possible reuse?",
+      "options": [
+        "The monitor’s physical dimensions",
+        "Only keyboard shortcuts",
+        "Previously received HTTP responses",
+        "A permanent copy of every website"
+      ],
+      "correctIndex": 2,
+      "explanation": "A web cache temporarily keeps responses that may be reused under suitable conditions. Sometimes the browser can reuse the answer instead of asking again.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Cache"
+      ]
+    },
+    {
+      "id": "technology-30",
+      "category": "Web Wonders",
+      "difficulty": "easy",
+      "question": "Safari, Firefox, and Chrome are examples of what?",
+      "options": [
+        "Image file formats",
+        "Search-engine algorithms",
+        "Web browsers",
+        "Programming languages"
+      ],
+      "correctIndex": 2,
+      "explanation": "These are programs that retrieve and display web pages. A browser is your viewing tool, not the same thing as a search engine.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Browser"
+      ]
+    },
+    {
+      "id": "technology-31",
+      "category": "Game Tech Arcade",
+      "difficulty": "medium",
+      "question": "Which accessory was bundled with Mario Paint for the Super NES?",
+      "options": [
+        "A steering wheel",
+        "A microphone",
+        "A dance mat",
+        "A mouse"
+      ],
+      "correctIndex": 3,
+      "explanation": "Mario Paint came with the Super NES Mouse. Mario traded some jumping time for pointing and painting.",
+      "sources": [
+        "https://press.nintendo.com/CompanyHistory"
+      ]
+    },
+    {
+      "id": "technology-32",
+      "category": "Game Tech Arcade",
+      "difficulty": "hard",
+      "question": "Which 1993 Nintendo game first used the Super FX chip?",
+      "options": [
+        "Pilotwings",
+        "Super Mario Kart",
+        "Star Fox",
+        "F-Zero"
+      ],
+      "correctIndex": 2,
+      "explanation": "Star Fox introduced the Super FX chip in a game. The chip helped give its space battles their distinctive polygonal look.",
+      "sources": [
+        "https://press.nintendo.com/CompanyHistory"
+      ]
+    },
+    {
+      "id": "technology-33",
+      "category": "Game Tech Arcade",
+      "difficulty": "medium",
+      "question": "Nintendo’s Hands Free NES controller used head movements and what for its A and B buttons?",
+      "options": [
+        "Pressing foot pedals",
+        "Breathing through a straw",
+        "Blinking at a camera",
+        "Clapping twice"
+      ],
+      "correctIndex": 1,
+      "explanation": "The controller used breath input for the buttons. It offered another way to play beyond holding a conventional controller.",
+      "sources": [
+        "https://press.nintendo.com/CompanyHistory"
+      ]
+    },
+    {
+      "id": "technology-34",
+      "category": "Game Tech Arcade",
+      "difficulty": "medium",
+      "question": "The Game Boy Player brought Game Boy games to the television through which console?",
+      "options": [
+        "Nintendo 64",
+        "Super NES",
+        "Wii U",
+        "Nintendo GameCube"
+      ],
+      "correctIndex": 3,
+      "explanation": "The Game Boy Player was a GameCube accessory. Small-screen adventures got a much bigger stage.",
+      "sources": [
+        "https://press.nintendo.com/CompanyHistory"
+      ]
+    },
+    {
+      "id": "technology-35",
+      "category": "Game Tech Arcade",
+      "difficulty": "easy",
+      "question": "What physical format did the original PlayStation primarily use for its games?",
+      "options": [
+        "Audio cassettes",
+        "CD-ROM discs",
+        "VHS tapes",
+        "Floppy disks"
+      ],
+      "correctIndex": 1,
+      "explanation": "PlayStation used CD-ROM games. The format supported larger games than contemporary cartridge alternatives.",
+      "sources": [
+        "https://www.playstation.com/en-us/playstation-history/1994-ps-one/"
+      ]
+    },
+    {
+      "id": "technology-36",
+      "category": "Game Tech Arcade",
+      "difficulty": "medium",
+      "question": "Where did original PlayStation players commonly save game progress?",
+      "options": [
+        "The game disc itself",
+        "The controller cable",
+        "The TV remote",
+        "Memory cards"
+      ],
+      "correctIndex": 3,
+      "explanation": "Players used separate memory cards. Remembering your save could be almost as important as remembering the game.",
+      "sources": [
+        "https://blog.playstation.com/2015/09/09/unboxing-the-original-playstation/"
+      ]
+    },
+    {
+      "id": "technology-37",
+      "category": "Game Tech Arcade",
+      "difficulty": "easy",
+      "question": "How many little squares make up a standard Tetris piece?",
+      "options": [
+        "Three",
+        "Four",
+        "Five",
+        "Six"
+      ],
+      "correctIndex": 1,
+      "explanation": "Each piece consists of four connected squares. Four blocks, endless decisions about where to put them.",
+      "sources": [
+        "https://service.mattel.com/instruction_sheets/I1045.pdf"
+      ]
+    },
+    {
+      "id": "technology-38",
+      "category": "Game Tech Arcade",
+      "difficulty": "medium",
+      "question": "How many distinct standard piece shapes are used in classic Tetris?",
+      "options": [
+        "Six",
+        "Eight",
+        "Five",
+        "Seven"
+      ],
+      "correctIndex": 3,
+      "explanation": "Classic Tetris uses seven shapes. Such a small cast can cause an impressive amount of last-second panic.",
+      "sources": [
+        "https://service.mattel.com/instruction_sheets/I1045.pdf"
+      ]
+    },
+    {
+      "id": "technology-39",
+      "category": "Game Tech Arcade",
+      "difficulty": "easy",
+      "question": "What was the Nintendo DS’s standout screen arrangement?",
+      "options": [
+        "One round screen",
+        "A screen inside each controller",
+        "Two screens, including a touchscreen",
+        "Three folding screens"
+      ],
+      "correctIndex": 2,
+      "explanation": "The DS combined two screens with touch input. A second view could stay visible instead of replacing the first.",
+      "sources": [
+        "https://www.nintendo.com/en-gb/Nintendo-DS/Nintendo-DS/Nintendo-DS-116439.html"
+      ]
+    },
+    {
+      "id": "technology-40",
+      "category": "Game Tech Arcade",
+      "difficulty": "medium",
+      "question": "In Minecraft, which material acts like wiring to carry power and signals?",
+      "options": [
+        "Redstone dust",
+        "Snow",
+        "Wool",
+        "Sand"
+      ],
+      "correctIndex": 0,
+      "explanation": "Redstone dust transmits power and signals between components. Minecraft builders can give their creations more than good looks.",
+      "sources": [
+        "https://www.minecraft.net/en-us/article/redstone-dust"
+      ]
+    },
+    {
+      "id": "technology-41",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "easy",
+      "question": "A Boolean value has which two possible states?",
+      "options": [
+        "True and false",
+        "Open and saved",
+        "Red and green",
+        "Hot and cold"
+      ],
+      "correctIndex": 0,
+      "explanation": "A Boolean is either true or false. Computers use those crisp choices even when humans prefer “maybe.”",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Boolean"
+      ]
+    },
+    {
+      "id": "technology-42",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "medium",
+      "question": "Which everyday object is a useful example of an algorithm?",
+      "options": [
+        "A restaurant’s address",
+        "A step-by-step recipe",
+        "A refrigerator magnet",
+        "An empty bowl"
+      ],
+      "correctIndex": 1,
+      "explanation": "An algorithm is a series of instructions for carrying out a task. A recipe counts, even before anyone adds a computer.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Algorithm"
+      ]
+    },
+    {
+      "id": "technology-43",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "medium",
+      "question": "Which kind of compression lets you reconstruct the original data exactly?",
+      "options": [
+        "Lossy compression",
+        "Screen scaling",
+        "Color inversion",
+        "Lossless compression"
+      ],
+      "correctIndex": 3,
+      "explanation": "Lossless compression preserves enough information to recover the exact original. Smaller packaging, nothing thrown away.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Lossless_compression"
+      ]
+    },
+    {
+      "id": "technology-44",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "medium",
+      "question": "What can lossy compression do to make a file smaller?",
+      "options": [
+        "Discard some original information",
+        "Guarantee perfect reconstruction",
+        "Add unlimited extra detail",
+        "Increase every pixel’s resolution"
+      ],
+      "correctIndex": 0,
+      "explanation": "Lossy methods discard some information. The trade-off is a smaller file rather than an exact round trip.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Lossy_compression"
+      ]
+    },
+    {
+      "id": "technology-45",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "easy",
+      "question": "What is a basic building block of a digital display called?",
+      "options": [
+        "A pixel",
+        "A token",
+        "A folder",
+        "A cookie"
+      ],
+      "correctIndex": 0,
+      "explanation": "A pixel is a basic display building block. Lots of these tiny elements work together to make the picture.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Pixel"
+      ]
+    },
+    {
+      "id": "technology-46",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "medium",
+      "question": "A display described as 800 × 600 pixels is how many pixels wide?",
+      "options": [
+        "480,000",
+        "600",
+        "800",
+        "1,400"
+      ],
+      "correctIndex": 2,
+      "explanation": "The first number gives the width; the second gives the height. Here that is 800 pixels across and 600 down.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Pixel"
+      ]
+    },
+    {
+      "id": "technology-47",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "medium",
+      "question": "Which programming feature is designed to repeat a sequence of instructions?",
+      "options": [
+        "A loop",
+        "A color code",
+        "A comment",
+        "A filename"
+      ],
+      "correctIndex": 0,
+      "explanation": "A loop repeats instructions according to its rules. It is how code says “do that again” without typing the same command endlessly.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Loop"
+      ]
+    },
+    {
+      "id": "technology-48",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "medium",
+      "question": "What do programmers call values supplied as inputs when calling a function?",
+      "options": [
+        "Arguments",
+        "Folders",
+        "Bookmarks",
+        "Screenshots"
+      ],
+      "correctIndex": 0,
+      "explanation": "Arguments are inputs passed into a function. In programming, having arguments can be entirely productive.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Function"
+      ]
+    },
+    {
+      "id": "technology-49",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "medium",
+      "question": "Which structure stores an ordered collection of items, such as a list of player names?",
+      "options": [
+        "A single Boolean",
+        "An array",
+        "A font",
+        "A cable"
+      ],
+      "correctIndex": 1,
+      "explanation": "An array stores an ordered collection. Its items can be reached by their indexes rather than by shouting for them.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Array"
+      ]
+    },
+    {
+      "id": "technology-50",
+      "category": "Digital Nuts and Bolts",
+      "difficulty": "hard",
+      "question": "In a JavaScript array, what index identifies the first item?",
+      "options": [
+        "0",
+        "-1",
+        "1",
+        "10"
+      ],
+      "correctIndex": 0,
+      "explanation": "JavaScript array indexes start at zero. The first player gets position zero without coming in last.",
+      "sources": [
+        "https://developer.mozilla.org/en-US/docs/Glossary/Array"
+      ]
+    },
+    {
+      "id": "technology-51",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "Training on photos paired with correct labels such as “cat” and “dog” is an example of what?",
+      "options": [
+        "File compression",
+        "Unsupervised clustering",
+        "Screen rendering",
+        "Supervised learning"
+      ],
+      "correctIndex": 3,
+      "explanation": "Supervised learning uses examples with known answers. The labels give the model a target to learn from.",
+      "sources": [
+        "https://developers.google.com/machine-learning/intro-to-ml/what-is-ml"
+      ]
+    },
+    {
+      "id": "technology-52",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "A model sorts emails into “spam” or “not spam.” What kind of task is this?",
+      "options": [
+        "Compression",
+        "Classification",
+        "Regression",
+        "Encryption"
+      ],
+      "correctIndex": 1,
+      "explanation": "Classification predicts membership in categories. Here there are two possible categories, so it is binary classification.",
+      "sources": [
+        "https://developers.google.com/machine-learning/intro-to-ml/what-is-ml"
+      ]
+    },
+    {
+      "id": "technology-53",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "A model predicts tomorrow’s temperature as a number. What kind of task is this?",
+      "options": [
+        "Classification",
+        "Clustering",
+        "Regression",
+        "Tokenization"
+      ],
+      "correctIndex": 2,
+      "explanation": "Regression predicts numerical values. This model is estimating a quantity rather than picking a category.",
+      "sources": [
+        "https://developers.google.com/machine-learning/intro-to-ml/what-is-ml"
+      ]
+    },
+    {
+      "id": "technology-54",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "Grouping unlabeled music tracks by similarities is an example of what?",
+      "options": [
+        "Password hashing",
+        "Clustering",
+        "Supervised labeling",
+        "Image cropping"
+      ],
+      "correctIndex": 1,
+      "explanation": "Clustering organizes similar items into groups. It can find groupings without being handed a label for every example.",
+      "sources": [
+        "https://developers.google.com/machine-learning/intro-to-ml/what-is-ml"
+      ]
+    },
+    {
+      "id": "technology-55",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "In machine learning, an embedding represents an item as what?",
+      "options": [
+        "A mandatory English definition",
+        "A miniature physical robot",
+        "A vector of numbers",
+        "A single web address"
+      ],
+      "correctIndex": 2,
+      "explanation": "An embedding represents data with a vector. Numbers let a model work with relationships between items mathematically.",
+      "sources": [
+        "https://developers.google.com/machine-learning/crash-course/embeddings/embedding-space"
+      ]
+    },
+    {
+      "id": "technology-56",
+      "category": "AI Without the Hype",
+      "difficulty": "hard",
+      "question": "In a useful embedding space, similar items are generally placed how?",
+      "options": [
+        "Closer together",
+        "In alphabetical order",
+        "At opposite corners",
+        "At identical distances from everything"
+      ],
+      "correctIndex": 0,
+      "explanation": "Nearby positions can encode similarity. The coordinates are learned representations, not a literal map of where objects live.",
+      "sources": [
+        "https://developers.google.com/machine-learning/crash-course/embeddings/embedding-space"
+      ]
+    },
+    {
+      "id": "technology-57",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "A model aces its training examples but struggles on new ones. What problem might it have?",
+      "options": [
+        "Lossless compression",
+        "Faster networking",
+        "Perfect generalization",
+        "Overfitting"
+      ],
+      "correctIndex": 3,
+      "explanation": "Overfitting means fitting the training data too closely to work well on new cases. Memorizing the practice sheet is not the same as mastering the topic.",
+      "sources": [
+        "https://developers.google.com/machine-learning/crash-course/overfitting/overfitting"
+      ]
+    },
+    {
+      "id": "technology-58",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "In a language model, a text token can be which of these?",
+      "options": [
+        "Always exactly one sentence",
+        "Always exactly one whole word",
+        "Always exactly eight letters",
+        "A word, part of a word, or character"
+      ],
+      "correctIndex": 3,
+      "explanation": "Tokens are units of text processing, and their sizes vary. A long word does not automatically get a single VIP token.",
+      "sources": [
+        "https://developers.google.com/machine-learning/crash-course/llm"
+      ]
+    },
+    {
+      "id": "technology-59",
+      "category": "AI Without the Hype",
+      "difficulty": "medium",
+      "question": "What does a language model estimate when considering possible text continuations?",
+      "options": [
+        "The writer’s exact future thoughts",
+        "The physical weight of each word",
+        "Probabilities of tokens or token sequences",
+        "A guarantee that each claim is true"
+      ],
+      "correctIndex": 2,
+      "explanation": "Language models estimate probabilities for text sequences. Likely wording is not the same thing as verified truth.",
+      "sources": [
+        "https://developers.google.com/machine-learning/crash-course/llm"
+      ]
+    },
+    {
+      "id": "technology-60",
+      "category": "AI Without the Hype",
+      "difficulty": "hard",
+      "question": "Which algorithm is central to training neural networks by working backward through prediction errors?",
+      "options": [
+        "Rasterization",
+        "Trilateration",
+        "Defragmentation",
+        "Backpropagation"
+      ],
+      "correctIndex": 3,
+      "explanation": "Backpropagation calculates how a neural network’s error changes with its weights, helping an optimizer adjust them. Working backward helps the next prediction move forward!",
+      "sources": [
+        "https://developers.google.com/machine-learning/crash-course/neural-networks/backpropagation"
+      ]
+    }
+  ],
+  "factCheckedAt": "2026-11-02"
+}

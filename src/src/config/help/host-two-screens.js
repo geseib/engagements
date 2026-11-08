@@ -76,8 +76,9 @@
                        the room), then handleSwitchGame.
     console-rail       components/console/ConsoleRail.jsx; config/consoleRail.js
                        (which section opens per moment; railSummaries: each
-                       header open and closed, "waiting on", "top:", the
-                       Needs-you mark; waitingClause past 12 = the count);
+                       header open and closed, "top:", the Needs-you mark;
+                       peopleRows sorts who is still out first; who is out
+                       by name is the room tile's, config/roomProgress.js);
                        components/people/PersonRow.jsx density="rail" (✓ / …
                        glyph, score muted until Results); hooks/useArrival.js
                        (the one fade, shared with NeedsYouLine.jsx).
@@ -226,7 +227,7 @@ const twoScreens = {
           t: 'list',
           items: [
             { title: 'Room, TV, Table', text: 'Only what the room needs, as large as it fits.' },
-            { title: 'Call', text: 'For a shared screen read on people\'s own displays. It carries a little more: for example a set\'s general instruction as a small line under the question.' },
+            { title: 'Call', text: 'For a shared screen read on people\'s own displays. It carries a little more: for example the session\'s title in the top line.' },
           ],
         },
       ],
@@ -241,7 +242,7 @@ const twoScreens = {
           head: ['Moment', 'On the room\'s window'],
           rows: [
             ['Lobby', 'The session\'s title large, its details under it, how many are in the room, and on the right the QR, the address and the **Session code**.'],
-            ['Answering', 'The category, the title, the lesson under it, and the question itself in a **Your turn** band. A count of who has answered, never a name.'],
+            ['Answering', 'The category, the title and the lesson under it, as large as they fit. How to answer is on every phone, not here. A count of who has answered, never a name.'],
             ['Voting', 'When every answer fits, all of them, whole and numbered, with how many have voted. When they do not fit, one answer at a time with its number. No names, no tally.'],
             ['Results', '**What the room backed**: **The room\'s pick** in full, the others with a bar for their backing against the pick, and **Talk about it**, a question to discuss. Names and points show only in a round that shows names. When there are too many to fit, the rest fold into "and N more answers".'],
           ],
@@ -281,7 +282,7 @@ const twoScreens = {
           t: 'list',
           items: [
             { title: 'One response up', text: 'At results, its place and a short ladder showing where it sits. During voting, its number among all of them, never a name.' },
-            { title: 'The question back up', text: 'The lesson and **Your turn** again, during voting or results.' },
+            { title: 'The question back up', text: 'The title and the lesson again, during voting or results.' },
             { title: 'What we heard', text: '**Workie is writing** until the read arrives, then Workie\'s read a page at a time ("Page 1 of 4"), the same page your console marks.' },
             { title: 'Feedback', text: 'The round\'s title and "Provide feedback on the round from your phone, laptop or tablet.", or the comment you put up.' },
             { title: 'A question for the room', text: 'The question with its options or scale and a count; then bars for Choose, the average for Rate, and for Ideas only the ideas you pick.' },
@@ -305,13 +306,31 @@ const twoScreens = {
           t: 'table',
           head: ['Part', 'What it is for'],
           rows: [
-            ['Top bar', 'Always in this order: **Main menu** (the start screen; the session keeps running, and Rejoin brings you back), the session\'s name, **Join** and the code, **Room\'s window ↗** with its status, **Not hearing the room** only while the connection is down, the bell (**Needs you**), **?**, and **Session menu**.'],
-            ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, **Ask**), then **Finish**. LIVE marks where the room is. Press a step to look at it privately: the room stays where it is, and **Back to the room** (or ←) returns. Setup is the lobby\'s own panel: where the room watches, the room\'s window and its size.'],
-            ['**Your part now**', 'What to do next in one sentence, what the room\'s window shows next, and the buttons. The main button is on the right; Space presses it.'],
-            ['The Needs-you line', 'Under Your part now: calm, or amber with what needs you and its buttons.'],
-            ['Three tiles', '**Answered** (or **Voted**) with a bar, turning green once with **Everyone\'s in**; **Time**, time left with **+1 min**, or time open; **Since this round opened**, who joined since, and any late items to review.'],
+            ['Top bar', 'Always in this order: **Main menu** (the start screen; the session keeps running, and Rejoin brings you back), the session\'s name, **Join** and the code, the room\'s window, one button with its status (press it to bring the window forward), **Not hearing the room** only while the connection is down, the bell (**Needs you**), **?**, and **Session menu**.'],
+            ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, and **Ask** once you can ask the room a question), then **Finish**. LIVE marks where the room is. Press a step to look at it privately; **Back to the room** (or ←) returns. Setup is the lobby\'s own panel.'],
+            ['**Your part now**', 'What to do next in one sentence, what the room\'s window shows next, and the buttons. The main button is on the right; Space presses it. **Skip this round** is behind **⋯** just left of it.'],
+            ['The Needs-you line', 'One quiet line when nothing needs you, or the amber bar with what does and its buttons.'],
+            ['The room tile', 'How the room is doing and who is still out (see The room tile).'],
             ['Left rail', 'From round 1: round queue, People and Late & not reviewed (see The left rail).'],
             ['Main area', 'What the step needs, from the lobby to the report (see The main area).'],
+          ],
+        },
+      ],
+    },
+    /* components/console/ConsolePulse.jsx, config/consolePulse.js pulseFor,
+       config/roomProgress.js (owner, 5 Nov 2026, cut 5). */
+    {
+      id: 'console-room-tile',
+      title: 'The room tile',
+      icon: 'UsersThree',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'The count', text: 'How many have answered (or voted), with a bar, and how long it has been open ("open 1:24"), or the time left with **+1 min**. It turns green once with **Everyone\'s in**.' },
+            { title: 'Who is still out', text: 'Their names when six or fewer are out ("Waiting on Hannah, Ravi"), else how many ("9 still writing"). Anyone whose phone or laptop is away is listed apart ("away: Tom"): they are not typing, so you can move on.' },
+            { title: 'Beside it', text: 'While the room votes, the answered count ("✓ 15/15 answered"). After the round, the round\'s record ("15/15 answered · 12/15 voted"). Someone who joins after a step has closed does not count against it.' },
+            { title: 'Joiners', text: 'People who joined since the round opened show here only when there are some ("+1 joined · Bob").' },
           ],
         },
       ],
@@ -324,10 +343,10 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Write a question** opens the composer in the Session menu\'s **Up next** (see Writing a question of your own); **All rounds** opens the Session menu\'s **Rounds so far**.' },
-            { title: 'People', text: 'Who is here and who has answered (see The People column); the count is the Answered tile. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
-            { title: 'Late & not reviewed', text: 'How many late answers and comments wait, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the Session menu\'s **Rounds so far**, where **Review** opens the full list (see Late answers and comments).' },
-            { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds Up next, Rounds so far, People, Screens, Joining and How it runs, with **End session…** and **Main menu** at its foot. The People column\'s **All N, and who left** opens its People section.' },
+            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Choose a question** (C), or a round not yet played, opens the question picker. **Write a question** opens the composer in **Up next**; **All rounds** opens the Session menu\'s **Up next**.' },
+            { title: 'People', text: 'Who is here and who has answered (see The People column). **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
+            { title: 'Late & not reviewed', text: 'Only while something waits: how many late answers and comments, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the Session menu\'s **Rounds so far**, where **Review** opens the full list (see Late answers and comments).' },
+            { title: 'Session menu', text: 'Top right. It opens over the room tile and the main area, never over Your part now, and holds Up next, Rounds so far, People, Screens, Joining and How it runs, with **End session…** and **Main menu** at its foot. The People column\'s **All N, and who left** opens its People section.' },
           ],
         },
         {
@@ -344,10 +363,10 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Each row', text: 'A ✓ when the person has answered or voted, … while they have not (a screen reader says the word). Rows keep their place during a round. Each row\'s ⋯ has **Move to a new device** and **Remove from session**.' },
-            { title: 'Scores', text: 'In Call & Answer and Trivia, each person\'s score: grey while the room answers or votes, bright from **Show results**, and "–" before the first round is scored. Trivia puts a ✓ or ✗ in front once the answer is out. Poll, Wavelength and Survey show no score.' },
-            { title: 'Closed', text: 'Fold People and its header still says who you are waiting for: "6 here · waiting on Marcus", two names and "+3" for more, and past 12 people just the number ("waiting on 14"). When everyone is in, it just says "6 here"; the Answered tile turns green. At results it says who leads ("top: Priya, 40").' },
-            { title: 'Other closed headers', text: 'The round queue adds the next round ("2 of 21 · next: Pricing"), or the first in the lobby. Late & not reviewed shows a small dot and "2 to review" (never amber: it can wait), or "none".' },
+            { title: 'Each row', text: 'A ✓ when the person has answered or voted, … while they have not (a screen reader says the word). While the room answers or votes, the people still out come first. Someone whose page has closed reads **away**, muted, as soon as it closes. Each row\'s ⋯ (shown when you point at the row or Tab to it; always on a touch screen) has **Move to a new device** and **Remove from session**.' },
+            { title: 'Scores', text: 'In Call & Answer and Trivia, each person\'s score, once someone has scored: grey while the room answers or votes, bright from **Show results**. Trivia puts a ✓ or ✗ in front once the answer is out. Poll, Wavelength and Survey show no score.' },
+            { title: 'Closed', text: 'Fold People and its header says "6 here"; who you wait for is in the room tile. At results it says who leads ("top: Priya, 40").' },
+            { title: 'Other closed headers', text: 'The round queue adds the next round ("2 of 21 · next: Pricing"), or the first in the lobby. Late & not reviewed, when it is there, shows a small dot and "2 to review" (never amber: it can wait).' },
             { title: 'When someone asks', text: 'A name request opens People once, with the person lifted to the top and **Let them** / **Not now** on their row. You can close it again: the header then wears the same amber as the Needs-you line, with the name ("● Sam needs you"). Both fade in together once; they never flash.' },
           ],
         },
@@ -361,7 +380,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Setup (the lobby)', text: 'Three steps: where the room watches, the room\'s window (open, full screen, and the size), and the room joining. The join code goes up only at step 3, with how many are in, who arrived in the last minute, named, and what round 1 is. There is no left rail and no tiles until round 1; the rail appears with it. **Setup** on the strip opens the same panel during the session, with the joining folded to one line.' },
+            { title: 'Setup (the lobby)', text: 'Three steps: where the room watches, the room\'s window (open, full screen, and the size), and the room joining. The join code goes up only at step 3, with how many are in, who arrived in the last minute, named, and what round 1 is. There is no left rail and no room tile until round 1; the rail appears with it. **Setup** on the strip opens the same panel during the session, with the joining folded to one line.' },
             { title: 'Answering', text: 'The title, the lesson and the question, then the responses as they arrive, newest first. While names are hidden they read Response 1, Response 2. **For you** shows the question\'s background notes, which only you see.' },
             { title: 'Voting', text: '**The ballot, in the order the room sees it**: every response as Response 1, 2 and so on, never a name.' },
             { title: 'Results', text: 'The responses ranked, with names and points where the round shows them.' },
@@ -403,7 +422,8 @@ const twoScreens = {
             { keys: 'S', text: 'Show or hide the scoreboard; Esc closes it. Works from the room\'s window too.' },
             { keys: 'V', text: 'Change the scoreboard\'s look while it is up. Works from the room\'s window too.' },
             { keys: '\\', text: 'Open or close the Session panel.' },
-            { keys: 'Q', text: 'Write a question of your own (Call & Answer): the Session menu opens at Rounds with the composer.' },
+            { keys: 'C', text: 'Choose a question (Call & Answer, Trivia and Poll): the question picker opens over the main area. Esc or **Done** goes back. On one screen it asks first, with your phone first.' },
+            { keys: 'Q', text: 'Write a question of your own (Call & Answer): the Session menu opens at **Up next** with the composer.' },
             { keys: 'F', text: 'Full screen for the window you are in, and back.' },
           ],
         },
@@ -503,9 +523,10 @@ const twoScreens = {
             { title: 'The main button', text: 'At the bottom, the same next move as your laptop, with the second move above it. An early move asks you to tap again.' },
             { title: 'Who the room is waiting on', text: 'While the room answers or votes, **Still to answer** or **Still to vote** names who has not yet, and the names go as people submit. It never shows who wrote what.' },
             { title: 'What we heard', text: 'Which page the room is on, **Back a page**, and Workie\'s points with Ask the room beside them.' },
-            { title: 'This round', text: 'A button that puts the question or one response up large for the room.' },
+            { title: 'This round', text: '**Show the question** puts the question back up; **Show the room** puts one response up.' },
             { title: 'Scoreboard', text: '**Show the scoreboard** or **Hide the scoreboard**, its next page, and its look.' },
-            { title: 'Session', text: 'Three doors with the laptop\'s names: **Up next** (the running order, **Write a question**, the categories, the set), **Rounds so far** (the report first) and **People**. Then **Join code**, **Room\'s screen**, and **Main menu**, which returns the phone to the code screen; the session keeps running.' },
+            { title: 'Session', text: 'Three doors with the laptop\'s names: **Up next** (the running order, **Choose a question**, **Write a question**, the categories), **Rounds so far** (the report first) and **People**. Then **Join code**, **Room\'s screen**, and **Main menu**, which returns the phone to the code screen; the session keeps running.' },
+            { title: 'Choose a question', text: 'The laptop\'s picker as a sheet, from **Up next** or the round\'s **Change**. **Ask next** returns with **Undo**.' },
             { title: 'End session', text: '**End session…** at the foot of those tabs asks **End this session?** in place.' },
             { title: 'Feedback round', text: 'How many comments have come in, and **Said in the room**, to add something said aloud to the round\'s comments.' },
           ],

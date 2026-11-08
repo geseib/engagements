@@ -1,0 +1,1068 @@
+{
+  "title": "80s Movies: Be Kind, Rewind",
+  "description": "60 questions from the decade of DeLoreans, proton packs and power ballads: big-screen moments, lines everyone quotes, the stars and directors behind them, Oscar nights and the soundtracks that ruled the radio. Every film released 1980 to 1989.",
+  "categories": [
+    "Blockbuster Moments",
+    "Quote, Unquote",
+    "Stars & Roles",
+    "Behind the Camera",
+    "Oscar Night & Box Office",
+    "Soundtracks & Theme Songs"
+  ],
+  "questions": [
+    {
+      "id": "movies80s-01",
+      "category": "Blockbuster Moments",
+      "difficulty": "easy",
+      "question": "In E.T. the Extra-Terrestrial (1982), which candy does Elliott use to lay a trail for E.T.?",
+      "options": [
+        "Reese's Pieces",
+        "Jelly beans",
+        "Gummy bears",
+        "M&M's"
+      ],
+      "correctIndex": 0,
+      "explanation": "Elliott lures E.T. into the house with a trail of Reese's Pieces, and the candy's sales jumped after the film opened.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/E.T._the_Extra-Terrestrial",
+        "https://en.wikipedia.org/wiki/Reese's_Pieces"
+      ]
+    },
+    {
+      "id": "movies80s-02",
+      "category": "Blockbuster Moments",
+      "difficulty": "easy",
+      "question": "In Back to the Future (1985), what speed must the DeLorean reach to travel through time?",
+      "options": [
+        "88 miles per hour",
+        "77 miles per hour",
+        "55 miles per hour",
+        "99 miles per hour"
+      ],
+      "correctIndex": 0,
+      "explanation": "Doc Brown's time machine jumps when it hits 88 mph, powered by 1.21 gigawatts from the flux capacitor.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Back_to_the_Future",
+        "https://en.wikipedia.org/wiki/DeLorean_time_machine"
+      ]
+    },
+    {
+      "id": "movies80s-03",
+      "category": "Blockbuster Moments",
+      "difficulty": "easy",
+      "question": "In Ghostbusters (1984), what giant figure does Gozer take after Ray tries to think of something harmless?",
+      "options": [
+        "A giant rubber duck",
+        "A giant gingerbread man",
+        "The Stay Puft Marshmallow Man",
+        "A giant teddy bear"
+      ],
+      "correctIndex": 2,
+      "explanation": "Ray pictures a mascot from his childhood, and a building-sized Stay Puft Marshmallow Man stomps through Manhattan.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ghostbusters",
+        "https://en.wikipedia.org/wiki/Stay_Puft_Marshmallow_Man"
+      ]
+    },
+    {
+      "id": "movies80s-04",
+      "category": "Blockbuster Moments",
+      "difficulty": "easy",
+      "question": "In Raiders of the Lost Ark (1981), which creatures is Indiana Jones famously afraid of?",
+      "options": [
+        "Bats",
+        "Rats",
+        "Spiders",
+        "Snakes"
+      ],
+      "correctIndex": 3,
+      "explanation": "\"Snakes. Why'd it have to be snakes?\" The Well of Souls is full of them, which is exactly what Indy dreads.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Raiders_of_the_Lost_Ark"
+      ]
+    },
+    {
+      "id": "movies80s-05",
+      "category": "Blockbuster Moments",
+      "difficulty": "medium",
+      "question": "In The Karate Kid (1984), what is the name of the dojo where Daniel's tormentors train?",
+      "options": [
+        "Iron Fist",
+        "Cobra Kai",
+        "Tiger Claw",
+        "Black Dragon"
+      ],
+      "correctIndex": 1,
+      "explanation": "Johnny Lawrence and his friends train at Cobra Kai under the ruthless sensei John Kreese.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Karate_Kid",
+        "https://en.wikipedia.org/wiki/Cobra_Kai"
+      ]
+    },
+    {
+      "id": "movies80s-06",
+      "category": "Blockbuster Moments",
+      "difficulty": "medium",
+      "question": "In Ferris Bueller's Day Off (1986), which car do Ferris and Cameron borrow from Cameron's father?",
+      "options": [
+        "A Lamborghini Countach",
+        "A Porsche 911 Turbo",
+        "A Chevrolet Corvette Stingray",
+        "A 1961 Ferrari 250 GT California"
+      ],
+      "correctIndex": 3,
+      "explanation": "Cameron's father's prized red 1961 Ferrari 250 GT California gets a day in Chicago it was never meant to have.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ferris_Bueller's_Day_Off"
+      ]
+    },
+    {
+      "id": "movies80s-07",
+      "category": "Blockbuster Moments",
+      "difficulty": "medium",
+      "question": "In The Goonies (1985), whose lost pirate treasure are the kids hunting for?",
+      "options": [
+        "Blackbeard's",
+        "Long John Silver's",
+        "Captain Kidd's",
+        "One-Eyed Willy's"
+      ],
+      "correctIndex": 3,
+      "explanation": "An old treasure map leads the Goonies under the Oregon coast in search of One-Eyed Willy's ship and gold.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Goonies"
+      ]
+    },
+    {
+      "id": "movies80s-08",
+      "category": "Blockbuster Moments",
+      "difficulty": "medium",
+      "question": "In Die Hard (1988), which Los Angeles skyscraper does Hans Gruber's gang take over?",
+      "options": [
+        "Oscorp Tower",
+        "Nakatomi Plaza",
+        "Tyrell Building",
+        "Wayne Tower"
+      ],
+      "correctIndex": 1,
+      "explanation": "John McClane is visiting the Nakatomi Corporation's Christmas party when the building is seized. Fox Plaza stood in for it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Die_Hard"
+      ]
+    },
+    {
+      "id": "movies80s-09",
+      "category": "Blockbuster Moments",
+      "difficulty": "easy",
+      "question": "In Gremlins (1984), what is the name of the mogwai that Billy receives as a gift?",
+      "options": [
+        "Gadget",
+        "Gizmo",
+        "Spike",
+        "Stripe"
+      ],
+      "correctIndex": 1,
+      "explanation": "Gizmo is the gentle mogwai; Stripe is the mohawked leader of the gremlins that spawn after the rules are broken.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Gremlins"
+      ]
+    },
+    {
+      "id": "movies80s-10",
+      "category": "Blockbuster Moments",
+      "difficulty": "medium",
+      "question": "In Big (1988), Tom Hanks and Robert Loggia play \"Chopsticks\" on a giant floor piano in which New York toy store?",
+      "options": [
+        "FAO Schwarz",
+        "Macy's",
+        "Toys \"R\" Us",
+        "KB Toys"
+      ],
+      "correctIndex": 0,
+      "explanation": "The walking-piano duet was filmed at FAO Schwarz on Fifth Avenue and became one of the decade's best-loved scenes.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Big_(film)",
+        "https://en.wikipedia.org/wiki/FAO_Schwarz"
+      ]
+    },
+    {
+      "id": "movies80s-11",
+      "category": "Quote, Unquote",
+      "difficulty": "easy",
+      "question": "In which film does Arnold Schwarzenegger first say \"I'll be back\"?",
+      "options": [
+        "The Terminator",
+        "Aliens",
+        "Escape from New York",
+        "RoboCop"
+      ],
+      "correctIndex": 0,
+      "explanation": "The line comes at a police station front desk in The Terminator, shortly before he drives a car through the doors.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Terminator",
+        "https://en.wikipedia.org/wiki/I'll_be_back"
+      ]
+    },
+    {
+      "id": "movies80s-12",
+      "category": "Quote, Unquote",
+      "difficulty": "easy",
+      "question": "Which film's climactic shoot-out features the line \"Say hello to my little friend!\"?",
+      "options": [
+        "The Untouchables",
+        "Scarface",
+        "Lethal Weapon",
+        "Wall Street"
+      ],
+      "correctIndex": 1,
+      "explanation": "Al Pacino's Tony Montana bellows it in the climactic shoot-out of Brian De Palma's Scarface.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Scarface_(1983_film)"
+      ]
+    },
+    {
+      "id": "movies80s-13",
+      "category": "Quote, Unquote",
+      "difficulty": "medium",
+      "question": "In Wall Street (1987), which character declares that \"greed, for lack of a better word, is good\"?",
+      "options": [
+        "Bud Fox",
+        "Patrick Bateman",
+        "Gordon Gekko",
+        "Louis Winthorpe III"
+      ],
+      "correctIndex": 2,
+      "explanation": "Michael Douglas's corporate raider Gordon Gekko makes the speech at a shareholders' meeting; Douglas won Best Actor.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Wall_Street_(1987_film)",
+        "https://en.wikipedia.org/wiki/Gordon_Gekko"
+      ]
+    },
+    {
+      "id": "movies80s-14",
+      "category": "Quote, Unquote",
+      "difficulty": "easy",
+      "question": "In Back to the Future, who says \"Roads? Where we're going, we don't need roads\"?",
+      "options": [
+        "Doc Brown",
+        "Marty McFly",
+        "Biff Tannen",
+        "George McFly"
+      ],
+      "correctIndex": 0,
+      "explanation": "Christopher Lloyd's Doc Brown delivers the final line of the film before the DeLorean lifts off.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Back_to_the_Future",
+        "https://en.wikipedia.org/wiki/Emmett_Brown"
+      ]
+    },
+    {
+      "id": "movies80s-15",
+      "category": "Quote, Unquote",
+      "difficulty": "medium",
+      "question": "In which 1980 horror film does Jack Nicholson push his face through an axed door and announce \"Here's Johnny!\"?",
+      "options": [
+        "The Shining",
+        "Friday the 13th",
+        "Poltergeist",
+        "The Fog"
+      ],
+      "correctIndex": 0,
+      "explanation": "Jack Torrance borrows Ed McMahon's introduction for Johnny Carson as he axes through the bathroom door.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Shining_(film)"
+      ]
+    },
+    {
+      "id": "movies80s-16",
+      "category": "Quote, Unquote",
+      "difficulty": "medium",
+      "question": "In which film does little Carol Anne announce \"They're here\"?",
+      "options": [
+        "Gremlins",
+        "Poltergeist",
+        "The Shining",
+        "The Fog"
+      ],
+      "correctIndex": 1,
+      "explanation": "Carol Anne Freeling says it in front of a static-filled television set, and the spirits arrive soon after.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Poltergeist_(1982_film)"
+      ]
+    },
+    {
+      "id": "movies80s-17",
+      "category": "Quote, Unquote",
+      "difficulty": "medium",
+      "question": "In The Princess Bride (1987), which character keeps exclaiming \"Inconceivable!\"?",
+      "options": [
+        "Prince Humperdinck",
+        "Fezzik",
+        "Inigo Montoya",
+        "Vizzini"
+      ],
+      "correctIndex": 3,
+      "explanation": "Wallace Shawn's Vizzini overuses the word until Inigo remarks, \"I do not think it means what you think it means.\"",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Princess_Bride_(film)"
+      ]
+    },
+    {
+      "id": "movies80s-18",
+      "category": "Quote, Unquote",
+      "difficulty": "medium",
+      "question": "Which 1989 comedy gave the world the motto \"Be excellent to each other\"?",
+      "options": [
+        "Better Off Dead",
+        "Bill & Ted's Excellent Adventure",
+        "Fast Times at Ridgemont High",
+        "Wayne's World"
+      ],
+      "correctIndex": 1,
+      "explanation": "Bill and Ted's motto, along with \"Party on, dudes!\", becomes the founding wisdom of the future society that sends Rufus back to help them.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Bill_%26_Ted's_Excellent_Adventure"
+      ]
+    },
+    {
+      "id": "movies80s-19",
+      "category": "Quote, Unquote",
+      "difficulty": "hard",
+      "question": "Clint Eastwood's line \"Go ahead, make my day\" comes from which Dirty Harry film?",
+      "options": [
+        "The Enforcer",
+        "Dirty Harry",
+        "Sudden Impact",
+        "Magnum Force"
+      ],
+      "correctIndex": 2,
+      "explanation": "The line is from Sudden Impact, the fourth Dirty Harry film and the only one Eastwood also directed.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Sudden_Impact"
+      ]
+    },
+    {
+      "id": "movies80s-20",
+      "category": "Quote, Unquote",
+      "difficulty": "hard",
+      "question": "In When Harry Met Sally... (1989), the deli customer who says \"I'll have what she's having\" is played by whose mother?",
+      "options": [
+        "Screenwriter Nora Ephron's",
+        "Director Rob Reiner's",
+        "Meg Ryan's",
+        "Billy Crystal's"
+      ],
+      "correctIndex": 1,
+      "explanation": "Estelle Reiner, mother of director Rob Reiner, delivers the punchline in Katz's Delicatessen.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/When_Harry_Met_Sally...",
+        "https://en.wikipedia.org/wiki/Estelle_Reiner"
+      ]
+    },
+    {
+      "id": "movies80s-21",
+      "category": "Stars & Roles",
+      "difficulty": "medium",
+      "question": "Who played Sarah Connor in The Terminator (1984)?",
+      "options": [
+        "Jamie Lee Curtis",
+        "Sigourney Weaver",
+        "Linda Hamilton",
+        "Kelly McGillis"
+      ],
+      "correctIndex": 2,
+      "explanation": "Linda Hamilton played the waitress Sarah Connor, a role she returned to in Terminator 2 in 1991.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Terminator",
+        "https://en.wikipedia.org/wiki/Linda_Hamilton"
+      ]
+    },
+    {
+      "id": "movies80s-22",
+      "category": "Stars & Roles",
+      "difficulty": "easy",
+      "question": "Who played the title \"bio-exorcist\" in Beetlejuice (1988)?",
+      "options": [
+        "Jack Nicholson",
+        "Danny DeVito",
+        "Bill Murray",
+        "Michael Keaton"
+      ],
+      "correctIndex": 3,
+      "explanation": "Michael Keaton played Betelgeuse in Tim Burton's ghost comedy, alongside Alec Baldwin, Geena Davis and Winona Ryder.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Beetlejuice"
+      ]
+    },
+    {
+      "id": "movies80s-23",
+      "category": "Stars & Roles",
+      "difficulty": "easy",
+      "question": "Who played Princess Leia in Return of the Jedi (1983)?",
+      "options": [
+        "Karen Allen",
+        "Margot Kidder",
+        "Carrie Fisher",
+        "Kathleen Turner"
+      ],
+      "correctIndex": 2,
+      "explanation": "Carrie Fisher played Leia across the original trilogy; Karen Allen was Marion in Raiders of the Lost Ark.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Return_of_the_Jedi",
+        "https://en.wikipedia.org/wiki/Carrie_Fisher"
+      ]
+    },
+    {
+      "id": "movies80s-24",
+      "category": "Stars & Roles",
+      "difficulty": "medium",
+      "question": "In Tootsie (1982), Dustin Hoffman's out-of-work actor disguises himself as a woman to land a role in what?",
+      "options": [
+        "A TV soap opera",
+        "A shampoo commercial",
+        "A Broadway musical",
+        "A Hollywood western"
+      ],
+      "correctIndex": 0,
+      "explanation": "Michael Dorsey becomes \"Dorothy Michaels\" and wins a part on the hospital soap Southwest General.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Tootsie"
+      ]
+    },
+    {
+      "id": "movies80s-25",
+      "category": "Stars & Roles",
+      "difficulty": "easy",
+      "question": "Who played Detroit detective Axel Foley in Beverly Hills Cop (1984)?",
+      "options": [
+        "Gregory Hines",
+        "Danny Glover",
+        "Eddie Murphy",
+        "Richard Pryor"
+      ],
+      "correctIndex": 2,
+      "explanation": "Eddie Murphy's Axel Foley follows a case to Beverly Hills; the film was among the biggest hits of 1984.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Beverly_Hills_Cop"
+      ]
+    },
+    {
+      "id": "movies80s-26",
+      "category": "Stars & Roles",
+      "difficulty": "easy",
+      "question": "In Lethal Weapon (1987), who played Martin Riggs opposite Danny Glover's Roger Murtaugh?",
+      "options": [
+        "Harrison Ford",
+        "Bruce Willis",
+        "Kurt Russell",
+        "Mel Gibson"
+      ],
+      "correctIndex": 3,
+      "explanation": "Mel Gibson and Danny Glover went on to make a whole series of Lethal Weapon films together.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Lethal_Weapon"
+      ]
+    },
+    {
+      "id": "movies80s-27",
+      "category": "Stars & Roles",
+      "difficulty": "hard",
+      "question": "Who played the android Bishop in Aliens (1986)?",
+      "options": [
+        "Bill Paxton",
+        "Michael Biehn",
+        "Lance Henriksen",
+        "Paul Reiser"
+      ],
+      "correctIndex": 2,
+      "explanation": "Lance Henriksen played Bishop. Michael Biehn was Hicks, Bill Paxton was Hudson and Paul Reiser was Burke.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Aliens_(film)",
+        "https://en.wikipedia.org/wiki/Lance_Henriksen"
+      ]
+    },
+    {
+      "id": "movies80s-28",
+      "category": "Stars & Roles",
+      "difficulty": "medium",
+      "question": "Which actor played Dr. Peter Venkman in Ghostbusters (1984)?",
+      "options": [
+        "Chevy Chase",
+        "Harold Ramis",
+        "Dan Aykroyd",
+        "Bill Murray"
+      ],
+      "correctIndex": 3,
+      "explanation": "Bill Murray played Venkman; co-writers Dan Aykroyd and Harold Ramis played Ray Stantz and Egon Spengler.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ghostbusters",
+        "https://en.wikipedia.org/wiki/Peter_Venkman"
+      ]
+    },
+    {
+      "id": "movies80s-29",
+      "category": "Stars & Roles",
+      "difficulty": "medium",
+      "question": "In Who Framed Roger Rabbit (1988), who played the toon-hating detective Eddie Valiant?",
+      "options": [
+        "Danny DeVito",
+        "Joe Pesci",
+        "Bob Hoskins",
+        "Christopher Lloyd"
+      ],
+      "correctIndex": 2,
+      "explanation": "Bob Hoskins acted mostly against empty space; Christopher Lloyd played the villain, Judge Doom.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Who_Framed_Roger_Rabbit"
+      ]
+    },
+    {
+      "id": "movies80s-30",
+      "category": "Stars & Roles",
+      "difficulty": "medium",
+      "question": "Which future star played Elliott's little sister Gertie in E.T. the Extra-Terrestrial?",
+      "options": [
+        "Winona Ryder",
+        "Drew Barrymore",
+        "Christina Ricci",
+        "Jodie Foster"
+      ],
+      "correctIndex": 1,
+      "explanation": "Drew Barrymore was six when filming began and steals several scenes, including teaching E.T. to talk.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/E.T._the_Extra-Terrestrial",
+        "https://en.wikipedia.org/wiki/Drew_Barrymore"
+      ]
+    },
+    {
+      "id": "movies80s-31",
+      "category": "Behind the Camera",
+      "difficulty": "easy",
+      "question": "Which studio made the animated musical The Little Mermaid (1989)?",
+      "options": [
+        "DreamWorks",
+        "Studio Ghibli",
+        "Disney",
+        "Pixar"
+      ],
+      "correctIndex": 2,
+      "explanation": "Walt Disney Feature Animation made it, and its success launched what fans call the Disney Renaissance.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Little_Mermaid_(1989_film)"
+      ]
+    },
+    {
+      "id": "movies80s-32",
+      "category": "Behind the Camera",
+      "difficulty": "hard",
+      "question": "Which actor was originally cast as Marty McFly and filmed for weeks before being replaced by Michael J. Fox?",
+      "options": [
+        "Eric Stoltz",
+        "Ralph Macchio",
+        "C. Thomas Howell",
+        "Jon Cryer"
+      ],
+      "correctIndex": 0,
+      "explanation": "Eric Stoltz shot several weeks as Marty before the filmmakers recast the part with Michael J. Fox.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Back_to_the_Future",
+        "https://en.wikipedia.org/wiki/Eric_Stoltz"
+      ]
+    },
+    {
+      "id": "movies80s-33",
+      "category": "Behind the Camera",
+      "difficulty": "medium",
+      "question": "Who directed Raging Bull (1980), the black-and-white boxing drama starring Robert De Niro?",
+      "options": [
+        "Francis Ford Coppola",
+        "Brian De Palma",
+        "Sidney Lumet",
+        "Martin Scorsese"
+      ],
+      "correctIndex": 3,
+      "explanation": "Martin Scorsese directed it, and De Niro won Best Actor for playing the middleweight Jake LaMotta.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Raging_Bull"
+      ]
+    },
+    {
+      "id": "movies80s-34",
+      "category": "Behind the Camera",
+      "difficulty": "medium",
+      "question": "Who directed Batman (1989), starring Michael Keaton and Jack Nicholson?",
+      "options": [
+        "Tim Burton",
+        "Richard Donner",
+        "Sam Raimi",
+        "Joel Schumacher"
+      ],
+      "correctIndex": 0,
+      "explanation": "Tim Burton directed Batman a year after Beetlejuice; Joel Schumacher took over the series in 1995.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Batman_(1989_film)"
+      ]
+    },
+    {
+      "id": "movies80s-35",
+      "category": "Behind the Camera",
+      "difficulty": "medium",
+      "question": "Which actor was first offered Indiana Jones but had to turn it down because of his TV series Magnum, P.I.?",
+      "options": [
+        "Kurt Russell",
+        "Tom Selleck",
+        "Nick Nolte",
+        "Burt Reynolds"
+      ],
+      "correctIndex": 1,
+      "explanation": "Tom Selleck was contracted to Magnum, P.I., and the role went to Harrison Ford.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Raiders_of_the_Lost_Ark",
+        "https://en.wikipedia.org/wiki/Tom_Selleck"
+      ]
+    },
+    {
+      "id": "movies80s-36",
+      "category": "Behind the Camera",
+      "difficulty": "medium",
+      "question": "Disney's Tron (1982) was a landmark for which filmmaking technique?",
+      "options": [
+        "Underwater photography",
+        "3-D projection",
+        "Stop-motion animation",
+        "Extensive computer-generated imagery"
+      ],
+      "correctIndex": 3,
+      "explanation": "Tron was one of the first feature films to use computer-generated imagery at length, blended with backlit animation.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Tron"
+      ]
+    },
+    {
+      "id": "movies80s-37",
+      "category": "Behind the Camera",
+      "difficulty": "medium",
+      "question": "Who directed the Studio Ghibli film My Neighbor Totoro (1988)?",
+      "options": [
+        "Katsuhiro Otomo",
+        "Hayao Miyazaki",
+        "Akira Kurosawa",
+        "Isao Takahata"
+      ],
+      "correctIndex": 1,
+      "explanation": "Hayao Miyazaki directed Totoro; his Ghibli colleague Isao Takahata's Grave of the Fireflies was released alongside it.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/My_Neighbor_Totoro"
+      ]
+    },
+    {
+      "id": "movies80s-38",
+      "category": "Behind the Camera",
+      "difficulty": "hard",
+      "question": "Akira Kurosawa's 1985 epic Ran adapts which Shakespeare play?",
+      "options": [
+        "Hamlet",
+        "Macbeth",
+        "King Lear",
+        "Othello"
+      ],
+      "correctIndex": 2,
+      "explanation": "Ran moves King Lear to feudal Japan. Kurosawa had adapted Macbeth decades earlier as Throne of Blood (1957).",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Ran_(film)"
+      ]
+    },
+    {
+      "id": "movies80s-39",
+      "category": "Behind the Camera",
+      "difficulty": "medium",
+      "question": "Who directed The Shining (1980)?",
+      "options": [
+        "Roman Polanski",
+        "John Carpenter",
+        "Brian De Palma",
+        "Stanley Kubrick"
+      ],
+      "correctIndex": 3,
+      "explanation": "Stanley Kubrick adapted Stephen King's novel, famously demanding many takes of key scenes.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Shining_(film)"
+      ]
+    },
+    {
+      "id": "movies80s-40",
+      "category": "Behind the Camera",
+      "difficulty": "hard",
+      "question": "Which director made the 1986 remake of The Fly, starring Jeff Goldblum?",
+      "options": [
+        "David Cronenberg",
+        "John Carpenter",
+        "Wes Craven",
+        "Sam Raimi"
+      ],
+      "correctIndex": 0,
+      "explanation": "David Cronenberg directed The Fly; John Carpenter had made his own celebrated horror remake, The Thing, in 1982.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Fly_(1986_film)"
+      ]
+    },
+    {
+      "id": "movies80s-41",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "medium",
+      "question": "Which film was the highest-grossing release of the 1980s?",
+      "options": [
+        "Batman",
+        "E.T. the Extra-Terrestrial",
+        "Raiders of the Lost Ark",
+        "Return of the Jedi"
+      ],
+      "correctIndex": 1,
+      "explanation": "E.T. overtook Star Wars as the highest-grossing film ever and held that record until Jurassic Park in 1993.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/E.T._the_Extra-Terrestrial",
+        "https://en.wikipedia.org/wiki/List_of_highest-grossing_films"
+      ]
+    },
+    {
+      "id": "movies80s-42",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "medium",
+      "question": "Which biographical epic won Best Picture for 1982, beating E.T. the Extra-Terrestrial?",
+      "options": [
+        "Out of Africa",
+        "Tootsie",
+        "Gandhi",
+        "Chariots of Fire"
+      ],
+      "correctIndex": 2,
+      "explanation": "Richard Attenborough's Gandhi won eight Oscars, including Best Picture and Best Actor for Ben Kingsley.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1983",
+        "https://en.wikipedia.org/wiki/Gandhi_(film)"
+      ]
+    },
+    {
+      "id": "movies80s-43",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "easy",
+      "question": "Oliver Stone's Best Picture winner Platoon (1986) is set during which war?",
+      "options": [
+        "World War II",
+        "The Vietnam War",
+        "The Korean War",
+        "The Gulf War"
+      ],
+      "correctIndex": 1,
+      "explanation": "Stone drew on his own service as an infantryman in Vietnam to write and direct Platoon.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1987",
+        "https://en.wikipedia.org/wiki/Platoon_(film)"
+      ]
+    },
+    {
+      "id": "movies80s-44",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "hard",
+      "question": "The Last Emperor (1987) won every Oscar it was nominated for. How many was that?",
+      "options": [
+        "Seven",
+        "Eleven",
+        "Nine",
+        "Five"
+      ],
+      "correctIndex": 2,
+      "explanation": "Bernardo Bertolucci's film about Puyi, China's last emperor, went nine for nine, including Best Picture.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1988",
+        "https://en.wikipedia.org/wiki/The_Last_Emperor"
+      ]
+    },
+    {
+      "id": "movies80s-45",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "medium",
+      "question": "Rain Man won Best Picture for 1988. Who won Best Actor for playing Raymond Babbitt?",
+      "options": [
+        "Tom Cruise",
+        "Tom Hanks",
+        "Gene Hackman",
+        "Dustin Hoffman"
+      ],
+      "correctIndex": 3,
+      "explanation": "Dustin Hoffman won his second Best Actor Oscar; Tom Cruise played Raymond's brother Charlie.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1989",
+        "https://en.wikipedia.org/wiki/Rain_Man"
+      ]
+    },
+    {
+      "id": "movies80s-46",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "medium",
+      "question": "At 80, Jessica Tandy set the record as the oldest winner of the Best Actress Oscar. For which 1989 film?",
+      "options": [
+        "The Trip to Bountiful",
+        "Steel Magnolias",
+        "Driving Miss Daisy",
+        "Fried Green Tomatoes"
+      ],
+      "correctIndex": 2,
+      "explanation": "Tandy won for playing Daisy Werthan; Driving Miss Daisy also won Best Picture.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1990",
+        "https://en.wikipedia.org/wiki/Jessica_Tandy"
+      ]
+    },
+    {
+      "id": "movies80s-47",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "hard",
+      "question": "Best Picture winner Chariots of Fire (1981) follows British runners competing at which Olympic Games?",
+      "options": [
+        "London 1948",
+        "Stockholm 1912",
+        "Berlin 1936",
+        "Paris 1924"
+      ],
+      "correctIndex": 3,
+      "explanation": "The film follows Harold Abrahams and Eric Liddell on their way to the 1924 Games in Paris.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1982",
+        "https://en.wikipedia.org/wiki/Chariots_of_Fire"
+      ]
+    },
+    {
+      "id": "movies80s-48",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "medium",
+      "question": "In The Color of Money (1986), which won Paul Newman his first competitive Oscar, what does his character \"Fast Eddie\" Felson play?",
+      "options": [
+        "Pool",
+        "Darts",
+        "Poker",
+        "Bowling"
+      ],
+      "correctIndex": 0,
+      "explanation": "Newman reprised the pool hustler he first played in The Hustler (1961), this time mentoring Tom Cruise.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1987",
+        "https://en.wikipedia.org/wiki/The_Color_of_Money"
+      ]
+    },
+    {
+      "id": "movies80s-49",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "hard",
+      "question": "Who won Best Supporting Actor for playing retired astronaut Garrett Breedlove in Terms of Endearment (1983)?",
+      "options": [
+        "John Lithgow",
+        "Jeff Daniels",
+        "Robert Duvall",
+        "Jack Nicholson"
+      ],
+      "correctIndex": 3,
+      "explanation": "Nicholson won Best Supporting Actor; the film also won Best Picture and Best Actress for Shirley MacLaine.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1984",
+        "https://en.wikipedia.org/wiki/Terms_of_Endearment"
+      ]
+    },
+    {
+      "id": "movies80s-50",
+      "category": "Oscar Night & Box Office",
+      "difficulty": "medium",
+      "question": "Which actor won Best Director for his very first film behind the camera, Ordinary People (1980)?",
+      "options": [
+        "Robert Redford",
+        "Clint Eastwood",
+        "Robert De Niro",
+        "Warren Beatty"
+      ],
+      "correctIndex": 0,
+      "explanation": "Robert Redford won Best Director for his debut, and Ordinary People won Best Picture.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1981",
+        "https://en.wikipedia.org/wiki/Ordinary_People"
+      ]
+    },
+    {
+      "id": "movies80s-51",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "medium",
+      "question": "Survivor's \"Eye of the Tiger\" was written for which film?",
+      "options": [
+        "Rocky IV",
+        "Rocky III",
+        "The Karate Kid",
+        "Rocky II"
+      ],
+      "correctIndex": 1,
+      "explanation": "Sylvester Stallone asked Survivor for a new theme for Rocky III (1982); the song topped the US charts.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Eye_of_the_Tiger",
+        "https://en.wikipedia.org/wiki/Rocky_III"
+      ]
+    },
+    {
+      "id": "movies80s-52",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "medium",
+      "question": "Ben E. King's \"Stand by Me\" returned to the charts with the 1986 film of the same name. Whose story was the film adapted from?",
+      "options": [
+        "Ray Bradbury's",
+        "John Irving's",
+        "S. E. Hinton's",
+        "Stephen King's"
+      ],
+      "correctIndex": 3,
+      "explanation": "Rob Reiner adapted Stephen King's novella \"The Body\" (1982), and the 1961 song became a hit all over again.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Stand_by_Me_(film)",
+        "https://en.wikipedia.org/wiki/Stand_by_Me_(Ben_E._King_song)"
+      ]
+    },
+    {
+      "id": "movies80s-53",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "medium",
+      "question": "Who sang the title song of Footloose (1984)?",
+      "options": [
+        "Phil Collins",
+        "Rick Springfield",
+        "Kenny Loggins",
+        "Bryan Adams"
+      ],
+      "correctIndex": 2,
+      "explanation": "Kenny Loggins co-wrote and sang \"Footloose,\" which reached No. 1 in the US.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Footloose_(song)"
+      ]
+    },
+    {
+      "id": "movies80s-54",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "medium",
+      "question": "Simple Minds' \"Don't You (Forget About Me)\" plays over the opening and closing of which film?",
+      "options": [
+        "The Breakfast Club",
+        "Sixteen Candles",
+        "Pretty in Pink",
+        "St. Elmo's Fire"
+      ],
+      "correctIndex": 0,
+      "explanation": "The song was written for The Breakfast Club (1985) and became Simple Minds' biggest US hit.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Don't_You_(Forget_About_Me)",
+        "https://en.wikipedia.org/wiki/The_Breakfast_Club"
+      ]
+    },
+    {
+      "id": "movies80s-55",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "medium",
+      "question": "Who sang \"Flashdance... What a Feeling,\" which won the Oscar for Best Original Song?",
+      "options": [
+        "Pat Benatar",
+        "Irene Cara",
+        "Cyndi Lauper",
+        "Laura Branigan"
+      ],
+      "correctIndex": 1,
+      "explanation": "Irene Cara sang it and shared the songwriting Oscar with Giorgio Moroder and Keith Forsey.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Flashdance..._What_a_Feeling",
+        "https://www.oscars.org/oscars/ceremonies/1984"
+      ]
+    },
+    {
+      "id": "movies80s-56",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "medium",
+      "question": "Which band recorded \"The Power of Love\" for Back to the Future?",
+      "options": [
+        "Toto",
+        "REO Speedwagon",
+        "Huey Lewis and the News",
+        "Journey"
+      ],
+      "correctIndex": 2,
+      "explanation": "Huey Lewis and the News took it to No. 1 in the US; Lewis also has a cameo as a battle-of-the-bands judge.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/The_Power_of_Love_(Huey_Lewis_and_the_News_song)"
+      ]
+    },
+    {
+      "id": "movies80s-57",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "easy",
+      "question": "Which composer scored E.T., Raiders of the Lost Ark and The Empire Strikes Back?",
+      "options": [
+        "James Horner",
+        "John Williams",
+        "Hans Zimmer",
+        "Jerry Goldsmith"
+      ],
+      "correctIndex": 1,
+      "explanation": "John Williams scored all three; The Empire Strikes Back introduced his \"Imperial March.\"",
+      "sources": [
+        "https://en.wikipedia.org/wiki/John_Williams"
+      ]
+    },
+    {
+      "id": "movies80s-58",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "medium",
+      "question": "Which composer won the Oscar for the synthesizer score of Chariots of Fire?",
+      "options": [
+        "Vangelis",
+        "Giorgio Moroder",
+        "Jean-Michel Jarre",
+        "Ennio Morricone"
+      ],
+      "correctIndex": 0,
+      "explanation": "The Greek composer Vangelis won Best Original Score, and his opening theme became a worldwide hit.",
+      "sources": [
+        "https://www.oscars.org/oscars/ceremonies/1982",
+        "https://en.wikipedia.org/wiki/Vangelis"
+      ]
+    },
+    {
+      "id": "movies80s-59",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "hard",
+      "question": "Public Enemy's \"Fight the Power\" was recorded for which 1989 film?",
+      "options": [
+        "Colors",
+        "Krush Groove",
+        "Boyz n the Hood",
+        "Do the Right Thing"
+      ],
+      "correctIndex": 3,
+      "explanation": "Spike Lee asked Public Enemy for an anthem, and the song plays throughout Do the Right Thing.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Fight_the_Power_(Public_Enemy_song)",
+        "https://en.wikipedia.org/wiki/Do_the_Right_Thing"
+      ]
+    },
+    {
+      "id": "movies80s-60",
+      "category": "Soundtracks & Theme Songs",
+      "difficulty": "hard",
+      "question": "Who composed \"Axel F,\" the synth theme from Beverly Hills Cop?",
+      "options": [
+        "Harold Faltermeyer",
+        "Thomas Dolby",
+        "Giorgio Moroder",
+        "Jan Hammer"
+      ],
+      "correctIndex": 0,
+      "explanation": "Harold Faltermeyer wrote it; Jan Hammer's similar-sounding hit was the Miami Vice theme.",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Axel_F"
+      ]
+    }
+  ],
+  "verificationDate": "2026-11-07",
+  "editorialNotes": "Films released 1980-1989 only. Box-office and award facts are fixed historical results (ceremony pages cited by year); no \"current record\" questions. Avoids the facts already used by the live 80strivia set (Top Gun, Last Crusade casting, Blade Runner source, Say Anything, Dirty Dancing, Purple Rain, Fame). Difficulty is editorial. All explanations are original paraphrases."
+}

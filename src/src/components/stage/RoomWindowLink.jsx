@@ -9,7 +9,7 @@ import { SCREEN_WORDS } from '../../config/roomScreen';
  * still work; where Chrome can place windows and a second display is attached,
  * a plain click opens it on that display, filled (present/roomWindow.js).
  */
-export default function RoomWindowLink({ href, className, children, title, onClick, ...rest }) {
+export default function RoomWindowLink({ href, className, children, title, onClick, target = '_blank', ...rest }) {
   const placing = willPlace();
   const handle = (e) => {
     onRoomWindowClick(e, href);
@@ -20,7 +20,7 @@ export default function RoomWindowLink({ href, className, children, title, onCli
       {...rest}
       className={className}
       href={href}
-      target="_blank"
+      target={target}
       rel="noopener noreferrer"
       title={placing ? `Opens on your other display. ${FILL_ONCE}.` : title}
       data-places={placing ? '' : undefined}

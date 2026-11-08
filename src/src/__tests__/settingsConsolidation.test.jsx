@@ -159,7 +159,8 @@ describe('the remote says who may sign in on the phone', () => {
     // rejects: the Screens group and the sign-in words in --text = dark ink
     // on the panel's navy, under a light page (walk of dev 92f8b24d).
     const panel = fs.readFileSync(path.join(__dirname, '..', 'components', 'stage', 'SessionSetupPanel.jsx'), 'utf8');
-    expect(panel).toMatch(/className=\{`setup-panel( smenu)?\$\{[^}]*\}`\}\s*data-theme="dark"/);
+    // A plain class since the question picker took the wide Choose step out.
+    expect(panel).toMatch(/className=(\{`setup-panel( smenu)?\$\{[^}]*\}`\}|"setup-panel smenu")\s*data-theme="dark"/);
     const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
     expect(css).toMatch(/\.setup-panel__tabs \{[^}]*flex-wrap: wrap;/);
   });

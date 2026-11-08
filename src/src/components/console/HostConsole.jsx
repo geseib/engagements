@@ -71,8 +71,8 @@ export function splitLeave(controls) {
     mainLabel   the main area's accessible name
     needs       the Needs-you line (experience plan §4.3), directly under
                 Your part now, in its own grid row so it never moves the card
-    pulse       the pulse (session-start D3; experience plan 2c): three tiles
-                in their own row under the Needs-you line
+    pulse       the room tile (cut 5, 5 Nov 2026; it was the pulse's three
+                tiles, session-start D3), in its own row under the Needs-you line
     sheetRef    a callback ref for the Session menu's sheet host (experience
                 plan §3.2b): a box over the content area (the pulse and the
                 main area), never over Your part now or the Needs-you line.

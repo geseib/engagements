@@ -25,7 +25,10 @@ describe('HostActionBar', () => {
     render(<HostActionBar controls={controlsFor()} onAction={() => {}} />);
 
     expect(screen.getByRole('button', { name: /start voting/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /skip this question/i })).toBeInTheDocument();
+    // Skip is behind the ⋯ beside the main button (owner, 5 Nov 2026, cut 8).
+    expect(screen.queryByRole('button', { name: /skip this question/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More for this round' }));
+    expect(screen.getByRole('menuitem', { name: /skip this question/i })).toBeInTheDocument();
     expect(screen.getByText('All 4 answered')).toBeInTheDocument();
   });
 
@@ -152,12 +155,30 @@ describe('HostActionBar', () => {
     fireEvent.click(primaryButton);
     expect(onAction).not.toHaveBeenCalled();
 
-    const skip = screen.getByRole('button', { name: skipName });
-    expect(skip).toHaveClass('host-action-bar__secondary');
-    expect(skip).not.toHaveClass('host-action-bar__primary');
-    fireEvent.click(skip);
+    // Not on the main line (cut 8): behind the ⋯, which is never the orange.
+    expect(screen.queryByRole('button', { name: skipName })).toBeNull();
+    const more = screen.getByRole('button', { name: 'More for this round' });
+    expect(more).not.toHaveClass('host-action-bar__primary');
+    expect(more).toHaveAttribute('aria-haspopup', 'menu');
+    fireEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('menuitem', { name: skipName }));
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onAction.mock.calls[0][0].intent).toBe(HOST_INTENTS.SKIP);
+    // The menu closes after the press; Escape closes it too and gives focus back.
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.click(more);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(more).toHaveFocus();
+  });
+
+  it('a second button that is not Skip stays on the line', () => {
+    const controls = controlsFor();
+    const next = { ...controls, secondary: { id: 'next-response', label: 'Next response', icon: 'ArrowRight', intent: 'x' } };
+    render(<HostActionBar controls={next} onAction={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Next response' })).toHaveClass('host-action-bar__secondary');
+    expect(screen.queryByRole('button', { name: 'More for this round' })).toBeNull();
   });
 
   it('honours shortcutsEnabled=false while an overlay is open', () => {

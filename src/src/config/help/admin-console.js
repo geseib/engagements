@@ -197,8 +197,8 @@ const questionSets = {
     },
     /*
       QuestionSetsPanel.jsx: "New set"; search placeholder "Search name,
-      description, tags"; selects topic (All topics + 15 topics + Unfiled),
-      type, status (Active/Inactive), owner (OWNER_OPTIONS), updated ("Updated
+      description, tags"; selects (SetFilterBar.jsx, type first since 7 Nov
+      2026) type, topic (All topics + 15 topics + Unfiled), status (Active/Inactive), owner (OWNER_OPTIONS), updated ("Updated
       any time" / this week / this month / "Older than 3 months"), sort (…
       "Owner (yours first)"); count "N sets · M shown"; SetShelfBrowse "Browse
       topics and tags" (counts across all sets; tag pills toggle, several at
@@ -219,7 +219,7 @@ const questionSets = {
           t: 'list',
           items: [
             { title: 'Search', text: 'Matches a set\'s name, description and tags.' },
-            { title: 'Filters', text: 'Topic, type, status (Active or Inactive), owner (Yours, Team, Engage, Public) and when it was updated (this week, this month, or older than 3 months). Sort by newest, name, size, or **Owner (yours first)**.' },
+            { title: 'Filters', text: 'Type, topic, status (Active or Inactive), owner (Yours, Team, Engage, Public) and when it was updated (this week, this month, or older than 3 months). Sort by newest, name, size, or **Owner (yours first)**.' },
             { title: 'Browse topics and tags', text: 'Opens every topic and tag in use, with counts. Click one to filter by it. Click more tags to see sets carrying any of them; click a tag again to let it go.' },
             { title: 'Nothing matches', text: 'The list names each filter that is hiding sets and how many it hides; click one to drop it, or **Clear all filters**.' },
           ],

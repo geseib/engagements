@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question picker</title>
+<style>
+/* THE QUESTION PICKER. Mockups, 5 Nov 2026. Mockup only; no application code.
+   Warm Summit dusk: the base block below is copied from docs/design/session-menu/index.html so the two
+   mockups share one look (tokens from styles.css :root and the theme-invariant set). Laptop ladder
+   12/13/15/19/24/30, rows 36px+; phone 13/16/19/24, rows 44px+. One orange per screen: Your part now's main
+   button (the phone dock's). Ask next is a blue outline, never orange. Pins are violet annotation.
+   Sample content invented. Every frame has a fixed size so the PNGs are honest. */
+/* base, from docs/design/session-menu/index.html */
+:root{
+  --bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;
+  --primary:#F6A94C;--on-primary:#1B2942;--secondary:#7CA7E6;
+  --success:#4FB286;--success-text:#6FD0A4;--danger:#E5645E;--danger-text:#EF8C86;
+  --rule:rgba(244,237,228,.12);--rule-2:rgba(244,237,228,.22);--rule-3:rgba(244,237,228,.32);
+  --amber-wash:rgba(246,169,76,.12);--blue-wash:rgba(124,167,230,.14);--green-wash:rgba(79,178,134,.14);
+  --yours:#C9B6FF;--yours-wash:rgba(167,139,250,.16);--yours-rule:rgba(167,139,250,.55);
+  --pin:#8B6CF6;--r-ctl:10px;--r-card:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#0a1220;color:var(--text);font:15px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1,h2,h3,h4,h5{font-family:Archivo,Inter,system-ui,sans-serif}
+.doc{max-width:2300px;margin:0 auto;padding:24px 16px 80px}
+.doc>h1{font-size:30px;margin:0 0 6px}
+.doc>p{color:var(--muted);max-width:1100px;margin:0 0 8px}
+.doc>p b{color:var(--text)}
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 26px;padding:0;list-style:none}
+.toc a{display:inline-block;font-size:13px;font-weight:700;color:var(--text);text-decoration:none;border:1px solid var(--rule-2);border-radius:999px;padding:5px 12px;background:var(--surface)}
+.cap{margin:40px 0 10px;max-width:1300px}
+.cap h2{font-size:19px;margin:0 0 6px}
+.cap p,.cap ol{color:var(--muted);font-size:13px;margin:0 0 6px}
+.cap ol{padding-left:22px}
+.cap b{color:var(--text)}
+.scroll{overflow-x:auto;padding-bottom:6px}
+.board{display:flex;gap:20px;align-items:flex-start;padding:16px;background:#0a1220;width:max-content}
+.col{display:flex;flex-direction:column;gap:8px}
+.blabel{font-size:13px;font-weight:700;color:var(--text);margin:0}
+.blabel span{color:var(--muted);font-weight:500}
+.frame{position:relative;overflow:hidden;background:var(--bg);border:1px solid var(--rule-2);border-radius:10px;flex:none}
+.f-laptop{width:1366px;height:768px}
+.f-sheet{width:600px;height:720px;background:#0d1628}
+.f-phone{width:390px;height:844px;border-radius:28px}
+.f-map{width:1500px;height:auto}
+.pin{position:absolute;z-index:30;width:22px;height:22px;border-radius:50%;background:var(--pin);color:#fff;font:800 12px/22px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #0a1220}
+.pin.in{position:static;display:inline-block;vertical-align:middle;margin-right:6px}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.i.s{width:14px;height:14px}
+svg.i.l{width:20px;height:20px}
+
+/* ---------- the live frame behind the sheet ---------- */
+.lf{position:absolute;inset:0;display:grid;grid-template-rows:auto auto auto minmax(0,1fr)}
+.tb{display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;border-bottom:1px solid var(--rule);min-width:0}
+.tb .sp{flex:1}
+.tbtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;border:1px solid var(--rule-2);border-radius:var(--r-ctl);color:var(--text);font-size:13px;font-weight:700;white-space:nowrap}
+.tbtn.ghost{border-color:transparent}
+.tbtn.on{border-color:var(--secondary);background:var(--blue-wash)}
+.tbtn .code{color:var(--primary);letter-spacing:.08em;font-weight:800}
+.tname{font-size:15px;font-weight:700;white-space:nowrap}
+.sepv{width:1px;height:22px;background:var(--rule-2)}
+.stat{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--success);background:var(--green-wash)}
+.stat i{width:8px;height:8px;border-radius:50%;background:var(--success);display:block}
+.stat.pub{border-color:var(--secondary);background:var(--blue-wash)} .stat.pub i{background:var(--secondary)}
+.qbtn{width:36px;justify-content:center;padding:0}
+.ypn{display:flex;align-items:center;gap:18px;margin:12px 16px 0;padding:12px 16px 12px 18px;border-radius:var(--r-card);background:var(--surface);border-left:4px solid var(--primary)}
+.ypn .t{flex:1;min-width:0}
+.eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ypn .s{margin:2px 0 0;font-size:19px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ypn .s b{color:var(--primary)}
+.ypn.slim{margin:8px 16px 0;padding:8px 14px}
+.ypn.slim .s{font-size:15px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--r-ctl);font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--rule-3);background:transparent;color:var(--text)}
+.btn.main{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:800}
+.btn.l{height:44px;padding:0 18px;font-size:15px}
+.btn.s{height:30px;padding:0 10px}
+.btn.quiet{border-color:transparent;color:var(--secondary);padding:0 6px}
+.btn.end{color:var(--danger-text);border-color:rgba(239,140,134,.55)}
+.btn.on{border-color:var(--secondary);background:var(--blue-wash)}
+.kc{font-size:12px;font-weight:700;border:1px solid rgba(27,41,66,.45);border-radius:5px;padding:0 5px;line-height:18px}
+.nys{display:flex;align-items:center;gap:12px;margin:10px 16px 0;min-height:48px;padding:8px 12px 8px 14px;border-radius:var(--r-card);background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--rule-3)}
+.nys p{margin:0;font-size:15px;color:var(--muted)}
+.nys p b{color:var(--text)}
+.body{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:0;margin-top:12px;border-top:1px solid var(--rule)}
+.body.one{grid-template-columns:minmax(0,1fr)}
+.rail{border-right:1px solid var(--rule);overflow:hidden;min-height:0}
+.rsec{border-bottom:1px solid var(--rule)}
+.rsec>h3{display:flex;align-items:center;gap:8px;margin:0;padding:12px 14px 8px;font-size:15px}
+.rsec>h3 .ct{font-size:13px;color:var(--muted);font-weight:600;margin-left:auto}
+.rsec.closed>h3{padding-bottom:12px}
+.qrow{display:flex;align-items:center;gap:10px;min-height:36px;padding:4px 14px;font-size:15px}
+.qrow .n{width:20px;font-size:13px;font-weight:800;color:var(--muted);flex:none;text-align:right}
+.qrow .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qrow .mt{font-size:12px;color:var(--muted);white-space:nowrap}
+.qrow.now{background:var(--blue-wash);box-shadow:inset 3px 0 0 var(--secondary)}
+.qrow.done .tt{color:var(--muted)}
+.rlinks{display:flex;flex-direction:column;gap:2px;padding:6px 14px 12px}
+.rlink{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--secondary);min-height:30px}
+.cc{min-width:0;min-height:0;display:flex;flex-direction:column;padding:12px 16px 0;gap:10px;overflow:hidden}
+.loop{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+.loop .stp{padding:3px 10px;border-radius:7px;border:1px solid var(--rule-2)}
+.loop .stp.done{color:var(--text)}
+.loop .stp.live{color:var(--text);background:rgba(124,167,230,.28);border-color:var(--secondary);font-weight:800}
+.loop .rnd{font-weight:800;color:var(--text);margin:0 2px 0 6px}
+.loop .crumb{color:var(--secondary);font-weight:800;border:1px solid var(--secondary);border-radius:7px;padding:3px 10px}
+.content{position:relative;flex:1;min-height:0;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-card);padding:14px 18px;overflow:hidden}
+.content h4{margin:2px 0 6px;font-size:24px;line-height:1.25}
+.content p.r{margin:0 0 8px;font-size:15px;max-width:880px}
+.scrim{position:absolute;inset:0;background:rgba(10,18,32,.55);z-index:9}
+
+/* ---------- THE SESSION MENU SHEET ---------- */
+.sm{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--rule-2);border-radius:14px;overflow:hidden}
+.in-frame{position:absolute;right:16px;top:206px;bottom:16px;width:600px;z-index:10;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.in-frame.one{top:120px}
+.in-frame .smbody{padding:12px 16px}
+.in-frame .more{margin-top:8px}
+.in-frame .orow{min-height:38px}
+.f-sheet .sm{position:absolute;inset:0;border:0;border-radius:0}
+.sm .hd{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--rule)}
+.sm .hd h4{margin:0;font-size:19px;flex:1}
+.ws{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--success-text)}
+.ws i{width:7px;height:7px;border-radius:50%;background:var(--success);display:block}
+.xbtn{width:36px;height:36px;border-radius:var(--r-ctl);border:1px solid var(--rule-2);display:grid;place-items:center;color:var(--text);flex:none;font-weight:800;font-size:15px}
+/* the event's one line, instead of an Agenda tab */
+.evl{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--rule);background:rgba(124,167,230,.08);font-size:13px;color:var(--muted)}
+.evl b{color:var(--text)}
+.evl .sp{flex:1}
+.evl a{color:var(--secondary);font-weight:800;text-decoration:none;white-space:nowrap}
+.tabs{display:flex;gap:2px;padding:8px 12px;border-bottom:1px solid var(--rule)}
+.tab{font-size:13px;font-weight:700;color:var(--muted);padding:7px 11px;border-radius:8px;white-space:nowrap}
+.tab.on{color:var(--text);background:var(--surface-2);box-shadow:inset 0 -2px 0 var(--secondary)}
+.tab b{font-weight:800;color:var(--primary);margin-left:4px}
+.smbody{flex:1;min-height:0;overflow:hidden;padding:14px 16px}
+.smfoot{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--rule)}
+.smfoot .sp{flex:1}
+.smfoot .hint{font-size:12px;color:var(--muted)}
+.lede{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.lede b{color:var(--text)}
+.grp{margin:0 0 14px}
+.gh{display:flex;align-items:baseline;gap:8px;margin:0 0 6px}
+.gh h5{margin:0;font-size:15px}
+.gh .scope{font-size:12px;color:var(--muted);font-weight:600}
+.gh .sp{flex:1}
+.note{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.note b{color:var(--text)}
+.row{display:flex;align-items:center;gap:10px;min-height:36px}
+.row .lab{flex:1;min-width:0;font-size:15px}
+.row .lab small{display:block;font-size:12px;color:var(--muted)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.sw{width:38px;height:22px;border-radius:999px;background:var(--surface-2);border:1px solid var(--rule-3);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted)}
+.sw.on{background:rgba(124,167,230,.45);border-color:var(--secondary)}
+.sw.on::after{left:18px;background:var(--text)}
+.seg2{display:inline-grid;grid-auto-flow:column;border:1px solid var(--rule-3);border-radius:10px;overflow:hidden}
+.seg2 span{padding:7px 14px;font-size:13px;font-weight:700;border-left:1px solid var(--rule-3);color:var(--muted)}
+.seg2 span:first-child{border-left:0}
+.seg2 span.on{background:var(--blue-wash);color:var(--text);box-shadow:inset 0 0 0 2px var(--secondary)}
+.sel{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--rule-3);font-size:15px;min-width:180px}
+.sel .sp{flex:1}
+.olist{border:1px solid var(--rule);border-radius:var(--r-card);overflow:hidden}
+.orow{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 8px 4px 12px;border-top:1px solid var(--rule);font-size:15px}
+.orow:first-child{border-top:0}
+.orow .n{width:22px;font-size:13px;font-weight:800;color:var(--muted);flex:none;text-align:right}
+.orow .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.orow .src{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+.orow .oa{display:flex;gap:4px;flex:none}
+.orow.now{background:var(--blue-wash);box-shadow:inset 3px 0 0 var(--secondary)}
+.orow.now .tt{font-weight:700}
+.orow.mine{background:var(--yours-wash);box-shadow:inset 3px 0 0 var(--yours-rule)}
+.orow.click .chev{color:var(--muted)}
+.orow .ai{font-size:12px;font-weight:800;color:var(--secondary);border:1px solid rgba(124,167,230,.55);border-radius:6px;padding:0 6px;line-height:20px}
+.orow .sub{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--rule-2);display:grid;place-items:center;color:var(--text)}
+.nextw{font-size:12px;font-weight:800;color:var(--primary);letter-spacing:.06em;text-transform:uppercase;flex:none}
+.yours{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:999px;font-size:12px;font-weight:800;color:var(--yours);background:var(--yours-wash);border:1px solid var(--yours-rule);white-space:nowrap;flex:none}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--rule-2);white-space:nowrap;flex:none}
+.tag.q{color:var(--text);border-color:var(--secondary)}
+.sumline{display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 12px;border-radius:10px;border:1px solid var(--rule);background:rgba(244,237,228,.03);font-size:13px;color:var(--muted)}
+.sumline b{color:var(--text)}
+.sumline .sp{flex:1}
+.sumline a{color:var(--secondary);font-weight:800;text-decoration:none;white-space:nowrap}
+.sumline.late{border-color:rgba(246,169,76,.45);background:var(--amber-wash)}
+/* the report card: the first thing in Rounds so far */
+.rep{display:flex;gap:14px;align-items:center;padding:12px 14px;border-radius:var(--r-card);background:var(--surface-2);border:1px solid var(--rule-2);margin:0 0 12px}
+.rep .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:rgba(124,167,230,.18);color:var(--secondary);flex:none}
+.rep .w{flex:1;min-width:0}
+.rep .w b{display:block;font-size:15px}
+.rep .w span{font-size:13px;color:var(--muted)}
+/* the one expander */
+.more{border-top:1px solid var(--rule);margin-top:12px;padding-top:4px}
+.more-h{display:flex;align-items:center;gap:8px;min-height:40px;font-size:13px;font-weight:800;color:var(--secondary)}
+.more-h small{font-weight:500;color:var(--muted);font-size:12px}
+.more-h svg{transition:none}
+.more.open .more-h svg{transform:rotate(180deg)}
+.more-in{padding:4px 0 0 2px}
+.qr{width:120px;height:120px;border-radius:8px;background:
+  conic-gradient(from 90deg at 25% 25%,#F4EDE4 0 25%,transparent 0) 0 0/30px 30px,
+  repeating-linear-gradient(90deg,#F4EDE4 0 6px,#0F1A2E 6px 12px),#F4EDE4;border:6px solid #F4EDE4;flex:none}
+.code-big{font-size:30px;font-weight:800;letter-spacing:.12em;color:var(--primary);line-height:1}
+.url{font-size:15px;font-weight:700}
+.pv{border:1px dashed var(--rule-3);border-radius:10px;padding:10px 12px;margin:0 0 10px;display:flex;align-items:center;gap:10px}
+.pv .w{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.pv .w b{display:block;color:var(--text);font-size:15px}
+.search{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--rule-3);font-size:15px;color:var(--muted);flex:1;min-width:0}
+.back{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--secondary);margin:0 0 10px}
+.privnote{font-size:12px;color:var(--muted);margin:8px 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--rule-2);font-size:13px;white-space:nowrap}
+.chip.on{border-color:var(--primary);background:var(--amber-wash)}
+.chip small{font-size:12px;color:var(--muted)}
+.chip.off{color:var(--muted)}
+.prow{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 10px;border-top:1px solid var(--rule);font-size:15px}
+.prow:first-child{border-top:0}
+.prow .dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex:none}
+.prow .dot.away{background:var(--muted)}
+.prow .nm{flex:1;min-width:0}
+.prow .dn{font-size:12px;color:var(--muted);width:90px}
+.prow .fact{font-size:13px;font-weight:700;width:52px;text-align:right}
+.prow.ask{background:var(--amber-wash);box-shadow:inset 3px 0 0 var(--primary)}
+.statechip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--success);background:var(--green-wash);font-size:13px;font-weight:700}
+.statechip i{width:7px;height:7px;border-radius:50%;background:var(--success);display:block}
+.prog{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden;margin:6px 0}
+.prog i{display:block;height:100%;background:var(--secondary)}
+
+/* ---------- phone ---------- */
+.ph-in{position:absolute;inset:0;display:flex;flex-direction:column}
+.ph-top{display:flex;align-items:center;gap:8px;height:56px;padding:0 16px;border-bottom:1px solid var(--rule);font-size:13px}
+.ph-top b{font-size:16px}
+.ph-top .sp{flex:1}
+.live{font-size:12px;font-weight:700;color:var(--success-text);border:1px solid var(--success);border-radius:999px;padding:1px 8px}
+.ph-tabs{display:flex;gap:2px;padding:8px 10px;border-bottom:1px solid var(--rule)}
+.ph-tabs .tab{font-size:13px;padding:10px 10px;flex:1;text-align:center}
+.ph-body{flex:1;min-height:0;overflow:hidden;padding:14px 16px}
+.ph-dock{padding:12px 16px 20px;border-top:1px solid var(--rule)}
+.ph-dock .btn{width:100%;height:56px;border-radius:14px;font-size:19px}
+.ph-h{margin:0 0 10px;font-size:19px}
+.ph-card{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:12px;margin:0 0 12px}
+.ph-card h5{margin:0 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ph-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ph-grid .btn{height:44px;font-size:15px;justify-content:flex-start;padding:0 12px}
+.ph-sheet-back{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px;border-bottom:1px solid var(--rule);font-size:16px;font-weight:800}
+.f-phone .orow{min-height:44px;font-size:16px}
+.f-phone .rep .w b{font-size:16px}
+.f-phone .btn{height:44px;font-size:15px}
+.f-phone .prow{min-height:44px;font-size:16px}
+
+/* ---------- map ---------- */
+table.map{border-collapse:collapse;table-layout:fixed;width:100%;font-size:13px}
+table.map th,table.map td{border:1px solid var(--rule-2);padding:7px 9px;vertical-align:top;text-align:left}
+table.map th{background:var(--surface-2);font-size:13px}
+table.map td.k{font-weight:800;width:150px;background:var(--surface)}
+table.map .t{display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:7px;border:1px solid var(--rule-3);font-weight:700;white-space:nowrap}
+table.map .t.gone{color:var(--muted);text-decoration:line-through;border-style:dashed}
+table.map .t.new{border-color:var(--secondary);background:var(--blue-wash)}
+table.map .t.foot{border-color:rgba(239,140,134,.55);color:var(--danger-text)}
+.map-in{padding:18px}
+.map-in h3{margin:0 0 4px;font-size:19px}
+.map-in p{margin:0 0 12px;font-size:13px;color:var(--muted)}
+
+/* ---------- additions for the picker ---------- */
+.k{display:inline-block;font-size:12px;font-weight:700;border:1px solid var(--rule-3);border-radius:5px;padding:0 5px;line-height:18px;color:var(--text);white-space:nowrap}
+.ypn .nx{margin:4px 0 0;font-size:13px;color:var(--muted);display:flex;gap:10px;align-items:center}
+.ypn .nx a{color:var(--secondary);font-weight:800;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.rlink .k{margin-left:6px}
+.rlinks.row2{flex-direction:row;flex-wrap:wrap;gap:4px 16px}
+.focusring{outline:3px solid var(--secondary);outline-offset:2px;border-radius:6px}
+/* the picker: over the content area, never over the top bar, Your part now or the rail */
+.pk{position:relative;flex:1;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:var(--surface);border:1px solid var(--rule-2);border-radius:var(--r-card);overflow:hidden;box-shadow:0 0 0 1px rgba(124,167,230,.25)}
+.pk-hd{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--rule)}
+.pk-hd h4{margin:0;font-size:19px;white-space:nowrap}
+.pk-hd .ct{font-size:13px;color:var(--muted);white-space:nowrap}
+.pk-hd .sp{flex:1}
+.crumb{display:inline-flex;align-items:center;gap:4px;height:36px;padding:0 12px 0 6px;border-radius:var(--r-ctl);border:1px solid var(--secondary);color:var(--secondary);font-size:13px;font-weight:800;white-space:nowrap;flex:none}
+.btn.done{border-color:var(--rule-3)}
+.pk-b{display:grid;grid-template-columns:200px minmax(0,1fr) 300px;min-height:0}
+.pk-f{border-right:1px solid var(--rule);padding:10px 12px;overflow:hidden;display:flex;flex-direction:column;gap:1px}
+.pk-f .search{flex:none;font-size:13px}
+.pk-f .search.typed{color:var(--text);border-color:var(--secondary)}
+.fh{margin:8px 0 1px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ck{display:flex;align-items:center;gap:8px;min-height:30px;font-size:13px;white-space:nowrap}
+.ck i{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--rule-3);flex:none;display:grid;place-items:center;font-style:normal;font-size:12px;line-height:1;color:var(--bg);font-weight:900}
+.ck.on i{background:var(--secondary);border-color:var(--secondary)}
+.ck .c{margin-left:auto;color:var(--muted);font-size:12px}
+.ck .off{font-size:12px;color:var(--muted);border:1px dashed var(--rule-3);border-radius:6px;padding:0 5px}
+.ck.r i{border-radius:50%}
+.ck.r.on i{box-shadow:inset 0 0 0 3px var(--surface)}
+.fnote{font-size:12px;color:var(--muted);margin:6px 0 0;line-height:1.4}
+.fnote a{color:var(--secondary);font-weight:800}
+.pk-l{overflow:hidden;min-height:0}
+.grp-h{display:flex;gap:8px;align-items:baseline;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 14px 6px}
+.grp-h span{text-transform:none;letter-spacing:0;font-weight:600}
+.qr2{display:flex;align-items:center;gap:8px;min-height:48px;padding:4px 10px 4px 14px;border-top:1px solid var(--rule)}
+.qr2 .w{flex:1;min-width:0}
+.qr2 .w b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qr2 .w span{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qr2 .w mark{background:rgba(124,167,230,.32);color:var(--text);border-radius:3px;padding:0 1px}
+.qr2.sel{background:var(--blue-wash);box-shadow:inset 3px 0 0 var(--secondary)}
+.qr2.asked .w b{color:var(--muted);font-weight:500}
+.btn.nx{border-color:var(--secondary);color:var(--text)}
+.btn.s.ic{width:30px;padding:0}
+.pk-p{border-left:1px solid var(--rule);padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:8px;background:rgba(244,237,228,.02)}
+.pk-p h5{margin:0;font-size:19px;line-height:1.3}
+.pk-p p{margin:0;font-size:15px;line-height:1.45}
+.pk-p .m{font-size:13px;color:var(--muted)}
+.pk-p .sp{flex:1}
+.pk-p .stepper{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--muted);border-top:1px solid var(--rule);padding-top:8px}
+.pk-p .stepper a{color:var(--secondary);font-weight:800}
+.pk-ft{display:flex;align-items:center;gap:14px;padding:7px 14px;border-top:1px solid var(--rule);font-size:12px;color:var(--muted);white-space:nowrap}
+.pk-ft .sp{flex:1}
+.pk-ft a{color:var(--secondary);font-weight:800}
+.fchips{display:flex;gap:6px;align-items:center;padding:8px 14px 2px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.fchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:999px;border:1px solid var(--secondary);background:var(--blue-wash);color:var(--text);font-size:12px;font-weight:700;white-space:nowrap}
+.empty{margin:16px 14px;padding:16px;border:1px dashed var(--rule-3);border-radius:var(--r-card);font-size:15px}
+.empty p{margin:0 0 10px;color:var(--muted);font-size:13px}
+.empty b{display:block;margin:0 0 4px}
+/* toast in Your part now's status slot */
+.ok{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text);background:var(--green-wash);border:1px solid rgba(79,178,134,.6);border-radius:999px;padding:3px 6px 3px 12px;white-space:nowrap}
+.ok a{color:var(--secondary);font-weight:800;padding:0 6px}
+.qrow.picked{background:var(--green-wash);box-shadow:inset 3px 0 0 var(--success)}
+/* the private choice on one screen */
+.choice{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;background:var(--surface);border:1px solid var(--rule-2);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.55);padding:18px 18px 14px;z-index:12}
+.choice h4{margin:0 0 4px;font-size:19px}
+.choice p{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.choice .opt{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px;border:1px solid var(--rule-2);border-radius:var(--r-ctl);margin:0 0 8px}
+.choice .opt.pref{border-color:var(--secondary);background:var(--blue-wash)}
+.choice .opt .w{flex:1;min-width:0}
+.choice .opt .w b{display:block;font-size:15px}
+.choice .opt .w span{display:block;font-size:13px;color:var(--muted)}
+.choice .ft{display:flex;align-items:center;gap:10px;margin-top:6px;font-size:12px;color:var(--muted)}
+.choice .ft .sp{flex:1}
+.roomsee{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid rgba(246,169,76,.45);background:var(--amber-wash);font-size:13px}
+.roomsee b{color:var(--text)}
+.roomsee .sp{flex:1}
+.stagebig{font-size:30px;line-height:1.2;margin:4px 0 10px;font-weight:800}
+/* phone additions */
+.ph-crumb{display:flex;align-items:center;gap:8px;height:52px;padding:0 10px;border-bottom:1px solid var(--rule)}
+.ph-crumb .bk{display:inline-flex;align-items:center;gap:4px;height:44px;padding:0 12px 0 6px;border-radius:12px;border:1px solid var(--secondary);color:var(--secondary);font-size:15px;font-weight:800;white-space:nowrap}
+.ph-crumb .sp{flex:1}
+.ph-crumb b{font-size:16px;white-space:nowrap}
+.ph-search{display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;border-radius:12px;border:1px solid var(--rule-3);font-size:16px;color:var(--muted);margin:0 0 8px}
+.ph-sel{display:flex;gap:8px;margin:0 0 6px}
+.ph-sel .sel{min-width:0;flex:1;height:44px;font-size:15px;padding:0 10px}
+.prow2{display:flex;align-items:center;gap:8px;min-height:60px;padding:6px 0;border-top:1px solid var(--rule)}
+.prow2 .w{flex:1;min-width:0}
+.prow2 .w b{display:block;font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow2 .w span{display:block;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow2 .btn{height:44px;font-size:15px;padding:0 12px}
+.ph-nextline{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--rule);background:var(--surface);font-size:15px;margin:0 0 12px}
+.ph-nextline .w{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.ph-nextline .w b{color:var(--text)}
+.ph-nextline a{color:var(--secondary);font-weight:800;font-size:15px;min-height:44px;display:inline-flex;align-items:center;padding:0 4px}
+.ph-flash{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:var(--green-wash);border:1px solid rgba(79,178,134,.6);font-size:15px;margin:0 0 12px}
+.ph-flash .w{flex:1;min-width:0}
+.ph-flash a{color:var(--secondary);font-weight:800;min-height:44px;display:inline-flex;align-items:center;padding:0 6px}
+.ph-meter{font-size:16px;color:var(--muted);margin:0 0 6px}
+.ph-meter b{color:var(--text);font-size:24px}
+.ph-q{font-size:19px;font-weight:800;line-height:1.3;margin:0 0 12px}
+/* path map */
+.path{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 6px}
+.path .st{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:2px 10px;border-radius:8px;border:1px solid var(--rule-3);font-size:13px;font-weight:700;background:var(--surface)}
+.path .st i{font-style:normal;font-size:12px;font-weight:900;color:#fff;background:var(--pin);border-radius:50%;width:20px;height:20px;display:grid;place-items:center;flex:none}
+.path .st.bad{border-color:rgba(239,140,134,.6)}
+.path .st.good{border-color:var(--secondary);background:var(--blue-wash)}
+.path .ar{color:var(--muted);font-size:13px}
+.path-h{margin:14px 0 6px;font-size:15px}
+.path-h small{color:var(--muted);font-weight:500;font-size:13px}
+.tot{font-size:13px;color:var(--muted);margin:0 0 4px}
+.tot b{color:var(--text)}
+.f-wide{width:1366px;height:auto}
+.f-crop{width:700px;height:420px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-house" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v7M14 20h3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16zM14 6l3 3"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</svg>
+
+<div class="doc">
+<h1>Choose a question: one door, one picker, one way back</h1>
+<p>Owner, 5 Nov 2026: <b>"it seems like a lot of work on the sessions menu to get to pick questions. i had to dig through and then to get back was confusing as well. is there a way to make this easier to navigate?"</b></p>
+<p>What ships on dev (9149c060): the question browser is a step <b>inside</b> the Session menu's Up next tab. The rail's link that reads "Rounds and questions" lands on <b>Rounds so far</b>, which has no questions. Esc goes back one level, a second Esc closes, and a click on the scrim closes everything and forgets the search.</p>
+<p>The proposal: <b>one picker, "Choose a question"</b>, opened by <b>C</b> or by a door where the host already looks: the rail's Round queue, Your part now's <b>Change what's next</b>, and the Session menu's Up next, which now links to it instead of holding its own copy. It covers the content area only, so the top bar, Your part now and the rail stay where they are. The crumb names where Back goes. <b>Ask next</b> returns you to the round and says what changed, and <b>Esc</b> or <b>✓ Done</b> returns you to where you opened it from, with focus on the opener. Mockup only; sample content invented.</p>
+<ul class="toc">
+  <li><a href="#f-1">1 Today: the path and its clicks</a></li><li><a href="#f-2">2 The doors, at rest</a></li>
+  <li><a href="#f-3">3 The picker open</a></li><li><a href="#f-4">4 Search and filter</a></li>
+  <li><a href="#f-5">5 After Ask next</a></li><li><a href="#f-6">6 One screen</a></li><li><a href="#f-7">7 Phone Remote</a></li>
+</ul>
+
+<!-- =============================== 1 TODAY =============================== -->
+<div class="cap"><h2>1 · Today: two screens, mid-round, picking "Pricing we would change" to ask next</h2>
+<ol>
+  <li>The rail's link reads <b>Rounds and questions</b> but opens <b>Rounds so far</b> (<code>ConsoleRail.jsx:185-186</code>). The host then has to find the Up next tab.</li>
+  <li>The browser is a step inside one tab of a sheet (<code>SessionSetupPanel.jsx:783-912</code>). Clicking another tab drops the step without saying so (<code>:1457</code>).</li>
+  <li>The way back is a 13px text button, <b>‹ Up next</b>. Esc goes back one level and a second Esc closes (<code>:467-476</code>), so getting back to the round takes two presses.</li>
+  <li><b>Ask next</b> leaves you in the list. The only sign it worked is a "Queued #1" tag on the row. The running order is out of sight.</li>
+  <li>A click on the scrim closes the whole menu (<code>:1364</code>). Reopening lands on Up next with the search and category cleared, because the sheet unmounts.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-1">
+<div class="col"><p class="blabel">Today · Session menu › Up next › Choose from the set <span>(the wide sheet, 860px)</span></p>
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 strategy offsite</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is answering. Press <b>Start voting</b> when they are done.</p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 8</span></h3>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Where do we lose deals?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="tt">The customer we under-serve</span><span class="mt">next</span></div>
+          <div class="rlinks"><span class="rlink"><svg class="i s"><use href="#i-plus"/></svg>Write a question</span><span class="rlink">Rounds and questions</span></div>
+        </div>
+        <div class="rsec closed"><h3>People <span class="ct">12 here</span></h3></div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 3</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="content"><h4>What would you stop doing?</h4><p class="r" style="color:var(--muted)">9 of 12 have answered.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="scrim" style="top:146px"></div>
+  <div class="sm in-frame" style="top:146px;width:860px">
+    <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+    <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">People</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+    <div class="smbody">
+      <span class="back"><svg class="i s"><use href="#i-left"/></svg>Up next</span>
+      <div class="row" style="gap:8px"><span class="search"><svg class="i s"><use href="#i-search"/></svg>Search titles…</span><span class="sel">All categories<span class="sp"></span><svg class="i s"><use href="#i-chev"/></svg></span></div>
+      <div class="row" style="min-height:28px;font-size:13px;color:var(--muted)"><span class="ck on"><i>✓</i>Hide asked · showing 23 of 41</span></div>
+      <p class="privnote" style="margin:4px 0"><b style="color:var(--text)">Correct answers are not on this screen.</b> The room may be watching it.</p>
+      <div class="olist">
+        <div class="orow"><span class="tt">Pricing we would change<span class="sub">Pricing · open response</span></span><span class="tag q">Queued #1</span><span class="btn s">Unqueue</span><span class="btn s" style="opacity:.5">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+        <div class="orow"><span class="tt">The customer we under-serve<span class="sub">Customers · open response</span></span><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+        <div class="orow"><span class="tt">One process we should kill<span class="sub">Operations · open response</span></span><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+        <div class="orow"><span class="tt">What our best customers have in common<span class="sub">Customers · open response</span></span><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+        <div class="orow"><span class="tt">Where the next hire should go<span class="sub">Team · open response</span></span><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+        <div class="orow"><span class="tt">A bet we are not making<span class="sub">Strategy · open response</span></span><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+      </div>
+    </div>
+    <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+  </div>
+  <span class="pin" style="left:150px;top:318px">1</span>
+  <span class="pin" style="left:480px;top:208px">2</span>
+  <span class="pin" style="left:600px;top:256px">3</span>
+  <span class="pin" style="left:1110px;top:356px">4</span>
+  <span class="pin" style="left:300px;top:470px">5</span>
+</div></div>
+<div class="col"><p class="blabel">The same job, counted <span>(clicks and presses, not typing)</span></p>
+<div class="frame map-in" style="width:760px;height:768px;padding:18px">
+  <h3 style="margin:0 0 4px;font-size:19px">Two screens · pick one question to ask next, then get back</h3>
+  <p class="path-h">Today, from the rail <small>(the link the host sees first)</small></p>
+  <div class="path"><span class="st"><i>1</i>Open Round queue</span><span class="ar">›</span><span class="st bad"><i>2</i>Rounds and questions</span><span class="ar">›</span><span class="st bad"><i>3</i>Up next tab</span><span class="ar">›</span><span class="st"><i>4</i>Choose from the set</span><span class="ar">›</span><span class="st"><i>5</i>Category select</span><span class="ar">›</span><span class="st"><i>6</i>pick category</span><span class="ar">›</span><span class="st"><i>7</i>Ask next</span><span class="ar">›</span><span class="st bad"><i>8</i>Esc · back to Up next</span><span class="ar">›</span><span class="st bad"><i>9</i>Esc · closed</span></div>
+  <p class="tot"><b>9</b> steps. The link misnames where it goes, and the way out takes two presses.</p>
+  <p class="path-h">Today, from the top bar</p>
+  <div class="path"><span class="st"><i>1</i>Session menu</span><span class="ar">›</span><span class="st"><i>2</i>Choose from the set</span><span class="ar">›</span><span class="st"><i>3</i>Ask next</span><span class="ar">›</span><span class="st bad"><i>4</i>‹ Up next</span><span class="ar">›</span><span class="st bad"><i>5</i>✕</span></div>
+  <p class="tot"><b>5</b> steps at best, and only once you know the browser is in Up next. With a search or a category, 6 to 7.</p>
+  <p class="path-h">Today, one screen</p>
+  <div class="path"><span class="st"><i>1</i>Session</span><span class="ar">›</span><span class="st"><i>2</i>Choose from the set</span><span class="ar">›</span><span class="st"><i>3</i>Show on this screen</span><span class="ar">›</span><span class="st"><i>4</i>Show it</span><span class="ar">›</span><span class="st"><i>5</i>Ask next</span><span class="ar">›</span><span class="st bad"><i>6</i>Esc</span><span class="ar">›</span><span class="st bad"><i>7</i>Esc</span></div>
+  <p class="tot"><b>7</b> steps, and the phone is never offered.</p>
+  <p class="path-h">Today, phone Remote</p>
+  <div class="path"><span class="st"><i>1</i>scroll to Session card</span><span class="ar">›</span><span class="st"><i>2</i>Up next</span><span class="ar">›</span><span class="st bad"><i>3</i>scroll past order, Write, Categories</span><span class="ar">›</span><span class="st"><i>4</i>Ask next</span><span class="ar">›</span><span class="st bad"><i>5</i>← back</span></div>
+  <p class="tot"><b>5</b>, two of them scrolls. There is no category filter, and the list stays open after Ask next.</p>
+  <p class="path-h" style="margin-top:22px">Proposed, every surface</p>
+  <div class="path"><span class="st good"><i>1</i>C, or Choose a question</span><span class="ar">›</span><span class="st good"><i>2</i>Ask next</span><span class="ar">›</span><span class="st good">back in the round, focus on the opener</span></div>
+  <p class="tot"><b>2</b> steps (plus typing, if you search). One screen adds one: the private choice. Picking several: <b>Queue</b> on each, then <b>Esc</b> or <b>✓ Done</b>.</p>
+</div></div>
+</div></div>
+
+<!-- =============================== 2 DOORS =============================== -->
+<div class="cap"><h2>2 · The doors, at rest: each one is where the host already looks</h2>
+<ol>
+  <li><b>Round queue</b> (rail): <b>Choose a question</b> <span class="k">C</span> beside <b>Write a question</b> <span class="k">Q</span>. The link to the history is renamed <b>All rounds</b>, the name the help already uses (<code>host-two-screens.js:346</code>), so it says where it goes.</li>
+  <li><b>Your part now</b>: one quiet line, <b>Change what's next</b> <span class="k">C</span>. It does not repeat the title, because the rail says it (hard rule 5).</li>
+  <li><b>Session menu › Up next</b>: the button opens the same picker. The sheet steps aside while the picker is open, and Done brings you back to Up next with focus on the button. The menu no longer has a copy of its own.</li>
+  <li>The rail's rows that are not yet played can be clicked: a click opens the picker with that slot's question in the preview, so <b>"swap this one"</b> is one click.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-2">
+<div class="col"><p class="blabel">Two screens · the console at rest</p>
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 strategy offsite</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is answering. Press <b>Start voting</b> when they are done.</p><p class="nx"><a><svg class="i s"><use href="#i-list"/></svg>Change what's next <span class="k">C</span></a></p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 8</span></h3>
+          <div class="qrow done"><span class="n">1</span><span class="tt">Warm-up: one word for Q3</span><span class="mt">done</span></div>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Where do we lose deals?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="tt">The customer we under-serve</span><span class="mt">next</span><svg class="i s" style="color:var(--muted)"><use href="#i-right"/></svg></div>
+          <div class="qrow"><span class="n">5</span><span class="tt">One process we should kill</span><svg class="i s" style="color:var(--muted)"><use href="#i-right"/></svg></div>
+          <div class="rlinks row2"><span class="rlink"><svg class="i s"><use href="#i-search"/></svg>Choose a question<span class="k">C</span></span><span class="rlink"><svg class="i s"><use href="#i-plus"/></svg>Write a question<span class="k">Q</span></span><span class="rlink">All rounds</span></div>
+        </div>
+        <div class="rsec closed"><h3>People <span class="ct">12 here</span></h3></div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 3</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="content"><h4>What would you stop doing?</h4><p class="r" style="color:var(--muted)">9 of 12 have answered.</p></div>
+      </div>
+    </div>
+  </div>
+  <span class="pin" style="left:22px;top:418px">1</span>
+  <span class="pin" style="left:22px;top:150px">2</span>
+  <span class="pin" style="left:1270px;top:2px">3</span>
+  <span class="pin" style="left:316px;top:396px">4</span>
+</div></div>
+<div class="col"><p class="blabel">Session menu › Up next <span>(the button opens the picker; no inline copy)</span></p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">People</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+  <div class="smbody">
+    <div class="gh"><h5>Running order</h5><span class="scope">Round 3 of 8</span></div>
+    <div class="olist">
+      <div class="orow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="src">on now</span></div>
+      <div class="orow"><span class="n">4</span><span class="nextw">Next</span><span class="tt">The customer we under-serve</span><span class="src">from the set</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="n">5</span><span class="tt">One process we should kill</span><span class="src">from the set</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="n">6</span><span class="tt">A bet we are not making</span><span class="src">from the set</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+    </div>
+    <p class="note">Then the set carries on by itself.</p>
+    <div class="acts"><span class="btn nx"><svg class="i s"><use href="#i-search"/></svg>Choose a question <span class="k">C</span></span><span class="btn"><svg class="i s"><use href="#i-plus"/></svg>Write a question <span class="k">Q</span></span></div>
+    <div class="sumline" style="margin-top:10px"><span><b>Categories</b> · 5 of 6 on · 23 questions left</span><span class="sp"></span><a>Change</a></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Category switches · Put aside this session (1) · Goal</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:4px;top:372px">3</span></div></div>
+</div></div>
+
+<!-- =============================== 3 PICKER OPEN =============================== -->
+<div class="cap"><h2>3 · The picker open: over the content area, and nothing else moves</h2>
+<ol>
+  <li><b>The crumb names the way back</b>: "‹ Round 3 · Answer" when it was opened from the round, or "‹ Session menu" when it was opened from the menu. <b>✓ Done</b> is on the right and <b>Esc</b> does the same. All three close it in one press.</li>
+  <li><b>Filters on the left</b>: search, Not asked / All, and the categories as filters with counts. A switched-off category is still listed with its "off" mark, because a filter is not a switch (fork F4).</li>
+  <li><b>The list</b>: "The set would serve next" comes first (the next three the set would pick), then every unasked question. Each row has <b>Queue</b> and <b>Ask next</b>. A row that is already queued says "Queued #2" and offers <b>Unqueue</b>.</li>
+  <li><b>The preview</b> shows the whole question, its kind and its category, and has the same two actions. <b>Ask now…</b> is in ⋯, with its warning. ↑ ↓ move through the list and the preview follows.</li>
+  <li>The top bar, <b>Your part now</b> and the <b>rail</b> stay where they are. Space still advances the round, and the rail's queue updates as you queue.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-3">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 strategy offsite</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is answering. Press <b>Start voting</b> when they are done.</p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 8</span></h3>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Where do we lose deals?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="tt">The customer we under-serve</span><span class="mt">next</span></div>
+          <div class="qrow"><span class="n">5</span><span class="tt">One process we should kill</span></div>
+          <div class="rlinks row2"><span class="rlink focusring"><svg class="i s"><use href="#i-search"/></svg>Choose a question<span class="k">C</span></span><span class="rlink"><svg class="i s"><use href="#i-plus"/></svg>Write a question<span class="k">Q</span></span><span class="rlink">All rounds</span></div>
+        </div>
+        <div class="rsec closed"><h3>People <span class="ct">12 here</span></h3></div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 3</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="pk" role="dialog" aria-label="Choose a question">
+          <div class="pk-hd"><span class="crumb"><svg class="i s"><use href="#i-left"/></svg>Round 3 · Answer</span><h4>Choose a question</h4><span class="ct">23 not asked · 41 in the set</span><span class="sp"></span><span class="btn done"><svg class="i s"><use href="#i-check"/></svg>Done <span class="k">Esc</span></span></div>
+          <div class="pk-b">
+            <div class="pk-f">
+              <span class="search"><svg class="i s"><use href="#i-search"/></svg>Search 41 questions <span class="k" style="margin-left:auto">/</span></span>
+              <p class="fh">Show</p>
+              <span class="ck r on"><i></i>Not asked<span class="c">23</span></span>
+              <span class="ck r"><i></i>All<span class="c">41</span></span>
+              <p class="fh">Categories</p>
+              <span class="ck on"><i>✓</i>All categories</span>
+              <span class="ck"><i></i>Strategy<span class="c">6</span></span>
+              <span class="ck"><i></i>Customers<span class="c">5</span></span>
+              <span class="ck"><i></i>Pricing<span class="c">4</span></span>
+              <span class="ck"><i></i>Team<span class="c">4</span></span>
+              <span class="ck"><i></i>Operations<span class="c">2</span></span>
+              <span class="ck"><i></i>Product <span class="off">off</span><span class="c">2</span></span>
+              <p class="fnote">Filters change this list only. To stop a category for the session: <a>Up next › Categories</a>.</p>
+            </div>
+            <div class="pk-l">
+              <div class="grp-h">The set would serve next <span>· if you change nothing</span></div>
+              <div class="qr2"><div class="w"><b>The customer we under-serve</b><span>Customers · open response</span></div><span class="tag q">Next</span><span class="btn s">Unqueue</span></div>
+              <div class="qr2"><div class="w"><b>One process we should kill</b><span>Operations · open response</span></div><span class="tag q">Queued #2</span><span class="btn s">Unqueue</span></div>
+              <div class="qr2"><div class="w"><b>A bet we are not making</b><span>Strategy · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="grp-h">All not asked <span>· 20 more</span></div>
+              <div class="qr2 sel"><div class="w"><b>Pricing we would change</b><span>Pricing · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>What our best customers have in common</b><span>Customers · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>Where the next hire should go</b><span>Team · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>The discount we regret most</b><span>Pricing · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>A meeting we could drop</b><span>Operations · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+            </div>
+            <div class="pk-p">
+              <p class="eyebrow">Preview · this laptop only</p>
+              <h5>Pricing we would change</h5>
+              <p>If you could change one thing about how we price, what would it be, and who would notice first?</p>
+              <p class="m">Pricing · open response · players write, then vote</p>
+              <div class="acts"><span class="btn nx"><svg class="i s"><use href="#i-check"/></svg>Ask next <span class="k">Enter</span></span><span class="btn">Queue</span><span class="btn s ic"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+              <p class="m" style="font-size:12px">Ask next: after the round on screen. Ask now… is in ⋯ and ends this round first.</p>
+              <span class="sp"></span>
+              <div class="stepper"><a>‹ Previous</a><span>4 of 23</span><a>Next ›</a></div>
+            </div>
+          </div>
+          <div class="pk-ft"><span><span class="k">↑</span> <span class="k">↓</span> move</span><span><span class="k">Enter</span> ask next</span><span><span class="k">/</span> search</span><span><span class="k">Esc</span> back to the round</span><span class="sp"></span><a>Or write your own <span class="k">Q</span></a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="pin" style="left:368px;top:192px">1</span>
+  <span class="pin" style="left:361px;top:262px">2</span>
+  <span class="pin" style="left:561px;top:262px">3</span>
+  <span class="pin" style="left:1055px;top:262px">4</span>
+  <span class="pin" style="left:22px;top:96px">5</span>
+</div>
+</div></div>
+
+<!-- =============================== 4 SEARCH + FILTER =============================== -->
+<div class="cap"><h2>4 · Search and filter: the list narrows, says why, and offers a way out</h2>
+<ol>
+  <li>Typing narrows the list on titles <b>and</b> question text, and the match is marked. Today the search reads titles only (<code>filterRemoteRows</code>, <code>hostRemote.js:441-445</code>).</li>
+  <li>The active filters show as chips above the list, each with an ✕, plus <b>Clear all</b>. The count says "3 of 23".</li>
+  <li>When nothing matches, the empty state says so and offers <b>Clear filters</b>. It never says the set is empty (hard rule 6).</li>
+  <li>The filters and the search are kept for the rest of the session, so a host who closes and reopens the picker comes back to the same list.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-4">
+<div class="col"><p class="blabel">Typed "pric", Pricing and Customers ticked</p>
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 strategy offsite</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">Voting is open. Press <b>Show results</b> when they are done.</p></div><span class="btn main l">Show results <span class="kc">Space</span></span></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 8</span></h3>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="tt">The customer we under-serve</span><span class="mt">next</span></div>
+          <div class="qrow"><span class="n">5</span><span class="tt">One process we should kill</span></div>
+          <div class="rlinks row2"><span class="rlink"><svg class="i s"><use href="#i-search"/></svg>Choose a question<span class="k">C</span></span><span class="rlink"><svg class="i s"><use href="#i-plus"/></svg>Write a question<span class="k">Q</span></span><span class="rlink">All rounds</span></div>
+        </div>
+        <div class="rsec closed"><h3>People <span class="ct">12 here</span></h3></div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 3</span><span class="stp done">Answer</span><span class="stp live">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="pk">
+          <div class="pk-hd"><span class="crumb"><svg class="i s"><use href="#i-left"/></svg>Round 3 · Vote</span><h4>Choose a question</h4><span class="ct">3 of 23 not asked</span><span class="sp"></span><span class="btn done"><svg class="i s"><use href="#i-check"/></svg>Done <span class="k">Esc</span></span></div>
+          <div class="pk-b">
+            <div class="pk-f">
+              <span class="search typed"><svg class="i s"><use href="#i-search"/></svg>pric<span style="margin-left:auto;color:var(--muted)">✕</span></span>
+              <p class="fh">Show</p>
+              <span class="ck r on"><i></i>Not asked<span class="c">23</span></span>
+              <span class="ck r"><i></i>All<span class="c">41</span></span>
+              <p class="fh">Categories</p>
+              <span class="ck"><i></i>All categories</span>
+              <span class="ck"><i></i>Strategy<span class="c">6</span></span>
+              <span class="ck on"><i>✓</i>Customers<span class="c">5</span></span>
+              <span class="ck on"><i>✓</i>Pricing<span class="c">4</span></span>
+              <span class="ck"><i></i>Team<span class="c">4</span></span>
+              <span class="ck"><i></i>Operations<span class="c">2</span></span>
+              <span class="ck"><i></i>Product <span class="off">off</span><span class="c">2</span></span>
+              <p class="fnote">Filters change this list only. To stop a category for the session: <a>Up next › Categories</a>.</p>
+            </div>
+            <div class="pk-l">
+              <div class="fchips">Showing 3 of 23 for <span class="fchip">"pric" ✕</span><span class="fchip">Customers ✕</span><span class="fchip">Pricing ✕</span><a style="color:var(--secondary);font-weight:800;margin-left:4px">Clear all</a></div>
+              <div class="grp-h">Matches</div>
+              <div class="qr2 sel"><div class="w"><b><mark>Pric</mark>ing we would change</b><span>Pricing · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>The discount we regret most</b><span>Pricing · "…when our <mark>pric</mark>e moved…"</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>Who would pay double?</b><span>Customers · "…at twice today's <mark>pric</mark>e…"</span></div><span class="tag q">Queued #3</span><span class="btn s">Unqueue</span></div>
+            </div>
+            <div class="pk-p">
+              <p class="eyebrow">Preview · this laptop only</p>
+              <h5>Pricing we would change</h5>
+              <p>If you could change one thing about how we price, what would it be, and who would notice first?</p>
+              <p class="m">Pricing · open response · players write, then vote</p>
+              <div class="acts"><span class="btn nx"><svg class="i s"><use href="#i-check"/></svg>Ask next <span class="k">Enter</span></span><span class="btn">Queue</span><span class="btn s ic"><svg class="i s"><use href="#i-dots"/></svg></span></div>
+              <span class="sp"></span>
+              <div class="stepper"><a>‹ Previous</a><span>1 of 3</span><a>Next ›</a></div>
+            </div>
+          </div>
+          <div class="pk-ft"><span><span class="k">↑</span> <span class="k">↓</span> move</span><span><span class="k">Enter</span> ask next</span><span><span class="k">/</span> search</span><span><span class="k">Esc</span> clears the search, then back to the round</span><span class="sp"></span><a>Or write your own <span class="k">Q</span></a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="pin" style="left:361px;top:262px">1</span>
+  <span class="pin" style="left:561px;top:244px">2</span>
+</div></div>
+<div class="col"><p class="blabel">Nothing matches <span>(the list, not the set)</span></p>
+<div class="frame f-crop"><div style="position:absolute;inset:0;padding:12px"><div class="pk" style="height:100%">
+  <div class="pk-hd"><span class="crumb"><svg class="i s"><use href="#i-left"/></svg>Round 3 · Vote</span><h4>Choose a question</h4><span class="sp"></span><span class="btn done"><svg class="i s"><use href="#i-check"/></svg>Done</span></div>
+  <div class="pk-l" style="overflow:hidden">
+    <div class="fchips">Showing 0 of 23 for <span class="fchip">"budget" ✕</span><span class="fchip">Team ✕</span></div>
+    <div class="empty"><b>No unasked question matches "budget" in Team.</b><p>2 match in other categories, and 1 matches among the questions already asked.</p><div class="acts"><span class="btn nx">Clear filters</span><span class="btn">Search all categories</span><span class="btn">Include asked</span></div></div>
+  </div>
+  <div class="pk-ft"><span><span class="k">Esc</span> clears the search, then back to the round</span></div>
+</div></div><span class="pin" style="left:20px;top:150px">3</span></div></div>
+</div></div>
+
+<!-- =============================== 5 AFTER ASK NEXT =============================== -->
+<div class="cap"><h2>5 · After Ask next: back in the round, told what changed, with Undo</h2>
+<ol>
+  <li>The picker closes and the content area shows the round again, exactly as it was.</li>
+  <li><b>Your part now</b> shows one status line for a few seconds: "Next: Pricing we would change · Undo". It is announced politely to screen readers. Undo puts the order back.</li>
+  <li>The rail's row 4 changes, with one fade, the same arrival the rail already uses for People.</li>
+  <li><b>Focus goes back to the opener</b> (here the rail's Choose a question), so a keyboard host is where they started. Opened with C, focus returns to wherever it was.</li>
+  <li>Queue does not close the picker, because a host queueing three questions wants to stay. Done or Esc closes it, and the status line counts them: "3 queued · Undo".</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-5">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 strategy offsite</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is answering. Press <b>Start voting</b> when they are done.</p><p class="nx"><span class="ok" role="status"><svg class="i s"><use href="#i-check"/></svg>Next: <b>Pricing we would change</b><a>Undo</a></span></p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 8</span></h3>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Where do we lose deals?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="mt">now</span></div>
+          <div class="qrow picked"><span class="n">4</span><span class="tt">Pricing we would change</span><span class="mt">next</span></div>
+          <div class="qrow"><span class="n">5</span><span class="tt">The customer we under-serve</span></div>
+          <div class="qrow"><span class="n">6</span><span class="tt">One process we should kill</span></div>
+          <div class="rlinks row2"><span class="rlink focusring"><svg class="i s"><use href="#i-search"/></svg>Choose a question<span class="k">C</span></span><span class="rlink"><svg class="i s"><use href="#i-plus"/></svg>Write a question<span class="k">Q</span></span><span class="rlink">All rounds</span></div>
+        </div>
+        <div class="rsec closed"><h3>People <span class="ct">12 here</span></h3></div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 3</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="content"><h4>What would you stop doing?</h4><p class="r" style="color:var(--muted)">10 of 12 have answered.</p></div>
+      </div>
+    </div>
+  </div>
+  <span class="pin" style="left:720px;top:280px">1</span>
+  <span class="pin" style="left:22px;top:96px">2</span>
+  <span class="pin" style="left:316px;top:272px">3</span>
+  <span class="pin" style="left:22px;top:380px">4</span>
+</div>
+</div></div>
+
+<!-- =============================== 6 ONE SCREEN =============================== -->
+<div class="cap"><h2>6 · One screen: the room sees this laptop, so the picker asks first</h2>
+<ol>
+  <li>C or a door opens a small private choice, not the list. It is the shape of the impromptu ask's choice (<code>OwnQuestionChoice.jsx</code>), so it is already familiar. <b>Choose on your phone</b> comes first (Connect your phone until the laptop can tell a Remote is connected). <b>Show them here</b> says plainly that the room will see the titles.</li>
+  <li>Shown here, the picker carries an amber line, "The room can see this list", with <b>Hide</b>. Titles and question text are public from then on. Correct answers are never drawn, on any screen.</li>
+  <li>The choice is asked every time it is opened. It is not remembered like People's (fork F5), because upcoming questions are content the room has not seen yet.</li>
+  <li>The stage's Your part now has the same <b>Change what's next</b> line. On one screen it opens the choice.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-6" style="flex-direction:column">
+<div class="col"><p class="blabel">C pressed on one screen</p>
+<div class="frame f-laptop">
+  <div class="lf" style="grid-template-rows:auto minmax(0,1fr) auto">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Team retro</span><span class="sp"></span>
+      <span class="stat pub"><i></i>The room can see this screen</span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">3318</span></span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session</span>
+    </div>
+    <div style="padding:30px 40px;position:relative">
+      <p class="eyebrow">Round 2 · Answer</p>
+      <p class="stagebig">What slowed us down this sprint?</p>
+      <p style="font-size:19px;color:var(--muted);margin:0">7 of 9 have answered</p>
+    </div>
+    <div class="ypn" style="margin:0 16px 16px"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is answering. Press <b>Start voting</b> when they are done.</p><p class="nx"><a><svg class="i s"><use href="#i-list"/></svg>Change what's next <span class="k">C</span></a></p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="choice" role="dialog" aria-label="Choose a question">
+    <h4>Choose a question</h4>
+    <p>The room can see this screen. The list shows questions they have not seen yet.</p>
+    <div class="opt pref"><svg class="i l"><use href="#i-phone"/></svg><div class="w"><b>Choose on your phone</b><span>Scan once to drive the room from your phone. Nothing shows here.</span></div><span class="btn nx">Connect your phone</span></div>
+    <div class="opt"><svg class="i l"><use href="#i-eye"/></svg><div class="w"><b>Show them here</b><span>The room will see the titles and the questions.</span></div><span class="btn">Show here</span></div>
+    <div class="ft"><span><span class="k">Esc</span> back to the round</span><span class="sp"></span><span class="btn">Cancel</span></div>
+  </div>
+  <span class="pin" style="left:438px;top:330px">1</span>
+  <span class="pin" style="left:6px;top:704px">4</span>
+</div></div>
+<div class="col"><p class="blabel">Show here, chosen</p>
+<div class="frame f-laptop">
+  <div class="lf" style="grid-template-rows:auto minmax(0,1fr) auto">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Team retro</span><span class="sp"></span>
+      <span class="stat pub"><i></i>The room can see this screen</span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">3318</span></span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session</span>
+    </div>
+    <div style="padding:12px 16px 0;display:flex;min-height:0">
+      <div class="pk">
+        <div class="pk-hd"><span class="crumb"><svg class="i s"><use href="#i-left"/></svg>Round 2 · Answer</span><h4>Choose a question</h4><span class="ct">14 not asked</span><span class="sp"></span><span class="btn done"><svg class="i s"><use href="#i-check"/></svg>Done <span class="k">Esc</span></span></div>
+        <div style="display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0">
+          <div class="roomsee"><svg class="i s" style="color:var(--primary)"><use href="#i-eye"/></svg><span><b>The room can see this list.</b> Correct answers are never shown.</span><span class="sp"></span><span class="btn s">Hide</span><span class="btn s nx">Use my phone instead</span></div>
+          <div class="pk-b" style="grid-template-columns:200px minmax(0,1fr) 340px">
+            <div class="pk-f">
+              <span class="search"><svg class="i s"><use href="#i-search"/></svg>Search 22 questions</span>
+              <p class="fh">Show</p>
+              <span class="ck r on"><i></i>Not asked<span class="c">14</span></span>
+              <span class="ck r"><i></i>All<span class="c">22</span></span>
+              <p class="fh">Categories</p>
+              <span class="ck on"><i>✓</i>All categories</span>
+              <span class="ck"><i></i>Process<span class="c">6</span></span>
+              <span class="ck"><i></i>Tools<span class="c">4</span></span>
+              <span class="ck"><i></i>People<span class="c">4</span></span>
+            </div>
+            <div class="pk-l">
+              <div class="grp-h">The set would serve next</div>
+              <div class="qr2"><div class="w"><b>One thing to keep doing</b><span>Process · open response</span></div><span class="tag q">Next</span><span class="btn s">Unqueue</span></div>
+              <div class="grp-h">All not asked <span>· 13 more</span></div>
+              <div class="qr2 sel"><div class="w"><b>A tool we should retire</b><span>Tools · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>Who unblocked you this sprint?</b><span>People · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>Our slowest handoff</b><span>Process · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+              <div class="qr2"><div class="w"><b>The meeting to cut</b><span>Process · open response</span></div><span class="btn s">Queue</span><span class="btn s nx">Ask next</span></div>
+            </div>
+            <div class="pk-p">
+              <p class="eyebrow">Preview · the room can see this</p>
+              <h5>A tool we should retire</h5>
+              <p>Name one tool we pay for or maintain that we would not miss. Why?</p>
+              <div class="acts"><span class="btn nx">Ask next</span><span class="btn">Queue</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="pk-ft"><span><span class="k">Esc</span> back to the round</span><span class="sp"></span></div>
+      </div>
+    </div>
+    <div class="ypn" style="margin:12px 16px 16px"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is answering. Press <b>Start voting</b> when they are done.</p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+  </div>
+  <span class="pin" style="left:6px;top:126px">2</span>
+</div></div>
+</div></div>
+
+<!-- =============================== 7 PHONE =============================== -->
+<div class="cap"><h2>7 · Phone Remote: the same picker as a full sheet, with the dock always below</h2>
+<ol>
+  <li>The round view gets one line above the dock: "Next: The customer we under-serve · <b>Change</b>". The phone has no rail, so here the title is not said twice. Up next's tab keeps the running order and two buttons, <b>Choose a question</b> and <b>Write a question</b>. The browser is no longer stacked under them.</li>
+  <li>The picker sheet: <b>‹ Round</b> in the sticky bar (48px, where the existing back is), search, then <b>Show</b> and <b>Category</b> as two selects (no hidden sideways scroll). Rows have <b>Ask next</b>. A tap on the title opens the existing preview, with Queue in it. The dock's main button stays live underneath.</li>
+  <li><b>Ask next returns to the round</b>, as Ask now already does (<code>HostRemote.jsx:1379</code>), with the flash "Next: Pricing we would change · Undo".</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-7">
+<div class="col"><p class="blabel">Round view</p>
+<div class="frame f-phone"><div class="ph-in">
+  <div class="ph-top"><b>7924</b><span>Q4 strategy offsite</span><span class="sp"></span><span class="live">Live</span></div>
+  <div class="ph-body">
+    <p class="eyebrow">Round 3 · Answer</p>
+    <p class="ph-q">What would you stop doing?</p>
+    <p class="ph-meter"><b>9</b> of 12 answered</p>
+    <div class="ph-card"><h5>This round</h5><div class="ph-grid"><span class="btn">Show the room</span><span class="btn">+1 min</span></div></div>
+    <div class="ph-card"><h5>Session</h5><div class="ph-grid"><span class="btn"><svg class="i"><use href="#i-list"/></svg>Up next</span><span class="btn">Rounds so far</span><span class="btn">People</span><span class="btn">Join code</span></div></div>
+    <div class="ph-nextline"><span class="w">Next: <b>The customer we under-serve</b></span><a>Change</a></div>
+  </div>
+  <div class="ph-dock"><span class="btn main">Start voting</span></div>
+</div><span class="pin" style="left:6px;top:500px">1</span></div></div>
+<div class="col"><p class="blabel">Choose a question</p>
+<div class="frame f-phone"><div class="ph-in">
+  <div class="ph-crumb"><span class="bk"><svg class="i"><use href="#i-left"/></svg>Round</span><b>Choose a question</b><span class="sp"></span></div>
+  <div class="ph-body">
+    <div class="ph-search"><svg class="i"><use href="#i-search"/></svg>Search 41 questions</div>
+    <div class="ph-sel"><span class="sel">Not asked (23)<span class="sp"></span><svg class="i s"><use href="#i-chev"/></svg></span><span class="sel">Pricing<span class="sp"></span><svg class="i s"><use href="#i-chev"/></svg></span></div>
+    <p class="note" style="margin:0 0 6px">4 in Pricing · <a style="color:var(--secondary);font-weight:800">Clear</a></p>
+    <div class="prow2"><div class="w"><b>Pricing we would change</b><span>open response</span></div><span class="btn nx">Ask next</span></div>
+    <div class="prow2"><div class="w"><b>The discount we regret most</b><span>open response</span></div><span class="btn nx">Ask next</span></div>
+    <div class="prow2"><div class="w"><b>Who would pay double?</b><span>Queued #3</span></div><span class="btn">Unqueue</span></div>
+    <div class="prow2"><div class="w"><b>Free tier: keep or cut?</b><span>yes / no</span></div><span class="btn nx">Ask next</span></div>
+  </div>
+  <div class="ph-dock"><span class="btn main">Start voting</span></div>
+</div><span class="pin" style="left:8px;top:10px">2</span></div></div>
+<div class="col"><p class="blabel">After Ask next</p>
+<div class="frame f-phone"><div class="ph-in">
+  <div class="ph-top"><b>7924</b><span>Q4 strategy offsite</span><span class="sp"></span><span class="live">Live</span></div>
+  <div class="ph-body">
+    <div class="ph-flash" role="status"><svg class="i"><use href="#i-check"/></svg><span class="w">Next: <b>Pricing we would change</b></span><a>Undo</a></div>
+    <p class="eyebrow">Round 3 · Answer</p>
+    <p class="ph-q">What would you stop doing?</p>
+    <p class="ph-meter"><b>10</b> of 12 answered</p>
+    <div class="ph-card"><h5>This round</h5><div class="ph-grid"><span class="btn">Show the room</span><span class="btn">+1 min</span></div></div>
+    <div class="ph-card"><h5>Session</h5><div class="ph-grid"><span class="btn"><svg class="i"><use href="#i-list"/></svg>Up next</span><span class="btn">Rounds so far</span><span class="btn">People</span><span class="btn">Join code</span></div></div>
+  </div>
+  <div class="ph-dock"><span class="btn main">Start voting</span></div>
+</div><span class="pin" style="left:8px;top:66px">3</span></div></div>
+</div></div>
+
+</div>
+</body>
+</html>

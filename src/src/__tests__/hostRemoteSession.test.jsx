@@ -360,6 +360,8 @@ describe('the questions tab is the browser that already existed', () => {
     await connect();
     await openPanel();
     fireEvent.click(screen.getByRole('tab', { name: /up next/i }));
+    // The set is one door away now: the picker sheet (question picker D10).
+    fireEvent.click(await screen.findByTestId('remote-choose'));
 
     expect(await screen.findByText('Which pricing change?')).toBeInTheDocument();
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
@@ -422,6 +424,7 @@ describe('the primary action survives a list being open', () => {
     serve({ state: 'ASK#002' });
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    fireEvent.click(await screen.findByTestId('remote-choose'));
     await screen.findByText('Which pricing change?');
 
     fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));

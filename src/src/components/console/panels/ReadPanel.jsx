@@ -98,7 +98,7 @@ export default function ReadPanel({
       {afterRead}
     </div>
   );
-  const kick = <p className="hc-kicker">{kicker}</p>;
+  const kick = kicker ? <p className="hc-kicker">{kicker}</p> : null;
   /* While composing, the kicker rides in the read's column so both columns
      start at the top of the main area: the composer can then be exactly the
      main area's height (HostConsole.css) and its Send never falls below the

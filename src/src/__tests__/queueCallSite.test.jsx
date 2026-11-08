@@ -30,6 +30,7 @@ jest.mock('qrcode.react', () => ({
 }));
 
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
+import QuestionPicker from '../components/stage/QuestionPicker';
 
 const categories = [{ name: 'Pricing Power' }, { name: 'Competitive Response' }];
 const categoryCounts = { '1-8': [7, 9], '9-16': [], '17-24': [] };
@@ -55,10 +56,21 @@ const renderPanel = (props = {}) => render(
   />,
 );
 
-/* Up next's Choose from the set step (docs/design/session-menu D4): the
-   browser, an inline step of Up next since the redesign. */
+/* The set's browser is the question picker (docs/design/question-picker):
+   the same rows, the same queue props, opened by every door. It is rendered
+   directly here, as the panel is: presentational, so a real render with
+   real assertions. */
 const openUpNext = () => fireEvent.click(screen.getByRole('tab', { name: 'Up next' }));
-const openQuestions = () => { openUpNext(); fireEvent.click(screen.getByTestId('up-next-choose')); };
+const renderPicker = (props = {}) => render(
+  <QuestionPicker
+    questions={questions}
+    categories={categories}
+    categoryCounts={categoryCounts}
+    view={{ search: '', cats: [], show: 'all' }}
+    backLabel="Round 3 · Answer"
+    {...props}
+  />,
+);
 /* Ask now sits in each row's ⋯ (fork F3). */
 const rowMenuItem = (row, id) => {
   fireEvent.click(within(row).getByTestId('browser-row-menu'));
@@ -68,30 +80,24 @@ const rowMenuItem = (row, id) => {
 /** The browser row whose title contains `text`. */
 const browserRow = (text) => screen.getAllByTestId('browser-row')
   .find((row) => row.textContent.includes(text));
+const named = (verb) => new RegExp(`^${verb}:`, 'i');
 
-describe('the queue on the questions tab', () => {
-  test('the running order is on screen before the browser that fills it', () => {
+describe('the queue in the question picker', () => {
+  test('the running order is on screen, and the set is behind its door', () => {
     // rejects: putting the queue below sixty question rows, where a host would
     // scroll past everything they might add to reach what they already chose.
-    // Document order is assertable in jsdom; geometry is not.
-    // Since the redesign the browser is not drawn until asked for: Up next
-    // opens on the running order, and Choose from the set is a step of it.
-    const { container } = renderPanel();
+    const { container } = renderPanel({ onChoose: () => {} });
     openUpNext();
     expect(container.querySelector('.setup-q')).toBeTruthy();
-    expect(container.querySelector('.setup-qb__list')).toBeNull();
-    openQuestions();
-    expect(container.querySelector('.setup-qb__list')).toBeTruthy();
+    expect(screen.queryAllByTestId('browser-row')).toHaveLength(0);
+    expect(screen.getByTestId('up-next-choose')).toBeInTheDocument();
   });
 
-  test('every browser row offers Queue, Ask next AND Ask now, least disruptive first', () => {
+  test('every row offers Queue, Ask next AND Ask now, least disruptive first', () => {
     // rejects: one button doing two jobs. The owner: "'ask next' in most
     // people's mind means put it at the top of the queue, not run it now" —
-    // so the interrupt is `Ask now`, and `Ask next` is a queue op. Since the
-    // redesign (fork F3) Ask now is one step further away, in the row's ⋯.
-    renderPanel();
-    openQuestions();
-
+    // so the interrupt is `Ask now`, in the row's ⋯ (fork F3).
+    renderPicker();
     for (const row of screen.getAllByTestId('browser-row')) {
       expect(within(row).getAllByRole('button').map((b) => b.textContent || b.getAttribute('aria-label')))
         .toEqual(['Queue', 'Ask next', expect.stringMatching(/^More for /)]);
@@ -100,48 +106,52 @@ describe('the queue on the questions tab', () => {
     }
   });
 
+  test('each row\'s buttons are named for their question (review A2)', () => {
+    renderPicker();
+    const row = browserRow('pricing power');
+    expect(within(row).getByRole('button', { name: 'Ask next: Where does pricing power come from?' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Queue: Where does pricing power come from?' })).toBeInTheDocument();
+  });
+
   test('Ask next puts the question at the top of the queue and does NOT ask it', () => {
     // rejects: the reported bug — "when you click a question to 'ask next' ...
     // it actually switches the game to that one."
-    const onQueueFirst = jest.fn();
-    const onSelectQuestion = jest.fn();
-    renderPanel({ onQueueFirst, onSelectQuestion });
-    openQuestions();
-
-    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^ask next$/i }));
-    expect(onQueueFirst).toHaveBeenCalledWith('q-1');
-    expect(onSelectQuestion).not.toHaveBeenCalled();
+    const onAskNext = jest.fn();
+    const onAskNow = jest.fn();
+    renderPicker({ onAskNext, onAskNow });
+    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: named('ask next') }));
+    expect(onAskNext).toHaveBeenCalledWith('q-1', expect.objectContaining({ title: questions[0].title }));
+    expect(onAskNow).not.toHaveBeenCalled();
   });
 
   test('Ask now asks the question, and does not touch the queue', () => {
-    const onQueueFirst = jest.fn();
-    const onQueueQuestion = jest.fn();
-    const onSelectQuestion = jest.fn();
-    renderPanel({ onQueueFirst, onQueueQuestion, onSelectQuestion });
-    openQuestions();
-
+    const onAskNext = jest.fn();
+    const onQueue = jest.fn();
+    const onAskNow = jest.fn();
+    renderPicker({ onAskNext, onQueue, onAskNow });
     fireEvent.click(rowMenuItem(browserRow('pricing power'), 'ask-now'));
-    expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
-    expect(onQueueFirst).not.toHaveBeenCalled();
-    expect(onQueueQuestion).not.toHaveBeenCalled();
+    expect(onAskNow).toHaveBeenCalledWith(questions[0]);
+    expect(onAskNext).not.toHaveBeenCalled();
+    expect(onQueue).not.toHaveBeenCalled();
   });
 
   test('Ask next is held on the question already at the top', () => {
-    renderPanel({ questionQueue: ['q-1', 'q-2'] });
-    openQuestions();
-    expect(within(browserRow('pricing power')).getByRole('button', { name: /^ask next$/i })).toBeDisabled();
-    expect(within(browserRow('competitor')).getByRole('button', { name: /^ask next$/i })).toBeEnabled();
+    renderPicker({ questionQueue: ['q-1', 'q-2'] });
+    // The head row says Next and offers Unqueue; the preview's Ask next waits.
+    expect(within(browserRow('pricing power')).getByTestId('browser-queued-tag')).toHaveTextContent('Next');
+    fireEvent.click(browserRow('pricing power'));
+    expect(screen.getByTestId('picker-preview-ask-next')).toBeDisabled();
+    fireEvent.click(browserRow('competitor'));
+    expect(screen.getByTestId('picker-preview-ask-next')).toBeEnabled();
   });
 
   test('an asked question can only be asked again now — the drain drops asked entries', () => {
     // rejects: a Queue or Ask next on an asked question, which next-question.js
     // would silently drop at the end of the round.
-    renderPanel({ usedQuestionIds: ['q-1'] });
-    openQuestions();
-    fireEvent.click(screen.getByTestId('hide-asked'));
+    renderPicker({ usedQuestionIds: ['q-1'] });
     const row = browserRow('pricing power');
-    expect(within(row).getByRole('button', { name: /^queue$/i })).toBeDisabled();
-    expect(within(row).getByRole('button', { name: /^ask next$/i })).toBeDisabled();
+    expect(within(row).getByRole('button', { name: named('queue') })).toBeDisabled();
+    expect(within(row).getByRole('button', { name: named('ask next') })).toBeDisabled();
     const again = rowMenuItem(row, 'ask-now');
     expect(again).toHaveTextContent(/^Ask again now/);
     expect(again).toBeEnabled();
@@ -170,72 +180,57 @@ describe('the queue on the questions tab', () => {
     // rejects: passing `row.id`. The row is a redacted PROJECTION that
     // deliberately carries no correct answer; the caller needs the original to
     // hand `next-question` something it will accept.
-    const onQueueQuestion = jest.fn();
-    renderPanel({ onQueueQuestion });
-    openQuestions();
-
-    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^queue$/i }));
-    expect(onQueueQuestion).toHaveBeenCalledWith(questions[0]);
+    const onQueue = jest.fn();
+    renderPicker({ onQueue });
+    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: named('queue') }));
+    expect(onQueue).toHaveBeenCalledWith(questions[0]);
   });
 
   test('Queue does NOT ask the question', () => {
-    // rejects: wiring Queue to `onSelectQuestion`. That is the entire feature —
-    // the owner's complaint was *"no matter where you are it forward to that
+    // rejects: wiring Queue to Ask now. That is the entire feature — the
+    // owner's complaint was *"no matter where you are it forward to that
     // question"*. A Queue button that jumps is worse than no Queue button.
-    const onSelectQuestion = jest.fn();
-    renderPanel({ onSelectQuestion });
-    openQuestions();
-
-    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^queue$/i }));
-    expect(onSelectQuestion).not.toHaveBeenCalled();
+    const onAskNow = jest.fn();
+    renderPicker({ onAskNow });
+    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: named('queue') }));
+    expect(onAskNow).not.toHaveBeenCalled();
   });
 
   test('a queued row shows its position and offers Unqueue', () => {
     // rejects: a control reading "Queued #2" that removes on press. A button
-    // must say what pressing it DOES; the position belongs in the tag, which is
-    // the same pill idiom as Asked and Off.
-    renderPanel({ questionQueue: ['q-2', 'q-1'] });
-    openQuestions();
-
+    // must say what pressing it DOES; the position belongs in the tag.
+    renderPicker({ questionQueue: ['q-2', 'q-1'] });
     const row = browserRow('pricing power');
     expect(within(row).getByTestId('browser-queued-tag')).toHaveTextContent('Queued #2');
-    expect(within(row).getByRole('button', { name: /unqueue/i })).toBeInTheDocument();
-    expect(within(row).queryByRole('button', { name: /^queue$/i })).not.toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: named('unqueue') })).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: named('queue') })).not.toBeInTheDocument();
   });
 
   test('Unqueue removes by key rather than re-adding', () => {
-    // rejects: a toggle that calls `onQueueQuestion` both ways, which would
-    // re-add the row it was meant to clear.
-    const onQueueRemove = jest.fn();
-    const onQueueQuestion = jest.fn();
-    renderPanel({ questionQueue: ['q-1'], onQueueRemove, onQueueQuestion });
-    openQuestions();
-
-    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /unqueue/i }));
-    expect(onQueueRemove).toHaveBeenCalledWith('q-1');
-    expect(onQueueQuestion).not.toHaveBeenCalled();
+    // rejects: a toggle that calls Queue both ways, which would re-add the row
+    // it was meant to clear.
+    const onUnqueue = jest.fn();
+    const onQueue = jest.fn();
+    renderPicker({ questionQueue: ['q-1'], onUnqueue, onQueue });
+    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: named('unqueue') }));
+    expect(onUnqueue).toHaveBeenCalledWith('q-1');
+    expect(onQueue).not.toHaveBeenCalled();
   });
 
   test('a row with a queue request in flight cannot be pressed again', () => {
     // rejects: leaving the control live through its own round trip, which turns
     // an impatient double-tap into two ops.
-    renderPanel({ queueBusyKeys: ['q-1'] });
-    openQuestions();
-
-    expect(within(browserRow('pricing power')).getByRole('button', { name: /^queue$/i })).toBeDisabled();
-    expect(within(browserRow('competitor')).getByRole('button', { name: /^queue$/i })).toBeEnabled();
+    renderPicker({ queueBusyKeys: ['q-1'] });
+    expect(within(browserRow('pricing power')).getByRole('button', { name: named('queue') })).toBeDisabled();
+    expect(within(browserRow('competitor')).getByRole('button', { name: named('queue') })).toBeEnabled();
   });
 
   test('Ask now stays reachable on a queued row', () => {
-    // rejects: disabling the interrupt once a question is queued. A host who
-    // queued something and then decided to ask it now must not have to unqueue
-    // it first — that is two presses to undo their own good intention.
-    const onSelectQuestion = jest.fn();
-    renderPanel({ questionQueue: ['q-1'], onSelectQuestion });
-    openQuestions();
-
+    // rejects: disabling the interrupt once a question is queued.
+    const onAskNow = jest.fn();
+    renderPicker({ questionQueue: ['q-1'], onAskNow });
     fireEvent.click(rowMenuItem(browserRow('pricing power'), 'ask-now'));
-    expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
+    expect(onAskNow).toHaveBeenCalledWith(questions[0]);
   });
 
   test('the panel reorders nothing itself', () => {
@@ -285,6 +280,15 @@ describe('the page wires the queue up', () => {
     expect(host).toMatch(/onQueueFirst=\{handleQueueFirst\}/);
     expect(host).toMatch(/const handleQueueFirst = useCallback\(\s*\(key\) => runQueueOp\('first', key, \(q\) => queueFirst\(q, key\)\)/);
     expect(host).toMatch(/onSelectQuestion=\{selectQuestion\}/);
+  });
+
+  test('the question picker reaches the same queue handlers, not a copy', () => {
+    // rejects: a second queue path for the picker (docs/design/question-picker:
+    // "do not create a second copy of the queue logic").
+    expect(host).toMatch(/const landed = await handleQueueFirst\(key\)/);
+    expect(host).toMatch(/const landed = await handleQueueQuestion\(question\)/);
+    expect(host).toMatch(/return handleQueueRemove\(key\)/);
+    expect(host).toMatch(/onAskNow=\{\(question\) => \{ setPickNotice\(null\); selectQuestion\(question\); \}\}/);
   });
 
   test('Ask now mid-round confirms, and points at Ask next', () => {

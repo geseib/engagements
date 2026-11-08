@@ -77,7 +77,8 @@ const openAllMore = () => {
 };
 
 test('one screen: no section renders a private part until it is shown, More options open or not', () => {
-  renderPanel({ oneScreen: true });
+  const onChoose = jest.fn();
+  renderPanel({ oneScreen: true, onChoose });
   const seen = [];
   for (const name of SECTIONS) {
     tab(name);
@@ -85,8 +86,12 @@ test('one screen: no section renders a private part until it is shown, More opti
     openAllMore();
     seen.push(document.body.textContent);
   }
+  /* Choose a question is the picker now (docs/design/question-picker): the
+     menu's door hands off to the page, which asks first on one screen
+     (questionPicker.test.jsx). Nothing of the set is drawn in the menu. */
   tab('Up next');
   fireEvent.click(screen.getByTestId('up-next-choose'));
+  expect(onChoose).toHaveBeenCalledTimes(1);
   seen.push(document.body.textContent);
   const all = seen.join('\n');
   PRIVATE.forEach((re) => expect([String(re), re.test(all)]).toEqual([String(re), false]));
@@ -109,6 +114,28 @@ test('one screen: People is a count, and the names wait behind Show on this scre
   expect([...document.querySelectorAll('.prow-name')].map((n) => n.textContent)).toEqual(expect.arrayContaining(['Priya', 'Sam Okafor']));
 });
 
+// Owner, 4 Nov 2026: the one-screen People choice is kept for the session,
+// until the host changes it — the panel closing must not reset it.
+test('one screen: showing People is kept for the session, across the panel closing, until Hide', () => {
+  window.localStorage.clear();
+  const first = renderPanel({ oneScreen: true, initialTab: 'players' });
+  const gate = screen.getByTestId('private-people');
+  fireEvent.click(within(gate).getByRole('button', { name: 'Show on this screen' }));
+  fireEvent.click(within(gate).getByRole('button', { name: 'Show it' }));
+  first.unmount();
+
+  const again = renderPanel({ oneScreen: true, initialTab: 'players' });
+  expect(screen.getByTestId('private-people-shown')).toBeInTheDocument();
+  expect(document.querySelector('.prow-name')).not.toBeNull();
+  fireEvent.click(within(screen.getByTestId('private-people-shown')).getByRole('button', { name: 'Hide' }));
+  again.unmount();
+
+  renderPanel({ oneScreen: true, initialTab: 'players' });
+  expect(screen.getByTestId('private-people')).toBeInTheDocument();
+  expect(document.querySelector('.prow-name')).toBeNull();
+  window.localStorage.clear();
+});
+
 test('Show on this screen asks first, then shows that one part', () => {
   renderPanel({ oneScreen: true, initialTab: 'history' });
   fireEvent.click(screen.getByTestId('late-review'));
@@ -129,9 +156,10 @@ test('two screens (a private laptop): everything shows, with Not now and the ask
   tab('Rounds so far');
   fireEvent.click(screen.getByTestId('late-review'));
   expect(document.body.textContent).toMatch(/We never write the handoff down/);
+  /* The set's questions are the picker's (docs/design/question-picker);
+     the menu keeps the door. */
   tab('Up next');
-  fireEvent.click(screen.getByTestId('up-next-choose'));
-  expect(document.body.textContent).toMatch(/The secret next question/);
+  expect(screen.queryByTestId('up-next-choose')).toBeNull();
 });
 
 test('Not now reaches the page for a round type (it was Build Room only)', () => {

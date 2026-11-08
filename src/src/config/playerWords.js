@@ -221,7 +221,7 @@ export const ENDED = Object.freeze({
  * never the main screen, the big screen or the projector.
  */
 export const LOOK_UP = Object.freeze({
-  lobby: 'Everything the room shares, the questions, the results and the discussion, is on the room’s screen. This page is only ever your half.',
+  lobby: 'The questions, the results and the discussion go up on the room’s screen.',
   between: 'The discussion is on the room’s screen. Join in: this is the part the session is for.',
   receiptTrivia: 'The room’s answers go up on the room’s screen when the round closes.',
   receiptWavelength: 'Nothing shows until everyone is in. When the round closes, the words the whole room shares light up on the room’s screen.',
@@ -235,3 +235,16 @@ export const LOOK_UP = Object.freeze({
   surveySent: 'When the survey closes, your host may put the results on the room’s screen.',
   surveyClosed: 'Your host may put the results on the room’s screen. Nobody’s name is shown there.',
 });
+
+/* ------------------------------------------------- the names promise ---- */
+
+/**
+ * THE ONE SENTENCE ABOUT HIDDEN NAMES (owner, 5 Nov 2026; dev QA 5 Nov). The
+ * ballot's line (PlayerPage) and the host's Advanced card (SessionOptions,
+ * "Hide names while voting") both read it from here, so the promise the host
+ * reads when they turn it on is word for word the one the room reads on every
+ * ballot. It never says anonymous: "Only names" is the qualifier, because a
+ * small room can still recognise a voice. The host side used to say "This
+ * hides names, not identities." and had drifted from the ballot.
+ */
+export const NAMES_HIDDEN = 'Only names are hidden, from the host too, until voting closes.';

@@ -136,10 +136,28 @@ export default function RemoteQuestionBrowser({
   onQuestions = null,
   onAskNext = () => {},
   onAskNow = () => {},
+  /* THE PICKER'S FILTERS (docs/design/question-picker D10): `view` is
+     { search, show, category } held by HostRemote for the session (D8), with
+     `onViewChange`; without them the browser keeps its own. `asked` is the
+     session's asked keys (GET /up-next): only with it is Not asked offered. */
+  view = null,
+  onViewChange = null,
+  asked = null,
+  /* Unqueue on a queued row (the sheet's), by key. Null: no Unqueue. */
+  onUnqueue = null,
 }) {
   const [questions, setQuestions] = useState(null);
   const [setName, setSetName] = useState('');
-  const [search, setSearch] = useState('');
+  const [ownView, setOwnView] = useState({ search: '', show: Array.isArray(asked) ? 'unasked' : 'all', category: '' });
+  const pickView = { ...ownView, ...(view || {}) };
+  const changeView = (patch) => {
+    const next = { ...pickView, ...patch };
+    if (typeof onViewChange === 'function') onViewChange(next); else setOwnView(next);
+  };
+  const { search } = pickView;
+  const setSearch = (value) => changeView({ search: value });
+  const askedKnown = Array.isArray(asked);
+  const show = askedKnown ? pickView.show : 'all';
   /*
     WHAT WENT WRONG, NOT MERELY THAT SOMETHING DID.
 
@@ -238,7 +256,15 @@ export default function RemoteQuestionBrowser({
     return { rows: list, sources: map };
   }, [questions]);
 
-  const shown = useMemo(() => filterRemoteRows(rows, search), [rows, search]);
+  const shown = useMemo(
+    () => filterRemoteRows(rows, search, { show, category: pickView.category, asked: asked || [] }),
+    [rows, search, show, pickView.category, asked],
+  );
+  const notAskedCount = useMemo(
+    () => (askedKnown ? filterRemoteRows(rows, '', { show: 'unasked', asked }).length : rows.length),
+    [rows, asked, askedKnown],
+  );
+  const categoryNames = useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))], [rows]);
 
   useEffect(() => {
     if (onQuestions && questions) onQuestions(questions);
@@ -273,6 +299,19 @@ export default function RemoteQuestionBrowser({
     const mine = (which) => asking !== null && asking.id === row.id && asking.which === which;
     const nextWord = mine('next') ? 'Working…' : 'Ask next';
     const nowWord = mine('now') ? 'Working…' : (armed ? 'Tap again to ask now' : 'Ask now');
+    if (position > 0 && typeof onUnqueue === 'function') {
+      return (
+        <Button
+          variant="secondary" size={44} className="hrq-next"
+          disabled={busy || asking !== null}
+          aria-label={`Unqueue “${row.title}”`}
+          onClick={() => onUnqueue(questionKey(String(row.id)))}
+          data-testid="hrq-unqueue"
+        >
+          Unqueue
+        </Button>
+      );
+    }
     return (
       <>
         <Button
@@ -539,11 +578,43 @@ export default function RemoteQuestionBrowser({
         <input
           type="search"
           value={search}
-          placeholder="Search titles…"
+          placeholder={rows.length ? `Search ${rows.length} questions` : 'Search questions'}
           aria-label="Search questions"
           onChange={(event) => setSearch(event.target.value)}
         />
       </label>
+
+      {/* SHOW AND CATEGORY (question picker D10, §1.8): the laptop's two
+          filters as two selects. They change this list only; the session's
+          category switches stay under Up next's Categories line. */}
+      {rows.length ? (
+        <div className="hrq-filters" data-testid="hrq-filters">
+          {askedKnown ? (
+            <label className="hrq-select">
+              <span className="hrq-visually-hidden">Show</span>
+              <select value={show} onChange={(e) => changeView({ show: e.target.value })} data-testid="hrq-show">
+                <option value="unasked">{`Not asked (${notAskedCount})`}</option>
+                <option value="all">{`All (${rows.length})`}</option>
+              </select>
+            </label>
+          ) : null}
+          {categoryNames.length > 1 ? (
+            <label className="hrq-select">
+              <span className="hrq-visually-hidden">Category</span>
+              <select value={pickView.category} onChange={(e) => changeView({ category: e.target.value })} data-testid="hrq-category">
+                <option value="">All categories</option>
+                {categoryNames.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+      {pickView.category ? (
+        <p className="hrq-filtered" data-testid="hrq-filtered">
+          {`${shown.length} in ${pickView.category} · `}
+          <button type="button" className="hrq-clear" onClick={() => changeView({ category: '' })}>Clear</button>
+        </p>
+      ) : null}
 
       {questions === null && <p className="hr-hint">Reading the question set…</p>}
 
@@ -574,7 +645,7 @@ export default function RemoteQuestionBrowser({
 
       {questions !== null && !failure && shown.length === 0 && (
         <p className="hr-hint">
-          {rows.length === 0 ? 'This set has no questions.' : 'Nothing matches that search.'}
+          {rows.length === 0 ? 'This set has no questions.' : 'Nothing matches these filters.'}
         </p>
       )}
 

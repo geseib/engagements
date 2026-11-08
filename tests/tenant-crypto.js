@@ -142,6 +142,9 @@ check('question fields are exactly the agreed set', () =>
     // A Build Room ready question's note for Claude (step 7b): how to use the
     // decided answer, never shown to the room (admin/shared/build-room-fields.js).
     'ClaudeNote',
+    // A bluff round's real answer: the same spoiler as the reveal
+    // (docs/design/bluff-round/README.md).
+    'RealAnswer',
   ].sort()));
 check('the survey switches and vocabulary stay plaintext — flags, not prose', () => {
   for (const f of ['kind', 'required', 'allowMultiple', 'maxPicks', 'allowOther', 'shuffle', 'scale',

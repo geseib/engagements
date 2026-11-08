@@ -56,18 +56,23 @@ describe('consolePeopleFor: never "still writing" beside someone who has answere
       players.map((p) => ({ name: p.name, state: 'unknown' })),
     );
   });
-  test('names that cover the count -> ticks and still writing', () => {
+  // Owner, 5 Nov 2026 (cut 6): the people still out sort first, roster order inside each group.
+  test('names that cover the count -> still writing first, then the ticks', () => {
     expect(consolePeopleFor({ moment: 'ANSWERING', players, answeredNames: ['Ada', 'Omar'], answeredCount: 2, ...anon })).toEqual([
-      { name: 'Ada', state: 'answered' }, { name: 'Omar', state: 'answered' },
       { name: 'Lin', state: 'writing' }, { name: 'Bo', state: 'writing' },
+      { name: 'Ada', state: 'answered' }, { name: 'Omar', state: 'answered' },
     ]);
   });
   test('voting reads the voters the same way', () => {
-    expect(consolePeopleFor({ moment: 'VOTING', players, votedNames: ['Lin'], votedCount: 1, ...anon }).map((p) => p.state))
-      .toEqual(['not-yet', 'not-yet', 'voted', 'not-yet']);
+    expect(consolePeopleFor({ moment: 'VOTING', players, votedNames: ['Lin'], votedCount: 1, ...anon }).map((p) => [p.name, p.state]))
+      .toEqual([['Ada', 'not-yet'], ['Omar', 'not-yet'], ['Bo', 'not-yet'], ['Lin', 'voted']]);
     expect(consolePeopleFor({ moment: 'VOTE_RESPONSES', players, votedNames: [], votedCount: 2, ...anon }).map((p) => p.state)).toEqual(['unknown', 'unknown', 'unknown', 'unknown']);
   });
-  test('other moments: everyone is here', () => {
+  test('other moments: everyone is here, in roster order', () => {
     expect(consolePeopleFor({ moment: 'READ', players }).map((p) => p.state)).toEqual(['here', 'here', 'here', 'here']);
+  });
+  test('away (no page open) rides on the row, in any moment (host-attention D8)', () => {
+    const rows = consolePeopleFor({ moment: 'READ', players: [{ name: 'Ada', deviceConnected: false }, { name: 'Bo', deviceConnected: true }, { name: 'Cy' }] });
+    expect(rows.map((r) => Boolean(r.away))).toEqual([true, false, false]);
   });
 });

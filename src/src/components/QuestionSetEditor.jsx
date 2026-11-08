@@ -36,6 +36,7 @@ import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
 import { editableRows } from '../utils/questionRows';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
+import { BLUFF_WORDS } from '../config/bluffRound';
 
 const API_BASE = () => window.API_BASE;
 
@@ -213,6 +214,7 @@ export default function QuestionSetEditor({
   const [engagementType, setEngagementType] = useState('call-and-answer');
   const [promptId, setPromptId] = useState('');
   const [roundNoun, setRoundNoun] = useState('');
+  const [bluffRound, setBluffRound] = useState(false);
   // Per-set voice. '' means "adapt to the session", which is the default and
   // beats the prompt template's baked-in persona on purpose.
   const [personaId, setPersonaId] = useState('');
@@ -430,7 +432,14 @@ export default function QuestionSetEditor({
     }
   }, [setId, activeVersion, showVersions]);
 
-  // Reload the form whenever a different set is opened.
+  /* WHETHER THE SET ITSELF HAS ARRIVED, or only its id. A fresh page load on
+     /admin?section=questionsets&set=<id> (the Archive's "Open the set" link)
+     hands the editor a bare `{ id }` before the list loads; the real set then
+     arrives under the same id. Keyed on the id alone, the form never refilled
+     and opened blank: no title, no description, Unfiled (dev QA 2026-11-07). */
+  const setArrived = Boolean(questionSet && Object.keys(questionSet).some((key) => key !== 'id'));
+
+  // Reload the form whenever a different set is opened, or the opened one arrives.
   useEffect(() => {
     const snapshot = editableSnapshot(questionSet || {});
     setTitle(questionSet?.name || '');
@@ -440,6 +449,7 @@ export default function QuestionSetEditor({
     setEngagementType(snapshot.engagementType);
     setPromptId(snapshot.promptId);
     setRoundNoun(snapshot.roundNoun);
+    setBluffRound(snapshot.bluffRound);
     setPersonaId(snapshot.personaId);
     setRoundKind(snapshot.roundKind);
     setRoundKindBrief(snapshot.roundKindBrief);
@@ -465,7 +475,7 @@ export default function QuestionSetEditor({
     setAiHeld({});
     loadVersions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setId]);
+  }, [setId, setArrived]);
 
   // Pass the Questions panel's unsaved state on to whoever owns the container.
   // Reported rather than reached into, the same way the panel reports it here.
@@ -742,7 +752,8 @@ export default function QuestionSetEditor({
     // no longer has.
     roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : '',
     topic,
-    tags: ownTags
+    tags: ownTags,
+    bluffRound
   };
 
   // The body this form would send right now. Built here as well as in the save
@@ -1461,6 +1472,21 @@ export default function QuestionSetEditor({
                 {roundKindGaps(roundKind, { brief: roundKindBrief, instruction: 'n/a' }).length > 0
                   && ' Saving without a description leaves the generator no direction to follow.'}
               </small>
+            </div>
+          )}
+
+          {normalizeGameType(engagementType) === 'call-and-answer' && (
+            <div className="form-group">
+              <label htmlFor="edit-bluff-round">
+                <input
+                  id="edit-bluff-round"
+                  type="checkbox"
+                  checked={bluffRound}
+                  onChange={(e) => setBluffRound(e.target.checked)}
+                />{' '}
+                {BLUFF_WORDS.setOption}
+              </label>
+              <small className="help-text">{BLUFF_WORDS.setOptionHelp}</small>
             </div>
           )}
 

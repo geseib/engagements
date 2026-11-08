@@ -84,7 +84,18 @@ export function fitCanvas(canvas, profile) {
   resetTally(canvas);
   let ok = true;
   if (main) {
-    let fit = 1;
+    /* A MOMENT MAY GROW (owner, 5 Nov 2026: "making the main body larger").
+       A main carrying data-grow (the question up: PresentMoments PRESENT_GROW)
+       starts the search above the ladder and steps down to the largest scale
+       that fits, as the stage's ASK does (hooks/useStageFit maxFit). The
+       ladder is a floor, not a ceiling. Every other moment starts at 1. */
+    const grow = Math.max(1, parseFloat(main.dataset.grow) || 1);
+    let fit = grow;
+    canvas.style.setProperty('--fit', String(fit));
+    while (overflows(main) && fit > 1) {
+      fit = Math.max(1, Number((fit - 0.03).toFixed(2)));
+      canvas.style.setProperty('--fit', String(fit));
+    }
     while (overflows(main) && fit > ladder.fitMin) {
       fit = Math.max(ladder.fitMin, Number((fit - 0.03).toFixed(2)));
       canvas.style.setProperty('--fit', String(fit));

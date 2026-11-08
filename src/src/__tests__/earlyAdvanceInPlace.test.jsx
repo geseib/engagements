@@ -29,7 +29,7 @@ test('the host page no longer asks with a modal before voting or results', () =>
   expect(bodyOf('handleShowResults')).not.toMatch(/showConfirmation/);
 });
 
-test('first press arms "Start voting anyway" with the count; the second, within 6 s, acts', () => {
+test('first press arms "Start voting anyway" with the count; the second acts; Escape lets go', () => {
   jest.useFakeTimers();
   const step = roundStep('ANSWERING', {
     gameType: 'call-and-answer', roundNoun: 'Round', playerCount: 3, answerCount: 2,
@@ -41,12 +41,14 @@ test('first press arms "Start voting anyway" with the count; the second, within 
   fireEvent.click(screen.getByRole('button', { name: /Start voting/ }));
   expect(onAction).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: /Start voting anyway/ })).toBeInTheDocument();
-  expect(screen.getByRole('alert').textContent).toBe('1 of 3 still writing. Press again to start voting.');
+  expect(screen.getByTestId('bar-armed').textContent).toBe('1 of 3 still writing. Press again to start voting.');
   fireEvent.click(screen.getByRole('button', { name: /Start voting anyway/ }));
   expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ id: 'open-vote' }));
-  // Armed and left alone, it lets go after six seconds.
+  // Armed and left alone it waits (dev QA 5 Nov: no silent timeout); Escape lets go.
   fireEvent.click(screen.getByRole('button', { name: /Start voting/ }));
-  act(() => { jest.advanceTimersByTime(6100); });
+  act(() => { jest.advanceTimersByTime(60000); });
+  expect(screen.getByRole('button', { name: /anyway/ })).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: 'Escape' });
   expect(screen.queryByRole('button', { name: /anyway/ })).toBeNull();
   jest.useRealTimers();
 });

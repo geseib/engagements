@@ -1,0 +1,975 @@
+{
+  "title": "Music & Pop Culture: Encore!",
+  "description": "60 crowd-friendly questions spanning iconic artists, curious instruments, unforgettable records, world sounds, live stages and playful pop-culture favorites. Six rounds, fresh facts, and plenty of “oh, I know this!” moments.",
+  "categories": [
+    "Artists & Alter Egos",
+    "Instrument Detectives",
+    "Records Worth a Spin",
+    "Sounds Around the World",
+    "Take the Stage",
+    "Playful Pop Icons"
+  ],
+  "questions": [
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "easy",
+      "question": "Which English city gave the world the Beatles?",
+      "explanation": "The Beatles came out of Liverpool. Four local musicians turned a city scene into a sound heard around the world—quite a hometown export.",
+      "sources": [
+        "https://rockhall.com/inductees/beatles/"
+      ],
+      "options": [
+        "Liverpool",
+        "Manchester",
+        "Bristol",
+        "Leeds"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "easy",
+      "question": "Who was Queen’s lead singer on “Bohemian Rhapsody”?",
+      "explanation": "Freddie Mercury fronted Queen, bringing theatrical flair to the band’s adventurous rock sound. “Bohemian Rhapsody” is a fine reminder that a rock song does not have to stay in one musical lane.",
+      "sources": [
+        "https://rockhall.com/inductees/queen/"
+      ],
+      "options": [
+        "Robert Plant",
+        "Mick Jagger",
+        "Roger Daltrey",
+        "Freddie Mercury"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "medium",
+      "question": "Bob Marley performed with which band?",
+      "explanation": "Bob Marley and the Wailers helped carry reggae to listeners around the world. The band name sounds sorrowful, but their music could also be joyful, unifying and full of hope.",
+      "sources": [
+        "https://rockhall.com/inductees/bob-marley/"
+      ],
+      "options": [
+        "The Animals",
+        "The Kinks",
+        "The Wailers",
+        "The Byrds"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "easy",
+      "question": "Which country singer was famously known as the Man in Black?",
+      "explanation": "Johnny Cash’s signature nickname was the Man in Black. It is a useful musical reminder that sometimes a performer’s wardrobe becomes part of the legend.",
+      "sources": [
+        "https://rockhall.com/wp-content/uploads/2024/03/Johnny_Cash_1992.pdf"
+      ],
+      "options": [
+        "Johnny Cash",
+        "Willie Nelson",
+        "Glen Campbell",
+        "Kenny Rogers"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "hard",
+      "question": "Which lyricist began his long-running songwriting partnership with Elton John in 1967?",
+      "explanation": "Bernie Taupin supplied the words, and Elton John added the music. Elton’s official account describes lyrics arriving first—even when the two collaborators were far apart.",
+      "sources": [
+        "https://www.eltonjohn.com/stories/happy-birthday-to-bernie-taupin-2019"
+      ],
+      "options": [
+        "Bernie Taupin",
+        "Burt Bacharach",
+        "Tim Rice",
+        "Andrew Lloyd Webber"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "hard",
+      "question": "André 3000 and Big Boi are the two members of which hip-hop duo?",
+      "explanation": "André 3000 and Big Boi make up OutKast. Their Atlanta-rooted music mixes hip-hop with funk, soul and other sounds, so staying in one musical box was never the plan.",
+      "sources": [
+        "https://rockhall.com/inductees/outkast/"
+      ],
+      "options": [
+        "Black Star",
+        "Run the Jewels",
+        "OutKast",
+        "Mobb Deep"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "easy",
+      "question": "Which singer is known as the Queen of Soul?",
+      "explanation": "Aretha Franklin earned the Queen of Soul title. Her 1967 recording of “Respect” became a defining part of her musical legacy—royalty with a very powerful voice.",
+      "sources": [
+        "https://www.detroithistorical.org/learn/online-research/encyclopedia-of-detroit/franklin-aretha"
+      ],
+      "options": [
+        "Diana Ross",
+        "Aretha Franklin",
+        "Dionne Warwick",
+        "Gladys Knight"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "medium",
+      "question": "Who wrote and recorded “I Will Always Love You” before Whitney Houston’s famous version?",
+      "explanation": "Dolly Parton wrote the song as her professional partnership with Porter Wagoner was ending. Her recording appeared on Jolene in 1974, long before Houston’s 1992 cover.",
+      "sources": [
+        "https://rockhall.com/inductees/dolly-parton/"
+      ],
+      "options": [
+        "Carole King",
+        "Joni Mitchell",
+        "Carly Simon",
+        "Dolly Parton"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "medium",
+      "question": "Who shared the songwriting Grammy for “bad guy” with Billie Eilish in 2020?",
+      "explanation": "Billie Eilish and FINNEAS won Song of the Year for “bad guy” at the 2020 Grammys. That award recognizes the songwriting: the people who built the song, not just the finished recording.",
+      "sources": [
+        "https://www.grammy.com/news/billie-eilish-finneas-wins-song-year-bad-guy-2020-grammys/"
+      ],
+      "options": [
+        "Jack Antonoff",
+        "FINNEAS",
+        "Mark Ronson",
+        "Max Martin"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Artists & Alter Egos",
+      "difficulty": "medium",
+      "question": "Which drummer joined Nirvana in 1990?",
+      "explanation": "Dave Grohl joined Nirvana in 1990 after playing with Scream. The band’s official timeline records the arrival of the drummer who became part of its classic lineup.",
+      "sources": [
+        "https://www.nirvana.com/timelines/"
+      ],
+      "options": [
+        "Travis Barker",
+        "Chad Smith",
+        "Dave Grohl",
+        "Lars Ulrich"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "easy",
+      "question": "How many keys does a standard modern acoustic piano have?",
+      "explanation": "The standard modern piano has 88 keys. Some specialist pianos have more, so “standard” is doing important work here—there are always musicians who want extra room.",
+      "sources": [
+        "https://www.yamaha.com/en/musical_instrument_guide/piano/trivia/trivia007.html"
+      ],
+      "options": [
+        "64",
+        "72",
+        "100",
+        "88"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "medium",
+      "question": "Inside an acoustic piano, what normally strikes the strings?",
+      "explanation": "Pressing a piano key sets a mechanism in motion that makes a hammer strike the strings. The soundboard helps project the vibrations, turning a small finger movement into a room-filling sound.",
+      "sources": [
+        "https://www.yamaha.com/en/musical_instrument_guide/piano/selection/selection002.html"
+      ],
+      "options": [
+        "Metal picks",
+        "Spinning wheels",
+        "Air jets",
+        "Hammers"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "medium",
+      "question": "A saxophone is usually made of brass. Which instrument family does it belong to?",
+      "explanation": "The saxophone belongs to the woodwind family because of how it produces sound, including its single reed. Instrument families are not simply a materials-sorting exercise.",
+      "sources": [
+        "https://hub.yamaha.com/winds/wood/the-woodwind-family-explained/"
+      ],
+      "options": [
+        "Brass",
+        "Percussion",
+        "Woodwind",
+        "Bowed strings"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "easy",
+      "question": "How many strings does a standard violin have?",
+      "explanation": "A standard violin has four strings, tuned to G, D, A and E. That is a compact setup for an instrument capable of making such a big musical impression.",
+      "sources": [
+        "https://hub.yamaha.com/strings/s-acoustic/whats-the-difference-between-fiddle-and-violin/"
+      ],
+      "options": [
+        "3",
+        "5",
+        "4",
+        "6"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "medium",
+      "question": "Which instrument is played by moving your hands near it without touching it?",
+      "explanation": "A theremin responds to the player’s hands without physical contact. Air guitar finally has a surprisingly serious electronic cousin.",
+      "sources": [
+        "https://www.metmuseum.org/art/collection/search/739621"
+      ],
+      "options": [
+        "Accordion",
+        "Marimba",
+        "Mandolin",
+        "Theremin"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "easy",
+      "question": "Which brass instrument commonly changes pitch using a long moving slide?",
+      "explanation": "The slide trombone changes its tube length as the player moves the slide. Longer and shorter tubing changes the pitch—music with a built-in stretching mechanism.",
+      "sources": [
+        "https://hub.yamaha.com/winds/brass/the-brass-family-explained/"
+      ],
+      "options": [
+        "Trombone",
+        "Trumpet",
+        "French horn",
+        "Tuba"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "medium",
+      "question": "How many valves does a standard modern trumpet usually have?",
+      "explanation": "A standard trumpet has three valves. Different combinations redirect the air through extra tubing, giving the player more notes without needing a trombone-style slide.",
+      "sources": [
+        "https://hub.yamaha.com/winds/brass/trumpet-vs-trombone/"
+      ],
+      "options": [
+        "3",
+        "2",
+        "4",
+        "6"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "easy",
+      "question": "Which of these orchestral woodwinds is played without a cane reed?",
+      "explanation": "A flute makes sound as air is directed across an opening rather than through a vibrating cane reed. The woodwind family has more than one way to get the air moving.",
+      "sources": [
+        "https://hub.yamaha.com/winds/wood/the-woodwind-family-explained/"
+      ],
+      "options": [
+        "Clarinet",
+        "Oboe",
+        "Bassoon",
+        "Flute"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "hard",
+      "question": "How many vibrating cane blades does a standard oboe reed have?",
+      "explanation": "An oboe uses a double reed: two cane blades vibrating together. The name is unusually helpful for once—no musical detective work required after the reveal.",
+      "sources": [
+        "https://www.yamaha.com/en/musical_instrument_guide/oboe/mechanism/mechanism002.html"
+      ],
+      "options": [
+        "1",
+        "3",
+        "2",
+        "4"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Instrument Detectives",
+      "difficulty": "hard",
+      "question": "How many pedals does a standard concert pedal harp have?",
+      "explanation": "A pedal harp has seven pedals. They change string pitches between flat, natural and sharp, so a harpist’s feet have a musical job alongside those busy hands.",
+      "sources": [
+        "https://www.harpsociety.org/new-to-the-harp"
+      ],
+      "options": [
+        "3",
+        "5",
+        "12",
+        "7"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "hard",
+      "question": "Which Queen album includes “Bohemian Rhapsody”?",
+      "explanation": "“Bohemian Rhapsody” appears on A Night at the Opera, released in 1975. Given the song’s theatrical twists, the album title makes a rather good introduction.",
+      "sources": [
+        "https://rockhall.com/inductees/queen/"
+      ],
+      "options": [
+        "Sheer Heart Attack",
+        "News of the World",
+        "A Night at the Opera",
+        "Jazz"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "medium",
+      "question": "Which Adele album includes “Rolling in the Deep” and “Someone Like You”?",
+      "explanation": "Both songs appear on 21. The album won Album of the Year at the 2012 Grammys, while “Rolling in the Deep” also collected major song and record honors.",
+      "sources": [
+        "https://www.grammy.com/news/adele-21-10-year-anniversary/"
+      ],
+      "options": [
+        "19",
+        "21",
+        "25",
+        "30"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "easy",
+      "question": "Which singer released “Hello” as the lead single from the album 25?",
+      "explanation": "Adele introduced 25 with “Hello.” It is an unusually dramatic way to begin a conversation—and a memorable way to begin an album campaign.",
+      "sources": [
+        "https://www.grammy.com/news/adele-turns-25-record/"
+      ],
+      "options": [
+        "Adele",
+        "Lorde",
+        "Dua Lipa",
+        "Sia"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "hard",
+      "question": "Which Daft Punk album won Album of the Year at the 2014 Grammys?",
+      "explanation": "Random Access Memories won Album of the Year in 2014. The title sounds like a computer specification, but the prize was very much for the music.",
+      "sources": [
+        "https://www.grammy.com/awards/categories/album-of-the-year/2014/"
+      ],
+      "options": [
+        "Discovery",
+        "Homework",
+        "Random Access Memories",
+        "Human After All"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "easy",
+      "question": "Which group burst onto the pop scene with the 1996 single “Wannabe”?",
+      "explanation": "“Wannabe” was the Spice Girls’ debut single. The group insisted on releasing it first, making it quite a strong opening argument for trusting your instincts.",
+      "sources": [
+        "https://thespicegirls.com/about/"
+      ],
+      "options": [
+        "All Saints",
+        "Destiny’s Child",
+        "TLC",
+        "Spice Girls"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "easy",
+      "question": "Which Beatles album cover shows the four members walking across a zebra crossing?",
+      "explanation": "The crossing appears on Abbey Road. The band stepped out near their recording studio for the photograph, giving an everyday road crossing an extraordinary second career.",
+      "sources": [
+        "https://www.thebeatles.com/abbey-road-anniversary-editions-out-now"
+      ],
+      "options": [
+        "Abbey Road",
+        "Revolver",
+        "Help!",
+        "Rubber Soul"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "medium",
+      "question": "“Dreams” and “Go Your Own Way” appear on which Fleetwood Mac album?",
+      "explanation": "Both songs are part of Rumours. The album turned deeply personal experiences into music that listeners could make part of their own lives.",
+      "sources": [
+        "https://images.rhino.com/press-release/rumours"
+      ],
+      "options": [
+        "Tusk",
+        "Mirage",
+        "Rumours",
+        "Tango in the Night"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "medium",
+      "question": "Who released the 1971 album Tapestry?",
+      "explanation": "Carole King released Tapestry in February 1971. It became a defining singer-songwriter album, with a title that neatly suggests individual songs woven into a bigger whole.",
+      "sources": [
+        "https://www.caroleking.com/news/carole-kings-landmark-album-tapestry-celebrates-its-55th-anniversary"
+      ],
+      "options": [
+        "Joni Mitchell",
+        "Carole King",
+        "Joan Baez",
+        "Janis Joplin"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "easy",
+      "question": "Which singer’s name completes the album title The Miseducation of ...?",
+      "explanation": "The full title is The Miseducation of Lauryn Hill. It won Album of the Year at the 1999 Grammys—an education that clearly impressed the voters.",
+      "sources": [
+        "https://www.grammy.com/awards/categories/album-of-the-year/1999/"
+      ],
+      "options": [
+        "Erykah Badu",
+        "Alicia Keys",
+        "Lauryn Hill",
+        "Mary J. Blige"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Records Worth a Spin",
+      "difficulty": "medium",
+      "question": "Which OutKast double album includes “Hey Ya!”?",
+      "explanation": "“Hey Ya!” appears on Speakerboxxx/The Love Below. OutKast made the double-album format a playground for different sounds rather than simply a longer track list.",
+      "sources": [
+        "https://rockhall.com/inductees/outkast/"
+      ],
+      "options": [
+        "Stankonia",
+        "ATLiens",
+        "Aquemini",
+        "Speakerboxxx/The Love Below"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "medium",
+      "question": "Tango is a shared cultural tradition especially associated with which two countries?",
+      "explanation": "Argentina and Uruguay jointly celebrate tango as part of their cultural heritage. Giving both countries credit avoids turning a shared tradition into a one-country quiz trap.",
+      "sources": [
+        "https://ich.unesco.org/en/RL?RL=00258"
+      ],
+      "options": [
+        "Argentina and Uruguay",
+        "Spain and Portugal",
+        "Mexico and Guatemala",
+        "Chile and Peru"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "easy",
+      "question": "Flamenco is especially associated with which country?",
+      "explanation": "Flamenco has deep roots in Andalusia in Spain. It brings together song, dance and instrumental music, so describing it as only a dance misses much of the performance.",
+      "sources": [
+        "https://www.spain.info/en/discover-spain/flamenco-spain/"
+      ],
+      "options": [
+        "Greece",
+        "Spain",
+        "Ireland",
+        "Austria"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "medium",
+      "question": "Fado is a singing tradition from which country?",
+      "explanation": "Fado is a Portuguese song tradition, commonly performed by a solo singer with string accompaniment. The Portuguese guitarra is part of its distinctive musical voice.",
+      "sources": [
+        "https://ich.unesco.org/en/RL/fado-00563"
+      ],
+      "options": [
+        "Italy",
+        "Norway",
+        "Portugal",
+        "Poland"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "medium",
+      "question": "Gamelan ensembles, known for gongs and metallophones, are closely associated with which country?",
+      "explanation": "Gamelan is a traditional Indonesian ensemble with a strong percussion presence. Gongs and metallophones help create a layered sound in which many parts fit together.",
+      "sources": [
+        "https://www.indonesia.travel/sa/en/travel-ideas/culture/gamelan"
+      ],
+      "options": [
+        "Morocco",
+        "Finland",
+        "Indonesia",
+        "Mexico"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "easy",
+      "question": "Reggae developed in which Caribbean country?",
+      "explanation": "Reggae developed in Jamaica, drawing on earlier local sounds such as ska and rocksteady. Bob Marley helped bring its grooves and messages to a global audience.",
+      "sources": [
+        "https://rockhall.com/inductees/bob-marley/"
+      ],
+      "options": [
+        "Barbados",
+        "Cuba",
+        "Dominican Republic",
+        "Jamaica"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "easy",
+      "question": "Mariachi music is a tradition of which country?",
+      "explanation": "Mariachi is a Mexican musical tradition combining singing with a distinctive ensemble sound. UNESCO recognizes the way it carries regional heritage and community history through music.",
+      "sources": [
+        "https://ich.unesco.org/en/RL/mariachi-string-music-song-and-trumpet-00575"
+      ],
+      "options": [
+        "Argentina",
+        "Mexico",
+        "Portugal",
+        "Japan"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "hard",
+      "question": "The Brazilian tradition Samba de Roda developed in the Recôncavo region of which state?",
+      "explanation": "Samba de Roda developed in Bahia’s Recôncavo region. It combines music, dance and poetry, and helped influence the urban samba that later flourished in Rio de Janeiro.",
+      "sources": [
+        "https://ich.unesco.org/en/RL/samba-de-roda-of-the-reconcavo-of-bahia-00101"
+      ],
+      "options": [
+        "Bahia",
+        "Amazonas",
+        "Paraná",
+        "Goiás"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "medium",
+      "question": "DJ Kool Herc and Cindy Campbell’s celebrated August 1973 party took place in which New York City borough?",
+      "explanation": "Their back-to-school party took place at 1520 Sedgwick Avenue in the Bronx. It is a landmark event in hip-hop history, showing just how much cultural energy one neighborhood party can generate.",
+      "sources": [
+        "https://www.thehenryford.org/collections/explore/articles/from-a-djs-closet"
+      ],
+      "options": [
+        "Queens",
+        "Brooklyn",
+        "The Bronx",
+        "Staten Island"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "easy",
+      "question": "The sitar is particularly associated with the classical music of which country?",
+      "explanation": "The sitar is a prominent instrument in the Hindustani classical tradition of India. Its long neck and distinctive string arrangement make it an instrument that is as recognizable to the eye as to the ear.",
+      "sources": [
+        "https://emuseum.nmmusd.org/objects/5827/sitar"
+      ],
+      "options": [
+        "Sweden",
+        "India",
+        "Peru",
+        "Egypt"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Sounds Around the World",
+      "difficulty": "hard",
+      "question": "A traditional West African kora commonly has how many strings?",
+      "explanation": "The kora is commonly a 21-string harp associated with the Mandé region of West Africa. Its strings rise over a bridge on a skin-covered gourd body—a remarkable combination of materials and music.",
+      "sources": [
+        "https://www.amis.org/post/on-the-organology-of-the-kora"
+      ],
+      "options": [
+        "6",
+        "12",
+        "18",
+        "21"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "easy",
+      "question": "What is the name of Glastonbury Festival’s best-known main stage?",
+      "explanation": "It is the Pyramid Stage. The first version appeared in 1971, making geometry part of the festival’s identity almost from the beginning.",
+      "sources": [
+        "https://www.glastonburyfestivals.co.uk/areas/pyramid-stage/"
+      ],
+      "options": [
+        "Summit Stage",
+        "Pyramid Stage",
+        "Crown Stage",
+        "Obelisk Stage"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "hard",
+      "question": "What farm product was included free with the £1 ticket to the first Glastonbury festival in 1970?",
+      "explanation": "The £1 ticket included free milk from the farm. Early festival hospitality was less about VIP lounges and more about remembering where the concert was taking place.",
+      "sources": [
+        "https://www.glastonburyfestivals.co.uk/history/history-1970/"
+      ],
+      "options": [
+        "Milk",
+        "Honey",
+        "Eggs",
+        "Apple juice"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "easy",
+      "question": "A Grammy trophy is shaped like which old-fashioned music device?",
+      "explanation": "The Grammy trophy depicts a gramophone. Even when an award honors very modern music, the little golden prize gives a nod to an earlier era of recorded sound.",
+      "sources": [
+        "https://www.grammy.com/news/behind-the-scenes-grammy-u-trophy-holder-2024-grammys-premiere-ceremony/"
+      ],
+      "options": [
+        "Jukebox",
+        "Gramophone",
+        "Cassette player",
+        "Transistor radio"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "hard",
+      "question": "The Tony Awards are named in honor of which theatre figure?",
+      "explanation": "The awards honor Antoinette Perry, an actress, director, producer and American Theatre Wing leader. “Tony” is not a mysterious awards acronym: it is a person’s nickname.",
+      "sources": [
+        "https://www.tonyawards.com/history/antoinette-perry/"
+      ],
+      "options": [
+        "Angela Lansbury",
+        "Ethel Merman",
+        "Mary Martin",
+        "Antoinette Perry"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "medium",
+      "question": "Which Nashville country-music institution began in 1925 as the WSM Barn Dance?",
+      "explanation": "The WSM Barn Dance became the Grand Ole Opry. Its roots are in radio, proving that a legendary live show can reach far beyond the people sitting in the room.",
+      "sources": [
+        "https://www.opry.com/planatrip/history"
+      ],
+      "options": [
+        "Country Music Hall of Fame",
+        "Bluebird Cafe",
+        "Ryman Auditorium",
+        "Grand Ole Opry"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "medium",
+      "question": "Despite its name, the 1969 Woodstock festival was held in which New York town?",
+      "explanation": "The festival took place on a dairy farm in Bethel, New York. Sometimes a concert’s name and its actual map location are not singing from the same song sheet.",
+      "sources": [
+        "https://woodstock.com/about/"
+      ],
+      "options": [
+        "Bethel",
+        "Woodstock",
+        "Ithaca",
+        "Saratoga Springs"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "easy",
+      "question": "Who wrote the book, music and lyrics for the stage musical Hamilton?",
+      "explanation": "Lin-Manuel Miranda wrote Hamilton’s book, music and lyrics. In theatre, the “book” means the script, not the biography on which a musical may be based.",
+      "sources": [
+        "https://www.linmanuel.com/project/hamilton/"
+      ],
+      "options": [
+        "Stephen Sondheim",
+        "Lin-Manuel Miranda",
+        "Jonathan Larson",
+        "Stephen Schwartz"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "medium",
+      "question": "Which Taylor Swift album won Album of the Year at the 2024 Grammys?",
+      "explanation": "Midnights won Album of the Year at the 2024 ceremony. The date matters in awards trivia: we are asking about that specific ceremony, not a permanent ranking of albums.",
+      "sources": [
+        "https://www.grammy.com/awards/categories/album-of-the-year/2024/"
+      ],
+      "options": [
+        "Midnights",
+        "Lover",
+        "Reputation",
+        "Speak Now"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "easy",
+      "question": "Which song won Eurovision for ABBA in 1974?",
+      "explanation": "ABBA won the 1974 Eurovision Song Contest with “Waterloo.” A song named for a famous defeat became a very memorable musical victory.",
+      "sources": [
+        "https://www.eurovision.com/stories/waterloo-at-50-revisiting-abbas-charge-to-eurovision-victory-in-1974/"
+      ],
+      "options": [
+        "Dancing Queen",
+        "Mamma Mia",
+        "Waterloo",
+        "Take a Chance on Me"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Take the Stage",
+      "difficulty": "medium",
+      "question": "Loreen won Eurovision in 2012 with which song?",
+      "explanation": "Loreen won with “Euphoria” in 2012. “Tattoo” is also a Loreen-winning answer, but for 2023 instead—this time the year is the clue that settles it.",
+      "sources": [
+        "https://www.eurovision.com/eurovision-song-contest/countries/sweden/"
+      ],
+      "options": [
+        "Tattoo",
+        "Euphoria",
+        "Heroes",
+        "Satellite"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "medium",
+      "question": "The LEGO name comes from Danish words meaning what?",
+      "explanation": "LEGO comes from the Danish words “leg godt,” meaning “play well.” The company name is essentially a tiny invitation to have a good time.",
+      "sources": [
+        "https://www.lego.com/en-no/aboutus/lego-group/the-lego-group-history"
+      ],
+      "options": [
+        "Build tall",
+        "Little bricks",
+        "Bright ideas",
+        "Play well"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "medium",
+      "question": "What was the main idea of the original Tamagotchi toy?",
+      "explanation": "Tamagotchi put a digital pet inside a small handheld device. Its 1996 arrival turned everyday care into a game—suddenly a keychain could make demands on your schedule.",
+      "sources": [
+        "https://tamagotchi-official.com/us/series/uni/news/02_492/"
+      ],
+      "options": [
+        "Recording voice messages",
+        "Caring for a digital pet",
+        "Solving sliding-tile puzzles",
+        "Taking miniature photographs"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "hard",
+      "question": "The material that became Play-Doh was originally sold for what household job?",
+      "explanation": "Before it became a modeling toy, the compound was sold as wallpaper cleaner. A teacher helped reveal its classroom potential, turning a cleaning product into something children could create with.",
+      "sources": [
+        "https://www.museumofplay.org/blog/the-history-of-play-doh-good-clean-fun/"
+      ],
+      "options": [
+        "Polishing shoes",
+        "Cleaning wallpaper",
+        "Sealing windows",
+        "Washing dishes"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "easy",
+      "question": "Which classic toy is a coil-shaped spring that can “walk” down stairs?",
+      "explanation": "The Slinky is a spring turned into a toy. It makes a simple set of stairs look like a miniature performance stage.",
+      "sources": [
+        "https://www.museumofplay.org/toys/slinky/"
+      ],
+      "options": [
+        "Slinky",
+        "Etch A Sketch",
+        "Spirograph",
+        "View-Master"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "hard",
+      "question": "Mattel introduced the original Barbie doll in which year?",
+      "explanation": "Barbie debuted in 1959. That places the doll’s arrival well before the 1980s toy boom—and many decades before her big-screen reinvention.",
+      "sources": [
+        "https://www.si.edu/object/barbie-doll%3Anmah_1313358",
+        "https://creations.mattel.com/blogs/inside-look/barbie-65th-anniversary-inspiration-through-the-decades"
+      ],
+      "options": [
+        "1959",
+        "1949",
+        "1969",
+        "1979"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "easy",
+      "question": "What breed of dog is Snoopy from Peanuts?",
+      "explanation": "Snoopy is a beagle. His imagination is considerably bigger than an ordinary doghouse, which is part of the joke that makes him so memorable.",
+      "sources": [
+        "https://www.peanuts.com/about-peanuts"
+      ],
+      "options": [
+        "Dalmatian",
+        "Beagle",
+        "Poodle",
+        "Dachshund"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "easy",
+      "question": "Pikachu belongs to which Pokémon type?",
+      "explanation": "Pikachu is an Electric-type Pokémon. Those familiar cheek patches are a good hint that this is not a pet you would ask to guard your charging cable.",
+      "sources": [
+        "https://www.pokemon.com/uk/pokedex/pikachu"
+      ],
+      "options": [
+        "Fire",
+        "Water",
+        "Grass",
+        "Electric"
+      ],
+      "correctIndex": 3
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "medium",
+      "question": "According to Sanrio’s character biography, Hello Kitty was born in the suburbs of which city?",
+      "explanation": "Hello Kitty’s official biography places her birth in the suburbs of London. A character created by a Japanese company can still have a distinctly British fictional hometown.",
+      "sources": [
+        "https://corporate.sanrio.co.jp/en/business-info/brands/hello_kity/"
+      ],
+      "options": [
+        "Tokyo",
+        "London",
+        "Paris",
+        "New York"
+      ],
+      "correctIndex": 1
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "medium",
+      "question": "In Kirby games, what can swallowing certain enemies let Kirby do?",
+      "explanation": "Kirby can copy the abilities of certain enemies he inhales and swallows. It is an unusual learning strategy, and definitely one to leave inside the video game.",
+      "sources": [
+        "https://www.nintendo.com/ph/switch/arzg/copy/index.html"
+      ],
+      "options": [
+        "Recruit them as permanent teammates",
+        "Transform every enemy into a coin",
+        "Copy their abilities",
+        "Make every level underwater"
+      ],
+      "correctIndex": 2
+    },
+    {
+      "category": "Playful Pop Icons",
+      "difficulty": "easy",
+      "question": "Who is Mario’s green-clad brother?",
+      "explanation": "Luigi is Mario’s brother and fellow adventurer. Red and green make a convenient color code when the family business involves so much running and jumping.",
+      "sources": [
+        "https://play.nintendo.com/news-tips/news/learn-more-mushroom-kingdom-friends/"
+      ],
+      "options": [
+        "Luigi",
+        "Wario",
+        "Yoshi",
+        "Toad"
+      ],
+      "correctIndex": 0
+    }
+  ]
+}

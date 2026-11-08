@@ -42,17 +42,15 @@ test('the dock hears it through hostControlsFor, and the panel gets the progress
   expect(source).toMatch(/<SessionSetupPanel[\s\S]*?remoteUrl=\{remoteUrl\}\s+goal=\{goal\}/);
 });
 
-// RETIRED: "the rail never prints the goal". M1b kept the plan off the room's
-// screen; the 2026-09-29 QA drive found the goal invisible there (finding #3)
-// and the fix plan puts it on the header. What stays true: the rail's goal is
-// goalStage's, not a second derivation, and a survey's rail carries none.
-test('the rail prints the goal from goalStage, and only on a counted round', () => {
+// The 2026-09-29 QA drive put the goal on the header (finding #3); the owner
+// took it off again on 5 Nov 2026 (cut 3: "Goal 5" is jargon to the room).
+// The host still reads it: the goal's notice is Your part now's status.
+test('the rail carries no goal; the goal\'s notice stays the host\'s status', () => {
   const at = source.indexOf('const railContext = ');
   const block = source.slice(at, source.indexOf(';\n', at));
-  expect(block).toMatch(/goal: stageGoal\.rail \|\| undefined/);
+  expect(block).not.toMatch(/goal:\s*stageGoal/);
   expect(block).not.toMatch(/sessionTarget/);
-  const surveyArm = block.slice(0, block.indexOf(': {', block.indexOf('surveyStage')));
-  expect(surveyArm).not.toMatch(/goal/);
+  expect(source).toMatch(/goalLine: stageGoal\.notice,/);
 });
 
 test('the dock is told when its status is the goal\'s notice', () => {

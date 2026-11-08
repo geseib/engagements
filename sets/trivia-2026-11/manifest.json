@@ -1,0 +1,34 @@
+[
+  {
+    "file": "trivia-geography.csv",
+    "title": "Around the World: Geography Adventure",
+    "description": "Sixty surprising stops across islands, waterways, wild landscapes and cities\u2014with map mysteries and the forces that shape our planet.",
+    "topic": "geography-travel",
+    "questions": 60,
+    "categories": 6
+  },
+  {
+    "file": "trivia-space.csv",
+    "title": "Space: Cosmic Curiosities",
+    "description": "60 questions from planetary plot twists to cosmic detective work. Explore strange worlds, historic missions, astronaut life, and the science behind the sky\u2014with surprising reveals and no astronaut training required.",
+    "topic": "science-technology",
+    "questions": 60,
+    "categories": 6
+  },
+  {
+    "file": "trivia-technology.csv",
+    "title": "Tech, Toys & Tomorrow",
+    "description": "60 playful questions about gadgets, web wonders, game tech, computing, and AI. Six rounds of curiosity: no engineering degree required.",
+    "topic": "science-technology",
+    "questions": 60,
+    "categories": 6
+  },
+  {
+    "file": "trivia-music-pop.csv",
+    "title": "Music & Pop Culture: Encore!",
+    "description": "60 crowd-friendly questions spanning iconic artists, curious instruments, unforgettable records, world sounds, live stages and playful pop-culture favorites. Six rounds, fresh facts, and plenty of \u201coh, I know this!\u201d moments.",
+    "topic": "music",
+    "questions": 60,
+    "categories": 6
+  }
+]

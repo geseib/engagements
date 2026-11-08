@@ -39,18 +39,21 @@ import './PlayerSurface.css';
  * thing that carries one, and it grows in the strip that is already there
  * rather than in a second bar (survey-phone.css, "progress, one line").
  *
+ * `wide` (optional): the answer screen's read-and-write layout on a laptop
+ * or a sideways tablet (PlayerSurface.css §2b). On a phone it changes nothing.
+ *
  * `help` (optional) is the screen id the bar's `?` opens, from
  * config/help/screens.js: `player-voting`, `player-survey` and so on.
  */
 export const PlayerShell = ({
   phase, volume, ctx, category, who, online = true, banner,
-  centre = false, dock = null, after = null, progress = null, help = null, sent = false, children,
+  centre = false, wide = false, dock = null, after = null, progress = null, help = null, sent = false, children,
 }) => {
   const eventBar = useContext(EventBarContext);
   const metered = typeof progress === 'number' && Number.isFinite(progress);
   const pct = metered ? Math.max(0, Math.min(100, Math.round(progress))) : null;
   return (
-    <div className="plr" data-theme="dark" data-phase={phase} data-volume={volume}>
+    <div className="plr" data-theme="dark" data-phase={phase} data-volume={volume} data-layout={wide ? 'wide' : undefined}>
       {banner}
       <header className="plr-bar">
         <div

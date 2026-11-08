@@ -394,6 +394,16 @@ const TEMPLATE_VARIABLES = [
     example: 'Real title: The Starry Night, Vincent van Gogh, 1889, Museum of Modern Art, New York.',
   },
   {
+    // docs/design/bluff-round/README.md. Filled only on a bluff round, at
+    // RESULTS; appended after the template when the template does not place it.
+    name: 'bluffRound',
+    description: 'On a bluff round only: the real answer and its story, who secretly held it, '
+      + 'who fooled the most people and who spotted it. Empty on every other round.',
+    category: 'Question Info',
+    gameTypes: ['call-and-answer'],
+    example: 'The real answer: The Starry Night. Fooled the most: Sam (3 votes). Spotted the real one: Ana.',
+  },
+  {
     // question-background spec §3. Read at RESULTS only; carried by no player payload.
     name: 'background',
     description: 'Background the question\'s author wrote for Workie: context, facts and angles to draw on. '

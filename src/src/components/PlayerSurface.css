@@ -348,6 +348,52 @@
   justify-content: center;
 }
 
+/* --- 2b. READ AND WRITE, SIDE BY SIDE (owner, 4 Nov 2026) ---------------------
+   "When a participant is using a laptop or tablet the screen should be laid out
+   well to read and write, no need for a narrow scroll." A call-and-answer brief
+   can run to a dozen lines; in the single 660px column above it pushed the
+   composer below the fold, so the participant scrolled away from what they were
+   answering to write the answer. On a laptop, or a tablet held sideways, the
+   answer screen (`PlayerShell wide`) becomes two columns: the brief and the
+   task on the left, the response on the right, beside it, never below it.
+
+   ONLY WHERE THERE IS ROOM AND NO SOFT KEYBOARD. Landscape and 1024px+, the
+   same query PlayerPage reads (WIDE_COMPOSE_QUERY) so the question stops
+   folding exactly where this layout starts: there is no keyboard here to fold
+   for. A phone, and a tablet held upright, keep the one column they have.
+
+   THE GUTTER STILL ABSORBS THE EXCESS (§5.1), it just absorbs less: 1240px of
+   content rather than 660, so a 2000px window is not a phone layout stretched,
+   and not a 2000px line either. The dock's padding puts Send under the write
+   column, where the eye already is when the answer is done. */
+@media (min-width: 1024px) and (orientation: landscape) {
+  .plr[data-layout="wide"] {
+    --plr-write: 400px;
+    --plr-gut: clamp(36px, calc((100% - 1240px) / 2), 25%);
+  }
+  .plr[data-layout="wide"] .plr-compose {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--plr-write);
+    column-gap: 44px;
+    align-items: start;
+  }
+  .plr[data-layout="wide"] .plr-compose__read { min-width: 0; }
+  /* The composer stays in view while a long brief is read beside it. */
+  .plr[data-layout="wide"] .plr-compose__write {
+    position: sticky;
+    top: 0;
+    min-width: 0;
+  }
+  .plr[data-layout="wide"] .plr-compose__write .plr-inp--area { min-height: 240px; }
+  .plr[data-layout="wide"] .plr-dock {
+    padding-left: calc(100% - var(--plr-gut) - var(--plr-write));
+  }
+}
+
+@media (min-width: 1200px) and (orientation: landscape) {
+  .plr[data-layout="wide"] { --plr-write: 440px; }
+}
+
 /* THE DOCK IS A FLEX ROW, NOT position:fixed (§5.1). A grid or flex row has no
    fold. `position: fixed` on iOS Safari interacts badly with the collapsing URL
    bar and with the soft keyboard, which is how a primary action ends up
@@ -433,12 +479,44 @@
   line-height: 1.4;
 }
 
+/* A PASSAGE, NOT A QUESTION (4 Nov 2026). A call-and-answer brief of several
+   sentences set at the question's size read as a wall: 600 characters at 32px
+   on a laptop is twenty lines. Past 160 characters (PlayerPage LONG_HEADLINE)
+   the headline drops to the answers' size and a reading weight; it is still
+   the largest text on the screen after the heading. */
+.plr-q.plr-q--long {
+  font-size: var(--plr-t-secondary);
+  font-weight: 600;
+  line-height: 1.42;
+  letter-spacing: 0;
+}
+
+/* THE BALLOT'S QUESTION, IN ONE LINE (owner, 5 Nov 2026). A title is short and
+   needs nothing. An untitled brief is clamped to two lines at the answers'
+   size, and PlayerPage renders "Show the whole question" with it: a fold the
+   reader can undo, never a silent clip. */
+.plr-q.plr-q--vote {
+  font-size: var(--plr-t-secondary);
+  line-height: 1.3;
+}
+
+.plr-q.plr-q--clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .plr-detail {
   margin: 0 0 18px;
   max-width: var(--plr-measure);
   font-size: var(--plr-t-body);
   line-height: 1.5;
 }
+
+/* A call-and-answer brief under its title: the thing they must read to
+   answer, so it is --text, not the muted grey of an aside. */
+.plr-detail.plr-brief { color: var(--text); }
 
 .plr-lede {
   margin: 0 0 16px;
@@ -790,6 +868,34 @@
 
 .plr-card.plr-card--good { border-color: var(--plr-good-edge); }
 
+/* THE WAY BACK, AS ONE LINE (owner, 5 Nov 2026). The lobby's second card
+   ("If you lose this page", six lines read before anything had gone wrong)
+   is a disclosure that opens in place to the same words. Muted like
+   `.plr-more`, because it is not the task; 44px tall, because it is a target. */
+.plr-lost {
+  margin: 0 0 14px;
+  max-width: var(--plr-measure);
+}
+
+.plr-lost > summary {
+  display: list-item;
+  min-height: var(--plr-tap);
+  padding: 10px 0;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-body);
+  font-weight: 600;
+  line-height: 1.5;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.plr-lost > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.plr-lost[open] > summary { color: var(--text); }
+
+.plr-lost > .plr-detail { margin: 4px 0 0; }
+
 .plr-quote {
   margin: 0;
   font-size: var(--plr-t-secondary);
@@ -1094,37 +1200,30 @@
 
 .plr-select:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-.plr-modes {
-  display: flex;
-  gap: 8px;
-  margin: 0 0 18px;
+/* THE OTHER BALLOT IS A QUIET LINK UNDER THIS ONE (owner, 5 Nov 2026), not a
+   two-button toggle above it: one way to vote by default, the quick vote.
+   `.plr-more` already carries the muted, underlined, 44px look; this only
+   gives it room, since it follows a select rather than a clamped response. */
+.plr-more.plr-more--switch { margin: 4px 0 10px; }
+
+/* "Show the whole question" straight under the ballot's question line. */
+.plr-more.plr-more--after { margin: -4px 0 10px; }
+
+/* The ballot's one-line instruction, directly above the ballot. */
+.plr-rank-cue {
+  margin: 4px 0 12px;
+  max-width: var(--plr-measure);
+  font-size: var(--plr-t-body);
+  font-weight: 600;
+  line-height: 1.4;
 }
 
-.plr-mode {
-  flex: 1;
-  min-height: var(--plr-tap);
-  padding: 10px 12px;
-  border: 1px solid var(--plr-rule-strong);
-  border-radius: 11px;
-  background: transparent;
-  color: var(--plr-muted);
-  font-family: inherit;
-  font-size: var(--plr-t-meta);
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  cursor: pointer;
+/* The privacy promise as one short line under the ballot: no rule, no bold. */
+.plr-anon.plr-anon--line {
+  margin: 6px 0 0;
+  padding: 0;
+  border-left: 0;
 }
-
-/* The mode toggle is a view control, not the task, so its selected state is a
-   surface fill rather than the one amber idea the ballot already spends. */
-.plr-mode[aria-pressed="true"] {
-  background: var(--surface-2);
-  border-color: var(--plr-rule-strong);
-  color: var(--text);
-}
-
-.plr-mode:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* ==========================================================================
    9. RESULTS ROWS

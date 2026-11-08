@@ -8,6 +8,7 @@
 import {
   TIERS, archiveTier, archiveScope, archiveSource, isSnapshot, displayTags, groupSnapshots,
   selectionKey, exportSelection, describeExport, describeRestore,
+  formatExported, lastBackups, relativeTime, pickerRows, describePlanEntry, restoreChecks, checkCount,
 } from '../utils/archiveItems';
 
 const snapshot = (id, tier, source, createdAt, extra = []) => ({
@@ -138,5 +139,79 @@ describe('describeExport', () => {
       'Team Retro: 1 image is not stored under sets/, so it is not in the backup: images/legacy.png.',
       'Quiz: 2 images are not stored under sets/, so they are not in the backup: images/a.png, images/b.png.',
     ]);
+  });
+});
+
+describe('telling batches apart, and when a source was last backed up', () => {
+  test('the Exported value carries the 24-hour time as well as the day', () => {
+    const at = new Date(2026, 10, 5, 9, 7).toISOString();
+    expect(formatExported(at)).toBe('Nov 5, 2026, 09:07');
+    expect(formatExported('')).toBe('—');
+    expect(formatExported('not a date')).toBe('—');
+  });
+  test('last backed up is per source and per tier: the newest snapshot taken ON this tier', () => {
+    const newer = snapshot('arc-9', 'dev', 'platform/teamretro', '2026-09-20T12:00:00.000Z');
+    const last = lastBackups([NEW_RETRO, OLD_RETRO, newer, SHARED, LEGACY], 'dev');
+    expect([...last.entries()]).toEqual([['platform/teamretro', '2026-09-20T12:00:00.000Z']]);
+    expect(lastBackups([NEW_RETRO], 'prod').get('platform/teamretro')).toBe('2026-09-15T12:00:00.000Z');
+  });
+  test('relative time reads in plain words, and falls back to the date after a month', () => {
+    const now = Date.parse('2026-11-05T12:00:00.000Z');
+    expect(relativeTime('2026-11-05T11:59:40.000Z', now)).toBe('just now');
+    expect(relativeTime('2026-11-05T11:48:00.000Z', now)).toBe('12 min ago');
+    expect(relativeTime('2026-11-05T09:00:00.000Z', now)).toBe('3 h ago');
+    expect(relativeTime('2026-11-04T12:00:00.000Z', now)).toBe('1 day ago');
+    expect(relativeTime('2026-11-01T12:00:00.000Z', now)).toBe('4 days ago');
+    expect(relativeTime('2026-08-01T12:00:00.000Z', now)).toBe('Aug 1, 2026');
+    expect(relativeTime('', now)).toBe('');
+  });
+});
+
+describe('the export picker', () => {
+  const ROWS = [
+    { key: 'platform:music', id: 'musicpopcultureencore', name: 'Music & Pop Culture: Encore!', type: 'Trivia', last: '2026-11-05T10:00:00.000Z' },
+    { key: 'platform:tech', id: 'techworld', name: 'lessons from the Tech World', type: 'Call & Answer', last: '' },
+    { key: 'platform:hist', id: 'historicleaders', name: 'Historic World Leaders', type: 'Trivia', last: '2026-11-05T11:00:00.000Z' },
+  ];
+  const ids = (rows) => rows.map((r) => r.id);
+  test('name sorts the name as shown, alphabetically, ignoring case', () => {
+    expect(ids(pickerRows(ROWS))).toEqual(['historicleaders', 'techworld', 'musicpopcultureencore']);
+  });
+  test('last backed up puts the newest first and the never-backed-up last', () => {
+    expect(ids(pickerRows(ROWS, { sort: 'last' }))).toEqual(['historicleaders', 'musicpopcultureencore', 'techworld']);
+  });
+  test('type groups by type, then by name', () => {
+    expect(ids(pickerRows(ROWS, { sort: 'type' }))).toEqual(['techworld', 'historicleaders', 'musicpopcultureencore']);
+  });
+  test('search matches the name or the id, ignoring case, and does not reorder the input', () => {
+    expect(ids(pickerRows(ROWS, { search: 'WORLD' }))).toEqual(['historicleaders', 'techworld']);
+    expect(ids(pickerRows(ROWS, { search: 'popcultureenc' }))).toEqual(['musicpopcultureencore']);
+    expect(ROWS[0].id).toBe('musicpopcultureencore');
+  });
+});
+
+describe('the restore preview and the check after it', () => {
+  test('a new version names the live version and whether it is live now', () => {
+    expect(describePlanEntry({ kind: 'set', mode: 'new-version', currentVersion: 3, currentlyActive: true, active: true, questionCount: 60, categoryCount: 6 }))
+      .toEqual({ verdict: 'New version of v3 (currently live)', counts: '60 questions · 6 categories', arrival: 'Active on arrival', live: true });
+    expect(describePlanEntry({ kind: 'set', mode: 'new-version', currentVersion: 1, currentlyActive: false, active: false, questionCount: 1, categoryCount: 1 }))
+      .toEqual({ verdict: 'New version of v1 (currently inactive)', counts: '1 question · 1 category', arrival: 'Inactive on arrival', live: false });
+  });
+  test('a new set, a legacy CSV with no category count, and a prompt', () => {
+    expect(describePlanEntry({ kind: 'set', mode: 'created', active: false, questionCount: 7, categoryCount: null, legacy: true }).verdict).toBe('New set');
+    expect(describePlanEntry({ kind: 'set', mode: 'created', active: false, questionCount: 7, categoryCount: null }).counts).toBe('7 questions');
+    expect(describePlanEntry({ kind: 'prompt', mode: 'new-version', currentVersion: 4, status: 'active' }))
+      .toEqual({ verdict: 'New version of v4', counts: 'Prompt', arrival: 'Active on arrival', live: false });
+    expect(describePlanEntry({ kind: 'prompt', mode: 'created', status: 'draft', legacy: true }).verdict).toBe('New draft prompt');
+  });
+  test('the check lists only sets that carry one, and counts read "found of expected"', () => {
+    const checks = restoreChecks({ results: { successful: [
+      { archiveId: 'a', kind: 'set', id: 's1', name: 'One', check: { questions: { expected: 60, found: 58 }, matches: false } },
+      { archiveId: 'b', kind: 'prompt', id: 'p1' },
+    ] } });
+    expect(checks).toEqual([{ archiveId: 'a', id: 's1', name: 'One', check: { questions: { expected: 60, found: 58 }, matches: false } }]);
+    expect(checkCount({ expected: 60, found: 58 })).toBe('58 of 60');
+    expect(checkCount({ expected: null, found: 6 })).toBe('6');
+    expect(checkCount(undefined)).toBe('—');
   });
 });

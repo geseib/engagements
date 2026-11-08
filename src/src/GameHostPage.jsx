@@ -72,7 +72,7 @@ import {
 } from './config/stagePaging';
 import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
-import { autoDecision } from './config/autoMode';
+import { autoDecision, walksResponses } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import ConfirmDialog, { useConfirm } from './components/ConfirmDialog';
 import { DialogHead, DialogFoot } from './components/ui/DialogParts';
@@ -139,7 +139,7 @@ import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import { TriviaPanel, PollPanel, correctSoFar, revealedLetters } from './components/console/panels/FormatPanels';
 import ReadPanel from './components/console/panels/ReadPanel';
 import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
-import { needsYou, markHandoverRequested, NEEDS_ACTIONS, NEEDS_LEVELS } from './config/needsYou';
+import { needsYou, markHandoverRequested, NEEDS_ACTIONS, NEEDS_LEVELS, projectNeedsLine } from './config/needsYou';
 import NeedsYouLine from './components/needs/NeedsYouLine';
 import ConsolePulse from './components/console/ConsolePulse';
 import TimeChip from './components/console/TimeChip';
@@ -149,6 +149,7 @@ import {
 } from './config/roundTimer';
 import { noteServerNow, serverNowMs } from './utils/serverClock';
 import { arrivalsSince, withoutRoomCount, answersAreChoices } from './config/consolePulse';
+import { roomProgressFor, applyPresence } from './config/roomProgress';
 import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import SessionSetup from './components/console/panels/SessionSetup';
@@ -158,10 +159,20 @@ import CW, { ownQuestionWords as OQ } from './config/consoleWords';
 import { isOwnKey, OWN_KEY_PREFIX, ownNowAllowed, ownNowIsFirst, ownAtHead, withOwnNext, laterAnchors, withOwnRounds } from './config/ownQuestion';
 import OwnQuestionChoice from './components/OwnQuestionChoice';
 import useOwnQuestionKey from './components/stage/useOwnQuestionKey';
+import QuestionPicker from './components/stage/QuestionPicker';
+import PrivateChoice from './components/PrivateChoice';
+import useQuestionPickerKey from './components/stage/useQuestionPickerKey';
+import useQuestionPicker from './components/stage/useQuestionPicker';
+import {
+  DEFAULT_PICKER_VIEW, PICKER_CHOICE_WORDS, pickerApplies, pickerBackLabel,
+  queueIndex, undoAskNextOps,
+} from './config/questionPicker';
 import { consolePeopleFor, personFactsFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
+import BluffLine, { useBluffReveal } from './components/stage/BluffLine';
+import { BLUFF_WORDS } from './config/bluffRound';
 import FW from './config/followUpWords';
 import { placeAsks, pointKey } from './config/askAnchors';
 import { sendAsk, closeAsk, cancelAsk, pickIdea } from './utils/followUpsClient';
@@ -208,38 +219,30 @@ const SURVEY_READ_STATES = new Set(['SURVEY#OPEN', 'SURVEY#CLOSED', 'ENDED']);
    are in config/questionCard.js now, beside the card that reads them
    (components/QuestionCard.jsx). */
 
+/** Where a question focus replaces the stage's body on one screen (ASK is the question already). */
+const QUESTION_HELD_PHASES = ['VOTE', 'RESULTS', 'FIELD_NOTES'];
+
+/** The words on the results' top card (docs/design/room-content-v2 frame 5). */
+const RESULTS_PICK = "The room's pick";
+
 /**
- * THE QUESTION LINE ABOVE THE STAGE'S CARDS, PRESSABLE (owner, 16 Oct 2026):
- * wherever the host can put a response up, the question can go back up too.
- * One screen: it opens the question large, over the stage. Two screens: the
- * same press puts it on the wall (expandQuestion publishes the focus).
+ * THE QUESTION LINE ABOVE THE STAGE'S CARDS.
  *
  * THE TITLE AS THE REMINDER (owner, 18 Oct 2026, docs/design/room-content-v2
  * frames 4 and 5; config/roomContent.js VOTING and RESULTS): the round's title
  * at the primary step above the answers, title-cased when the set wrote it in
  * capitals. Support, and essential — no data-drop: the fitter may not take
  * away the one line saying what is being voted on or what the result is of.
+ *
+ * NOT PRESSABLE (owner, 5 Nov 2026). It used to open the question "large"
+ * in a white overlay that was not much larger; that is gone. The question
+ * goes back up from the phone Remote's "Show the question" (on one screen the
+ * stage then draws the ASK card in place of the answers) or, with two
+ * screens, the console's "The question" row (the wall's QUESTION_FOCUS).
  */
-/** The words on the results' top card (docs/design/room-content-v2 frame 5). */
-const RESULTS_PICK = "The room's pick";
-
-function StageQuestionRecap({ question, onOpen }) {
+function StageQuestionRecap({ question }) {
   return (
-    <h2
-      className="q-remind is-openable"
-      data-rc-part="title"
-      data-rc="support"
-      role="button"
-      tabIndex={0}
-      aria-label="Show the question on the screen"
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-    >
+    <h2 className="q-remind" data-rc-part="title" data-rc="support">
       {roomTitle(question.title || question.question)}
     </h2>
   );
@@ -499,12 +502,17 @@ function GameHostPage() {
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
   const [currentQuestionVotes, setCurrentQuestionVotes] = useState([]);
   const [manualStateChange, setManualStateChange] = useState(false);
+  /* THE QUESTION IS UP: the round's `{ focus: 'question' }`, as the server
+     last said or this page last sent (the phone Remote's "Show the question",
+     the console's "The question" row). On one screen the stage draws the
+     question in its ASK card in place of the answers at VOTE and RESULTS
+     (`stageQuestionUp` below); on two screens it is the wall's
+     QUESTION_FOCUS. The name is older than that: it once opened a white
+     "expanded lesson" overlay, retired 5 Nov 2026. */
   const [lessonExpanded, setLessonExpanded] = useState(false);
   /* WHAT KIND OF FOCUS THE WALL HOLDS ('none' | 'question' | 'answer' | 'join'),
      as the server last said or this page last sent. The console reads it to
-     mark "The question" on the wall (owner, 16 Oct 2026); on two screens a
-     question focus is the wall's, so it does not also open the laptop's
-     expanded-question overlay, which is a one-screen thing. */
+     mark "The question" on the wall (owner, 16 Oct 2026). */
   const [wallFocus, setWallFocus] = useState('none');
   // THE ONE HOST PANEL. It replaced both edge tabs, both side panels and the
   // full-screen question browser — four surfaces, one dock button. Closed by
@@ -527,7 +535,13 @@ function GameHostPage() {
     comes from the server.
   */
   const [phaseSeenAt, setPhaseSeenAt] = useState({});
-  useEffect(() => { setPhaseSeenAt({}); }, [gameId]);
+  /* THE PHASE THAT WAS ALREADY UNDER WAY when this page loaded (the owner's
+     "Took 10:30:37", 4 Nov 2026). Its entry in phaseSeenAt is the load time,
+     not the moment it began, and the pulse subtracted the round's server start
+     from it — so reopening the console at Results reported "Took" as however
+     long ago the round opened. `seenFor` below treats it as not witnessed. */
+  const phaseAtLoadRef = useRef(null);
+  useEffect(() => { setPhaseSeenAt({}); phaseAtLoadRef.current = null; }, [gameId]);
   /*
     THE ROUND TIMER (experience plan 2f; config/roundTimer.js, server half
     lambda-functions/game/round-timer.js). `timeChoices` is what the time
@@ -549,13 +563,20 @@ function GameHostPage() {
   const [roundTime, setRoundTime] = useState(null);
   useEffect(() => { setRoundTime(null); }, [gameId]);
   /** A reply or read that may carry the host's timer and the server's clock. */
+  /* When the server says the phase on now opened (the host door's
+     `phaseStartedAt`, round-timer.js PhaseStartedAt), with the state it was
+     read beside: the room tile's "open 0:42" during voting, on the server's
+     clock, also after a reload (host-attention PLAN D5). */
+  const [hostPhaseOpened, setHostPhaseOpened] = useState(null);
   const takeHostTime = useCallback((data, sentAt = null) => {
     if (!data || typeof data !== 'object') return;
     noteServerNow(data.serverNow, sentAt);
     if (Object.prototype.hasOwnProperty.call(data, 'hostTime')) setRoundTime(data.hostTime || null);
+    if (data.phaseStartedAt && data.state) setHostPhaseOpened({ state: String(data.state), at: data.phaseStartedAt });
   }, []);
   useEffect(() => {
     if (!gameState) return;
+    if (phaseAtLoadRef.current === null) phaseAtLoadRef.current = gameState;
     setPhaseSeenAt((seen) => (seen[gameState] ? seen : { ...seen, [gameState]: Date.now() }));
   }, [gameState]);
   // The workflow strip's step the host is LOOKING at (session flow v3 §4.8),
@@ -971,6 +992,10 @@ function GameHostPage() {
   const autoActRef = useRef(null);
   // When the response Auto is cycling during voting went up (its round#index).
   const autoShownRef = useRef(null);
+  // When this round's read beat began waiting on Workie (its round#), so the
+  // bounded wait (autoMode.js NOTES_WAIT_MAX_MS) is measured from the beat,
+  // not from the last re-render.
+  const autoNotesWaitRef = useRef(null);
 
   /*
     A SURVEY'S PER-GAME FACTS (surveys phase 2). `surveyNames` is the session's
@@ -1134,6 +1159,18 @@ function GameHostPage() {
   const [ownBusy, setOwnBusy] = useState(false);
   const [ownError, setOwnError] = useState('');
   const [ownNotice, setOwnNotice] = useState(null);
+  /*
+    CHOOSE A QUESTION (docs/design/question-picker): one picker, four doors.
+    `picker` is { from: 'key'|'rail'|'row'|'part'|'menu', focusKey, oneScreen }
+    or null. Its view (search, categories, Show) and scroll position live
+    HERE for the session (D8), so closing and reopening returns the same list.
+    `pickNotice` is Your part now's "Next: … · Undo" after Ask next (D7),
+    until the phase changes or the host acts again (review R5).
+  */
+  const [pickerView, setPickerView] = useState(DEFAULT_PICKER_VIEW);
+  const pickerScrollRef = useRef(0);
+  const [pickNotice, setPickNotice] = useState(null);
+  const [pickQueued, setPickQueued] = useState([]);
   // The socket handlers are registered before loadQueue exists; they read it here.
   const loadQueueRef = useRef(() => {});
   const loadUpNextRef = useRef(() => {});
@@ -1789,17 +1826,21 @@ function GameHostPage() {
    * for on the screen they are standing in front of — the phone falls back to
    * its own two-second poll of get-game-state, which reads the same record.
    */
+  // The last beat this page published, in flight or settled (publishNotesPage waits on it).
+  const beatPublishRef = useRef(null);
   const publishStageBeat = (beat) => {
     // The round on screen — a closed survey's is 0 (resultsRoundOf).
     const padded = resultsRoundOf(gameState);
     if (!gameId || padded === null) return;
     const round = parseInt(padded, 10);
     // authFetch: /stage-beat carries the Cognito authorizer, like /close-round.
-    authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+    const sent = authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ beat, questionNumber: round }),
     }).catch((err) => console.error('Stage beat publish failed (continuing):', err));
+    // The page of Workie's read waits for this (publishNotesPage below).
+    beatPublishRef.current = sent;
   };
 
   /**
@@ -2892,18 +2933,32 @@ Focus on actionable business strategy insights.`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState, gameId, useWebSocket]);
 
-  // When the room finishes answering, close the expanded-question overlay so
-  // the host is looking at the stage again. The celebratory full-screen alert
-  // that used to fire here is deleted: it covered the stage — the advance
-  // control included — for three seconds at exactly the moment the host wanted
-  // to move on. The dock's status line already says "safe to move on", without
+  // The celebratory full-screen alert that used to fire when the room
+  // finished answering is deleted: it covered the stage — the advance control
+  // included — for three seconds at exactly the moment the host wanted to
+  // move on. The dock's status line already says "safe to move on", without
   // taking the screen to say it.
+
+  /* THE QUESTION HELD UP, AND ESC TO PUT IT AWAY (one screen). At ASK the
+     stage already IS the question, so a question focus there changes nothing
+     on this screen and must not quietly hold the keys either (nor in the
+     lobby, where there is no question): only while the answers or the
+     results are up (QUESTION_HELD_PHASES) does it replace what the room
+     sees and take → and Space (shortcutsSuppressed), as a response held up
+     does. Esc goes back, and tells the Remote. With the console the focus is
+     the wall's, and the console's own row puts it away. */
+  const questionHeld = lessonExpanded
+    && QUESTION_HELD_PHASES.includes(hostPhaseForBeat(phaseOfGameState(gameState), resultsBeat));
   useEffect(() => {
-    if (gameState.startsWith('ASK#') && players.length > 0
-        && answeredCount >= players.length && lessonExpanded) {
+    if (!questionHeld || useConsole) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       setLessonExpanded(false);
-    }
-  }, [gameState, players.length, answeredCount, lessonExpanded]);
+      if (publishFocusRef.current) publishFocusRef.current({ focus: 'none' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [questionHeld, useConsole]);
 
   // 🔗 Initialize game ID and event title from URL or generate new one
   useEffect(() => {
@@ -3065,6 +3120,20 @@ Focus on actionable business strategy insights.`;
       console.log('🔌 Player left notification:', data);
       // Fetch updated players list
       fetchPlayers('websocket-leave');
+    });
+
+    /* A PAGE OPENED OR CLOSED (websocket/presence.js; dev QA 5 Nov: a closed
+       tab showed as away only after a console reload, the room tile kept
+       "Waiting on Ben, Cy"). The frame names the person, so their row's
+       `deviceConnected` changes in this render (config/roomProgress.js reads
+       it for the room tile, config/consoleRail.js for the rail); the roster
+       read that follows is the authority. */
+    webSocketClient.onMessage('presenceChanged', (data) => {
+      const name = data && data.playerName;
+      if (name && typeof data.connected === 'boolean') {
+        setPlayers((prev) => applyPresence(prev, name, data.connected));
+      }
+      fetchPlayers('websocket-presence');
     });
 
     /* SOMEBODY IS LOCKED OUT OF THEIR OWN NAME AND IS ASKING FOR IT BACK.
@@ -3523,6 +3592,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('initialStateSync');
       webSocketClient.offMessage('playerJoined');
       webSocketClient.offMessage('playerLeft');
+      webSocketClient.offMessage('presenceChanged');
       webSocketClient.offMessage('handoverRequested');
       webSocketClient.offMessage('playerRemoved');
       webSocketClient.offMessage('playerRestored');
@@ -4876,7 +4946,7 @@ Focus on actionable business strategy insights.`;
       if (local.refused === 'full') {
         setSessionActionError('The queue is full — 24 questions is the limit. Remove one from the running order first.');
       }
-      return;
+      return false;
     }
 
     setQuestionQueue(local.queue);
@@ -4894,7 +4964,7 @@ Focus on actionable business strategy insights.`;
       // "moved" to the top and get the one that was actually there.
       setQuestionQueue(before);
       hostActionFailed(`Could not change the running order: ${result.error}`);
-      return;
+      return false;
     }
 
     // The server refused something the local copy accepted — only possible when
@@ -4908,12 +4978,13 @@ Focus on actionable business strategy insights.`;
     if (result.queue === null) {
       loadQueue();
       loadUpNext();
-      return;
+      return true;
     }
     setQuestionQueue(result.queue);
     // Queueing something changes what follows it, so the tail is re-planned.
     loadUpNext();
     setQueueVersion(result.version);
+    return true;
   }, [gameId, questionQueue, queueVersion, loadQueue, hostActionFailed]);
 
   const handleQueueQuestion = useCallback(
@@ -5061,6 +5132,113 @@ Focus on actionable business strategy insights.`;
     setOwnComposer(null);
     setOwnError('');
   }, []);
+
+  /*
+    ── CHOOSE A QUESTION (docs/design/question-picker) ──────────────────────
+
+    One picker for the C key, the rail's Round queue (and its planned rows),
+    Your part now's "Change what's next" and the Session menu's Up next. Every
+    action is a queue op this page already sends (runQueueOp and its
+    handlers, selectQuestion, handleDisableQuestion): there is no second copy
+    of the queue logic. On one screen every door asks first (D9, F5: every
+    time, the phone first); upcoming questions never draw on the room's
+    screen without that choice.
+  */
+  const pickerOn = Boolean(gameId) && pickerApplies(currentGameType, gameState);
+  const pickerState = useQuestionPicker({
+    allowed: () => Boolean(gameId) && pickerApplies(currentGameType, gameState),
+    twoSurfaces,
+    menuOpen: setupPanelOpen,
+    // Two surfaces never stack: the menu's door closes the menu first.
+    onMenuClose: () => setSetupPanelOpen(false),
+    onMenuReturn: () => openSetupAt('up-next'),
+  });
+  const { picker, setPicker } = pickerState;
+  const pickerChoiceOpen = pickerState.choiceOpen;
+  const setPickerChoiceOpen = pickerState.setChoiceOpen;
+  const openPickerHere = pickerState.open;
+  const closePicker = pickerState.close;
+  const showPickerHere = pickerState.showHere;
+  const hidePicker = pickerState.hide;
+  const openPicker = useCallback((args) => {
+    setOwnChoiceOpen(false);
+    setPickQueued([]);
+    return openPickerHere(args);
+  }, [openPickerHere]);
+
+  /* The picker reads the same browser data as the menu did (note 1). */
+  useEffect(() => {
+    if (picker) fetchQuestionsForBrowsing();
+  }, [Boolean(picker)]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* A new session starts with a fresh view (D8). */
+  useEffect(() => {
+    setPicker(null);
+    setPickerView(DEFAULT_PICKER_VIEW);
+    pickerScrollRef.current = 0;
+    setPickNotice(null);
+    setPickQueued([]);
+  }, [gameId, setPicker]);
+
+  /* The status line lasts until the phase changes (review R5). */
+  useEffect(() => { setPickNotice(null); }, [gameState]);
+
+  /* ASK NEXT CLOSES AND RETURNS TO THE ROUND (F2), with "Next: … · Undo". */
+  const pickAskNext = useCallback(async (key, row) => {
+    const before = queueIndex(questionQueue, key);
+    closePicker();
+    const landed = await handleQueueFirst(key);
+    if (landed) setPickNotice({ key, title: (row && row.title) || '', before });
+  }, [questionQueue, closePicker, handleQueueFirst]);
+
+  /* QUEUE KEEPS IT OPEN (F2); Done then says "3 queued · Undo" (D7). */
+  const pickQueue = useCallback(async (question) => {
+    const key = String(question?.id ?? '').replace(/^QUESTION#/, '');
+    setPickNotice(null);
+    const landed = await handleQueueQuestion(question);
+    if (landed && key) setPickQueued((prev) => (prev.includes(key) ? prev : [...prev, key]));
+  }, [handleQueueQuestion]);
+
+  const pickUnqueue = useCallback((key) => {
+    setPickNotice(null);
+    setPickQueued((prev) => prev.filter((k) => k !== key));
+    return handleQueueRemove(key);
+  }, [handleQueueRemove]);
+
+  /* UNDO, as the queue route's own ops (config/questionPicker.js
+     undoAskNextOps), sequential like handleAutoMove's burst and reconciled
+     by reload. */
+  const runPickOps = useCallback(async (steps) => {
+    let version = queueVersion;
+    let failed = null;
+    const keys = steps.map((st) => st.key);
+    setQueueBusyKeys((prev) => [...new Set([...prev, ...keys])]);
+    for (const st of steps) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await postQueueOp({ apiBase: API_BASE, gameId, op: st.op, questionKey: st.key, expectedVersion: version });
+      if (!result.ok) { failed = result.error; break; }
+      if (result.version !== null && result.version !== undefined) version = result.version;
+    }
+    setQueueBusyKeys((prev) => prev.filter((k) => !keys.includes(k)));
+    if (failed) hostActionFailed(`Could not change the running order: ${failed}`);
+    loadQueue();
+    loadUpNext();
+    return !failed;
+  }, [gameId, queueVersion, loadQueue, loadUpNext, hostActionFailed]);
+
+  const undoPick = useCallback(async () => {
+    const n = pickNotice;
+    if (!n || n.undone) return;
+    const ok = await runPickOps(undoAskNextOps(n.before).map((op) => ({ op, key: n.key })));
+    if (ok) setPickNotice({ ...n, undone: true });
+  }, [pickNotice, runPickOps]);
+
+  const undoPickQueued = useCallback(async () => {
+    const keys = pickQueued.slice();
+    if (!keys.length) return;
+    const ok = await runPickOps(keys.map((key) => ({ op: 'remove', key })));
+    if (ok) setPickQueued([]);
+  }, [pickQueued, runPickOps]);
 
   const removeOwnQuestion = useCallback(async (key) => {
     if (!isOwnKey(key)) return;
@@ -5974,6 +6152,8 @@ Focus on actionable business strategy insights.`;
   // The one-screen Needs-you sheet (2h): the top bar's bell and the public
   // Needs-you line's Open open this one sheet.
   const [needsSheetOpen, setNeedsSheetOpen] = useState(false);
+  // The stage's main button is armed, waiting for its second press (HostActionBar onArmedChange).
+  const [stageArmed, setStageArmed] = useState(false);
 
   /**
    * BACK TO THE EVENT'S AGENDA — the HOST's screen only (the owner, 27 Sep
@@ -6948,6 +7128,8 @@ Focus on actionable business strategy insights.`;
    */
   const closeAllSidePanels = () => {
     setSetupPanelOpen(false);
+    // The picker's asked marks are round-scoped too (question picker note 3).
+    setPicker(null);
     closeQuestionBrowser();
   };
 
@@ -7036,7 +7218,7 @@ Focus on actionable business strategy insights.`;
         || showReport || showSurveyResults || showSurveyWalkthrough || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
-      lessonExpanded, isLoadingData, qrMode,
+      lessonExpanded: questionHeld, isLoadingData, qrMode,
       // With two surfaces a response on the wall is a step Auto walks, not a
       // pause: the laptop's spotlight is the host's view of the wall.
       spotlightOpen: !twoSurfaces && spotlightIndex !== null,
@@ -7068,13 +7250,17 @@ Focus on actionable business strategy insights.`;
     let pages = 1;
     let pageText = '';
     let notesReady = false;
+    let notesFailed = false;
     if (phase === 'RESULTS') {
       const slice = pageSlice(answers, rawIndex, stagePageSizeFor('RESULTS', profile, answers));
       page = slice.page;
       pages = slice.pages;
     } else if (phase === 'FIELD_NOTES') {
-      const md = currentAIInsights && currentAIInsights.markdownResponse;
+      // A read with no markdown still has its summary to show (a fallback).
+      const md = currentAIInsights && (currentAIInsights.markdownResponse || currentAIInsights.summary);
       notesReady = Boolean(md) && !loadingAIInsights;
+      // The read failed: nothing is coming, so Auto does not wait for it.
+      notesFailed = !notesReady && !loadingAIInsights && Boolean(aiSummaryFailure);
       if (notesReady) {
         const slice = prosePageSlice(md, rawIndex, proseBudgetFor(profile));
         page = slice.page;
@@ -7089,8 +7275,9 @@ Focus on actionable business strategy insights.`;
       playerCount: players.length,
       answeredCount,
       votedCount: playersWhoVoted.length,
-      page, pages, pageText, notesReady,
-      walkResponses: twoSurfaces,
+      page, pages, pageText, notesReady, notesFailed,
+      // Never for Trivia or Poll: their RESULTS has no response to walk.
+      walkResponses: walksResponses(twoSurfaces, normalizeGameType(currentGameType)),
       responseCount: answers.length,
       responseText: shownAnswer ? answerText(shownAnswer.answer) : '',
     });
@@ -7103,6 +7290,13 @@ Focus on actionable business strategy insights.`;
       const key = `${lessonNumber}#${votingKey}`;
       if (!autoShownRef.current || autoShownRef.current.key !== key) autoShownRef.current = { key, at: Date.now() };
       delayMs = Math.max(500, decision.delayMs - (Date.now() - autoShownRef.current.at));
+    }
+    // The wait on Workie keeps its own clock too: the insights, the players
+    // and the answers all re-run this effect while the read is being written.
+    if (decision.kind === 'leave') {
+      const key = `${lessonNumber}#notes`;
+      if (!autoNotesWaitRef.current || autoNotesWaitRef.current.key !== key) autoNotesWaitRef.current = { key, at: Date.now() };
+      delayMs = Math.max(500, decision.delayMs - (Date.now() - autoNotesWaitRef.current.at));
     }
 
     const timer = setTimeout(() => {
@@ -7118,7 +7312,22 @@ Focus on actionable business strategy insights.`;
         const walkable = [HOST_INTENTS.SHOW_RESPONSE, HOST_INTENTS.NEXT_RESPONSE, HOST_INTENTS.NEXT_PART];
         if (hands.secondary && !hands.secondary.disabled && walkable.includes(hands.secondary.intent)) {
           hands.run(hands.secondary);
+          return;
         }
+        // No response to walk at RESULTS (session 8741, round 22: a trivia
+        // round sat on its tally for eight minutes because this returned
+        // here). The tally has had its moment; the primary moves on.
+        if (phase !== 'RESULTS') return;
+        if (hands.primary && !hands.primary.disabled && hands.primary.intent !== HOST_INTENTS.END_SURVEY) hands.run(hands.primary);
+        return;
+      }
+      // Workie's read still not written: leave by the dock's own secondary
+      // ("Start round N"), and only when it asks no confirmation — unsent
+      // asks are the host's call, never Auto's. If the read lands at the last
+      // moment the primary is "Next page" and Auto simply keeps reading.
+      if (decision.kind === 'leave') {
+        const leave = hands.secondary;
+        if (leave && !leave.disabled && !leave.arm && leave.intent === HOST_INTENTS.NEXT) hands.run(leave);
         return;
       }
       // The dock's own primary, through the dock's own runner — disabled means
@@ -7131,10 +7340,10 @@ Focus on actionable business strategy insights.`;
     }, delayMs);
     return () => clearTimeout(timer);
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
-    currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
+    currentAIInsights, loadingAIInsights, aiSummaryFailure, currentGameType, profile, players.length, answeredCount,
     playersWhoVoted.length, createdSetup, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
-    showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
+    showConfirmModal, showExpandedQR, questionHeld, isLoadingData, qrMode,
     spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces, wallFocus]);
 
   /*
@@ -7158,8 +7367,20 @@ Focus on actionable business strategy insights.`;
     notesSyncPages = pageCount(points, pageSizeFor(profile));
     notesSyncPage = clampPage(notesSyncRaw, notesSyncPages);
   }
+  /*
+    THE PAGE WAITS FOR THE BEAT (dev QA 5 Nov: one "Failed to load resource:
+    409" early in a two-screen session). Pressing What we heard sends the beat
+    (publishStageBeat, fire and forget) and, a render later, the read's first
+    page (useStageNotesSync). Two POSTs in flight at once: when the page
+    landed first, stage-beat.js refused it, "The room is not on What we
+    heard", a 409 the hook then retried a second later. Not a "not ready"
+    state the server should hide, a race in this page: so the page post waits
+    for the beat this page sent, and the server still refuses a page for a
+    read the room is not on.
+  */
   const publishNotesPage = async (body) => {
     try {
+      if (beatPublishRef.current) await beatPublishRef.current;
       const res = await authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7199,7 +7420,7 @@ Focus on actionable business strategy insights.`;
   const scoreboardKeysOn = scoreboardKeysLive({
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
-    lessonExpanded, isLoadingData, qrMode: qrCovers,
+    lessonExpanded: questionHeld, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
@@ -7269,6 +7490,21 @@ Focus on actionable business strategy insights.`;
       && normalizeGameType(currentGameType) === 'call-and-answer'
       && !ownComposer && !ownChoiceOpen && gameState !== 'ENDED',
     onWrite: () => openOwnComposer(),
+  });
+
+  /*
+    C: CHOOSE A QUESTION (question picker D2, F6). Q's `enabled` without the
+    Call & Answer term (F7: Trivia and Poll too, never a survey, Wavelength
+    or the Build Room), never while the picker or its one-screen choice is
+    already up.
+  */
+  useQuestionPickerKey({
+    enabled: sessionPanelKeyOn && !createdSetup && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && !confirmLeave && Boolean(gameId)
+      && pickerApplies(currentGameType, gameState)
+      && !picker && !pickerChoiceOpen && !ownComposer && !ownChoiceOpen,
+    onChoose: () => openPicker({ from: 'key' }),
   });
 
   // F: the host's screen full screen, and back (hooks/useFullscreenKey.js).
@@ -7355,6 +7591,17 @@ Focus on actionable business strategy insights.`;
   // and the payload has not landed; the old condition fell through that window
   // to the stage behind, so the button read as broken. GameReport owns the
   // wait now, via `status`.
+  // A bluff round's reveal at RESULTS (components/stage/BluffLine.jsx): the
+  // real answer and its ballot number for the stage, and each player's own
+  // points for this screen's results list. Above the report's early return.
+  const bluffReveal = useBluffReveal({
+    inResults: String(gameState || '').startsWith('RESULTS#'),
+    question: questions[0] || null,
+    gameId,
+    round: lessonNumber,
+    apiBase: API_BASE,
+  });
+
   if (showReport) {
     return (
       <GameReport
@@ -7704,6 +7951,8 @@ Focus on actionable business strategy insights.`;
   const hostPhase = gameState === 'ENDED'
     ? 'ENDED'
     : hostPhaseForBeat(roundPhase, resultsBeat);
+  // The question back up, on THIS screen: its ASK card in place of the answers.
+  const stageQuestionUp = questionHeld && !useConsole;
 
   // Are `answers` THIS round-phase's? VOTE and RESULTS leave their responses'
   // space blank until they are (config/stageAnswers.js) — the owner: "it
@@ -7993,8 +8242,8 @@ Focus on actionable business strategy insights.`;
   const anyOverlayOpen = shortcutsSuppressed({
     // The ask preview is a dialog: Space and the arrows are its own.
     // …and so is the one-screen choice before writing a question (impromptu ask).
-    showConfirmModal: showConfirmModal || Boolean(askComposer) || ownChoiceOpen, showExpandedQR,
-    showReportsModal, lessonExpanded, isLoadingData, qrMode: qrCovers,
+    showConfirmModal: showConfirmModal || Boolean(askComposer) || ownChoiceOpen || pickerChoiceOpen, showExpandedQR,
+    showReportsModal, lessonExpanded: questionHeld, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
     scoreboardOpen: scoreboard.open,
@@ -8603,8 +8852,13 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  /* The question, blown up for the room. Same deal as openSpotlight. */
-  const expandQuestion = () => {
+  /* The question, back up for the room (Session menu → Show how this works).
+     Same deal as openSpotlight: on one screen the stage draws it in its ASK
+     card, on two it is the wall's QUESTION_FOCUS. Only inside a round: in the
+     lobby there is no question, and a focus set there would surface later. */
+  const showQuestion = () => {
+    if (roundOfState(gameStateRef.current) === null) return;
+    setSpotlightIndex(null);
     setLessonExpanded(true);
     publishFocus({ focus: 'question' });
   };
@@ -8849,7 +9103,9 @@ Focus on actionable business strategy insights.`;
       noun: getHostRoundNoun(),
       round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
       of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
-      goal: stageGoal.rail || undefined,
+      /* No "Goal 5" on the room's view (owner, 5 Nov 2026, cut 3): jargon
+         to the room. The goal's notice is still Your part now's status on
+         the goal round (goalStage.js goalLine). */
     };
   const surveyFitKey = isSurvey && survey.progress
     ? `${surveyQuestionCount}:${survey.progress.finished}:${survey.people ? survey.people.length : -1}`
@@ -9001,12 +9257,44 @@ Focus on actionable business strategy insights.`;
   const seenFor = (prefix) => {
     if (!pulseRound) return null;
     const key = `${prefix}#${pulseRound}`;
-    const ts = Object.entries(phaseSeenAt).filter(([k]) => k === key || k.startsWith(`${key}#`)).map(([, t]) => t);
+    const ts = Object.entries(phaseSeenAt)
+      .filter(([k]) => (k === key || k.startsWith(`${key}#`)) && k !== phaseAtLoadRef.current)
+      .map(([, t]) => t);
     return ts.length ? Math.min(...ts) : null;
   };
   const pulseOpenedAt = (currentQuestion && currentQuestion.startedAt) || seenFor('ASK');
-  const pulseTimer = phaseTimer
-    || (roundTime && pulseRound && /^RESULTS#/.test(basePhase(gameState)) && String(roundTime.phase || '').endsWith(`#${pulseRound}`) ? roundTime : null);
+  /* WHEN VOTING OPENED: the server's PhaseStartedAt for this VOTE (the host
+     door's `phaseStartedAt`, or the timer's own start), else the moment this
+     page saw it open, never a page's load time (seenFor skips that). */
+  const pulseVoteAt = (() => {
+    if (!pulseRound) return null;
+    const key = `VOTE#${pulseRound}`;
+    if (hostPhaseOpened && String(hostPhaseOpened.state || '').startsWith(key) && hostPhaseOpened.at) return hostPhaseOpened.at;
+    if (roundTime && String(roundTime.phase || '').startsWith(key) && roundTime.startedAt) return roundTime.startedAt;
+    return seenFor('VOTE');
+  })();
+  /*
+    HOW FAR ALONG IS THE ROOM (config/roomProgress.js; host-attention PLAN
+    §4.1; owner's cut 5, 5 Nov 2026): one answer for the step that is live,
+    read by the room tile and the People rail. A latecomer during an open
+    step is owed it; one who joined after it closed is not.
+  */
+  const roomProgress = roomProgressFor({
+    moment: consoleMoment,
+    roster: players,
+    noVote: !closesIntoVote,
+    choice: answersAreChoices(normalizeGameType(currentGameType), currentQuestion),
+    answer: {
+      names: playersWhoAnswered, count: answeredCount, openedAt: pulseOpenedAt,
+      closedAt: closesIntoVote ? pulseVoteAt : null,
+    },
+    vote: { names: playersWhoVoted, count: playersWhoVoted.length, openedAt: pulseVoteAt },
+    ask: roundAsks.shown ? {
+      n: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0,
+      answeredBy: Array.isArray(roundAsks.shown.answeredBy) ? roundAsks.shown.answeredBy : null,
+      sentAt: roundAsks.shown.sentAt || null,
+    } : null,
+  });
   /*
     THE TIME CHIP beside the opening move (2f, D4): Start round N takes the
     answering chip, Start voting the voting chip. `timeChipFor` builds it for
@@ -9030,30 +9318,35 @@ Focus on actionable business strategy insights.`;
   // At zero, Your part now says so (D4): "Time's up. Start voting, or give them another minute."
   // Everyone's in leads when the whole room has answered (dev QA 2 Nov).
   const timesUpPart = timesUpPartFor({ timeIsUp, gameState, closesIntoVote, everyoneIn: everybodyIn });
-  const consolePulse = useConsole ? (
+  /* A BLUFF ROUND ON THE HOST'S OWN SCREEN, TWO SCREENS (QA 2026-11-07): the
+     same line the stage gives, under the room tile, from the round itself
+     rather than from the content the console is previewing. Never who. */
+  const consoleBluffPhase = (String(gameState || '').match(/^(ASK|VOTE|RESULTS)#/) || [])[1] || null;
+  const consoleBluff = useConsole && consoleBluffPhase && currentGameType === 'call-and-answer' && questions[0] ? (
+    <BluffLine phase={consoleBluffPhase} question={questions[0]} reveal={bluffReveal} />
+  ) : null;
+  const consolePulseTile = useConsole ? (
     <ConsolePulse
       moment={consoleMoment}
-      players={players.length}
-      answered={answeredCount}
-      voted={playersWhoVoted.length}
+      // THE ONE SOURCE (config/roomProgress.js): the count, who is still out,
+      // who is away. Everything on the console that counts reads it.
+      progress={roomProgress}
       everyoneIn={consoleMoment === 'ANSWERING' || consoleMoment === 'VOTING' || consoleMoment === 'VOTE_RESPONSES' ? everybodyIn : null}
       openedAt={pulseOpenedAt}
-      voteAt={seenFor('VOTE')}
-      resultsAt={seenFor('RESULTS')}
+      voteAt={pulseVoteAt}
+      askAt={roundAsks.shown ? roundAsks.shown.sentAt || null : null}
       arrivals={arrivalsSince(players, pulseOpenedAt)}
-      late={lateCounts.notReviewed}
-      // The late count is the Needs-you item's own Review (one home for the late list).
-      onLate={openLateList}
-      // The round timer (2f): the phase's own while it is on; after the round,
-      // the last phase's, for "2:00 given".
-      timer={pulseTimer}
+      // The round timer (2f): the phase's own while it is on.
+      timer={phaseTimer}
       onAddMinute={phaseTimer ? addMinute : null}
-      // Trivia's tile 3, "Correct so far" (2g): host-only, from the answer letters.
+      // Trivia's "Correct so far" (2g): host-only, from the answer letters.
       correct={consoleTrivia && (consoleMoment === 'ANSWERING' || (consoleMoment === 'RESULTS' && stageResponsesReady)) ? correctSoFar(answers, triviaLetters) : null}
       noVote={!closesIntoVote}
       choice={consoleChoice}
     />
   ) : null;
+  // The room tile and, in a bluff round, its line under it.
+  const consolePulse = consoleBluff && consolePulseTile ? <>{consolePulseTile}{consoleBluff}</> : consolePulseTile;
   /*
     THE ROUND QUEUE: the rounds played (the session history, `rounds`), the one
     on screen, and what the server's plan says comes next (`upNext`). All
@@ -9122,7 +9415,11 @@ Focus on actionable business strategy insights.`;
     ? questionRoomData(askRecord, { task: getHostInstructionText(askRecord), sessionTitle: eventTitle })
     : null;
   const consoleAuthorsHidden = authorsHiddenNow({ gameType: currentGameType, anonymousUntilReveal, authorsRevealed });
-  const consoleKicker = (label) => [workflow && workflow.round ? workflow.round.label : '', label].filter(Boolean).join(' · ');
+  /* NO EYEBROW OVER THE CONTENT (owner, 5 Nov 2026, cut 7: "say each thing
+     once"): "Round 3 · Answer" repeated the step bar directly above it, and
+     "Page 2 of 6" the strip's own "What we heard · page 2 of 6". The panels
+     draw no kicker for an empty one. */
+  const consoleKicker = () => '';
   // The one line roundStep writes for what the main button puts up next.
   const consoleNext = hostControls.step && hostControls.step.next && consoleMoment !== 'UNKNOWN' && consoleMoment !== 'OTHER'
     ? `${CW.nextOnWall}: ${hostControls.step.next.charAt(0).toLowerCase()}${hostControls.step.next.slice(1)}`
@@ -9355,7 +9652,7 @@ Focus on actionable business strategy insights.`;
       case 'LOBBY':
         return <LobbyPanel code={eventCode || gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
       case 'ANSWERING':
-        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={askRoomData ? askRoomData.story : String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={askRoomData ? askRoomData.task : consoleTask} taskOwn={Boolean(askRoomData && askRoomData.taskOwn)} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={askRoomData ? askRoomData.story : String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={askRoomData ? askRoomData.task : consoleTask} taskOwn={Boolean(askRoomData && askRoomData.taskOwn)} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} side={consoleNotes} />;
       case 'VOTING':
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
@@ -9373,7 +9670,7 @@ Focus on actionable business strategy insights.`;
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':
       case 'ROOM_RESULTS':
-        return <RoomQuestionPanel><AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} /></RoomQuestionPanel>;
+        return <RoomQuestionPanel><AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} showCount={false} /></RoomQuestionPanel>;
       case 'ENDED':
         return <EndedPanel onOpenReport={() => runHostAction({ intent: HOST_INTENTS.REPORT })} />;
       default:
@@ -9381,6 +9678,80 @@ Focus on actionable business strategy insights.`;
     }
   })();
 
+
+  /* THE NEEDS-YOU LINE, ONE RULE FOR BOTH FRAMES (owner, 5 Nov 2026, cut 3;
+     dev QA 5 Nov). Two screens: a private laptop, the full line, calm
+     included. One screen: the room reads this laptop, so Setup's console
+     frame and the live stage alike draw nothing while calm (no "Nothing
+     needs you now.", no Soon count: the bell counts it) and the public line,
+     a count by kind and Open, only while a Now item waits
+     (config/needsYou.js projectNeedsLine). Setup on one screen used to draw
+     the private line, calm and all, where the room could read it. Before
+     step 1 is answered nothing says this laptop is the room's screen (and
+     the count-only bell, whose sheet Open opens, is not up yet), so Setup
+     keeps the private line until one screen is chosen. */
+  /* CHOOSE A QUESTION, BUILT ONCE (question picker note 3): portalled into
+     the console's sheet host on the console, the Stage's `view` on one
+     screen. The way back names where it goes (D6). */
+  const PICK_STEP = {
+    LOBBY: 'Lobby', ASK: RW.stepAnswer, VOTE: RW.stepVote, RESULTS: RW.stepResults,
+    FIELD_NOTES: RW.whatWeHeard, FEEDBACK: RW.stepFeedback,
+  };
+  const pickerBack = picker ? pickerBackLabel({
+    from: picker.from,
+    round: hostPhase !== 'LOBBY' ? lessonNumber : 0,
+    step: PICK_STEP[hostPhase] || '',
+  }) : '';
+  const pickerEl = picker ? (
+    <QuestionPicker
+      key={picker.focusKey || picker.from}
+      place={consoleOn ? 'sheet' : 'stage'}
+      questions={browsingQuestions}
+      loadingQuestions={loadingQuestions}
+      usedQuestionIds={usedQuestionIds}
+      categories={categories}
+      categoryCounts={categoryCounts}
+      categoryBitmasks={categoryBitmasks}
+      activeCategoryIds={activeCategoryIds}
+      questionQueue={questionQueue}
+      queueBusyKeys={queueBusyKeys}
+      upNext={upNext}
+      currentQuestionId={currentQuestionId}
+      gameType={currentGameType}
+      view={pickerView}
+      onViewChange={setPickerView}
+      scrollRef={pickerScrollRef}
+      focusKey={picker.focusKey}
+      backLabel={pickerBack}
+      backWhere={picker.from === 'menu' ? 'the Session menu' : 'the round'}
+      onClose={() => { setPickQueued([]); closePicker(); }}
+      onQueue={pickQueue}
+      onUnqueue={pickUnqueue}
+      onAskNext={pickAskNext}
+      onAskNow={(question) => { setPickNotice(null); selectQuestion(question); }}
+      onDisable={(key, opts) => { setPickNotice(null); handleDisableQuestion(key, opts); }}
+      onWrite={ownWritable ? () => { closePicker({ focus: false }); openOwnComposer(); } : null}
+      onOpenCategories={() => { closePicker({ focus: false }); openSetupAt('up-next'); }}
+      queuedHere={pickQueued.length}
+      onUndoQueued={pickQueued.length ? undoPickQueued : null}
+      oneScreen={Boolean(picker.oneScreen)}
+      onHide={picker.oneScreen ? hidePicker : null}
+      onUsePhone={picker.oneScreen ? () => { closePicker({ focus: false }); openSetupAt('remote'); } : null}
+    />
+  ) : null;
+  /* YOUR PART NOW'S LINE (D3, D7; R2): the notice after Ask next, or the
+     quiet door, while a next round exists. */
+  const pickNoticeProp = pickNotice ? { title: pickNotice.title, undone: Boolean(pickNotice.undone), onUndo: undoPick } : null;
+  const nextRoundExists = consoleRounds.some((r) => r.state === 'next')
+    || (typeof roundOf === 'number' && roundOf > 0 ? lessonNumber < roundOf : true);
+  const changeNextDoor = pickerOn && nextRoundExists ? () => openPicker({ from: 'part' }) : null;
+
+  const roomReadsThisLaptop = !twoSurfaces && (!setupFrame || setupChoice === 'classic');
+  const needsLine = !roomReadsThisLaptop
+    ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
+    : (projectNeedsLine(needs)
+      ? <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />
+      : null);
 
   return (
     <>
@@ -9436,6 +9807,8 @@ Focus on actionable business strategy insights.`;
             presentDetail,
             // The state alone beside "Room's window ↗", as the Build Room's bar does, so the bar fits at 1280.
             short: true,
+            // ONE CONTROL (cut 7): the room's window with its status in it.
+            oneRoomWindow: true,
             help: consoleHelp,
             // The bell is the Needs-you door in a live session (experience plan §4.3).
             bellSession: needsBell,
@@ -9495,6 +9868,8 @@ Focus on actionable business strategy insights.`;
             onOpenSection: openSetupAt,
             // The impromptu ask's rail door: the same composer step (D2).
             onWriteQuestion: ownWritable ? () => openOwnComposer() : null,
+            // Choose a question's rail door, and each planned row (picker D3, D4).
+            onChoose: pickerOn ? ({ focusKey = null } = {}) => openPicker({ from: focusKey ? 'row' : 'rail', focusKey }) : null,
             scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
             // Askers lifted to the top of People, with Let them / Not now on the row.
             asking: needs.items.filter((i) => i.kind === 'name-request' || i.kind === 'name-open'),
@@ -9519,6 +9894,8 @@ Focus on actionable business strategy insights.`;
             interceptAdvance: consoleInterceptAdvance,
             onBackKey: consoleOnBackKey,
             onReviewLate: openLateList,
+            pickNotice: pickNoticeProp,
+            onChangeNext: changeNextDoor,
           } : {
             // roundStep's own status, without the room's count: the pulse says it (one fact, once).
             status: viewing
@@ -9534,8 +9911,10 @@ Focus on actionable business strategy insights.`;
             interceptAdvance: consoleInterceptAdvance,
             onBackKey: consoleOnBackKey,
             onReviewLate: openLateList,
+            pickNotice: pickNoticeProp,
+            onChangeNext: changeNextDoor,
           }}
-          needs={<NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />}
+          needs={needsLine}
         >
           {consolePanel}
         </HostConsole>
@@ -9554,7 +9933,10 @@ Focus on actionable business strategy insights.`;
            items: a dot and the number in the corner while the chrome is
            away, never a name. */
         autoHide={!twoSurfaces}
-        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || showReportsModal}
+        /* An armed press ("3 questions not asked yet. Press again to move
+           on.") holds the chrome too (dev QA 5 Nov): its words are in Your
+           part now, and fading them would undo the warning. */
+        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || pickerChoiceOpen || Boolean(picker) || showReportsModal || stageArmed}
         urgent={((needs && needs.items) || []).filter((i) => i.level === NEEDS_LEVELS.NOW).length}
         /* The fitter's deps live in Stage but the content that changes lives
            here. Without this a question arriving, an answer list growing or a
@@ -9578,6 +9960,8 @@ Focus on actionable business strategy insights.`;
           joinPanelLive ? 'join' : '',
           // The round timer's line under the meter (2f) adds a row: re-measure.
           phaseTimer && phaseTimer.onWall !== false ? 'time' : '',
+          // The question back up replaces the answers: re-measure.
+          stageQuestionUp ? 'question' : '',
         ].join('|')}
         /* NO STEPS STRIP ON ONE SCREEN (experience plan §3.3, 2h): it is
            folded into the room's view, whose eyebrow and rail say where the
@@ -9602,7 +9986,7 @@ Focus on actionable business strategy insights.`;
             />
           )
           : null}
-        view={viewStep
+        view={pickerEl && !consoleOn ? pickerEl : viewStep
           ? (
             <StepView
               step={viewStep}
@@ -9689,6 +10073,8 @@ Focus on actionable business strategy insights.`;
                Passing `meter` unchanged is deliberate: two sources for one
                fraction is how they drift apart. */
             progress={meter ? { ...meter, complete: everybodyIn } : null}
+            pickNotice={pickNoticeProp}
+            onChangeNext={changeNextDoor}
           >
             {/* Not reimplemented here. HostActionBar keeps its keyboard
                 handling, its typing-target guard and its disabled hint; only
@@ -9699,6 +10085,7 @@ Focus on actionable business strategy insights.`;
             <HostActionBar
               controls={stageControls}
               onAction={runHostAction}
+              onArmedChange={setStageArmed}
               bigScreen
               shortcutsEnabled={!anyOverlayOpen}
               /* The time chip and +1 min (2f), beside the main button as on
@@ -9738,9 +10125,12 @@ Focus on actionable business strategy insights.`;
             />
           </Dock>
         )}
-        needs={twoSurfaces
-          ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
-          : <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />}
+        /* NOTHING EMPTY PROJECTED (owner, 5 Nov 2026, cut 3): on one screen
+           the room reads this laptop, so the calm "Nothing needs you now."
+           is never drawn there, nor a Soon item's count (the bell counts
+           it). The public line comes up only while a Now item waits, a
+           count by kind and Open, as before. */
+        needs={needsLine}
         rail={(
           <Rail
             phase={hostPhase}
@@ -9844,7 +10234,7 @@ Focus on actionable business strategy insights.`;
             `[data-join]` lays the content out in a narrower column with the
             join block on the right; the fitter re-measures (fitKey) and steps
             the type down, and nothing leaves the screen. */}
-        <div className="content" data-join={joinPanelLive ? '1' : undefined} data-grow={STAGE_GROW[hostPhase] || '1'}>
+        <div className="content" data-join={joinPanelLive ? '1' : undefined} data-grow={STAGE_GROW[stageQuestionUp ? 'ASK' : hostPhase] || '1'}>
           {joinPanelLive && gameId && (
             <StageJoinPanel playUrl={playUrl} joinUrl={joinDisplayUrl} code={eventCode || gameId} />
           )}
@@ -9922,22 +10312,60 @@ Focus on actionable business strategy insights.`;
             {/* WHAT THE ROOM SEES (owner, 18 Oct 2026, docs/design/room-content-v2):
                 a Call & Answer round draws the parts config/roomContent.js
                 names for this profile, from the same call the room's window
-                makes — the title leads, the lesson under it, the question's
-                own instruction in "Your turn". `askRoomData` reads the same
-                question record the instruction is resolved from, so its own
-                instruction (customInstructions) decides "Your turn". Other
-                types keep the card's own DOM. */}
+                makes — the title leads and the whole lesson under it. Other
+                types keep the card's own DOM: the title, the prompt, trivia's
+                options (a poll's board is drawn below it).
+                NO INSTRUCTION ON THE ROOM'S SCREEN (owner, 5 Nov 2026: "taking
+                the instructions out and making the main body larger is more
+                useful"): neither "Your turn" nor the how-to-answer line. The
+                card is handed none, so the body takes the space (ASK's
+                data-grow); every phone still shows how to answer.
+                NOTHING TO ENLARGE: the card opens nothing (QuestionCard). */}
             {hostPhase === 'ASK' && currentQuestion && (
               <QuestionCard
                 phase="ASK"
                 question={currentQuestion}
                 gameType={currentGameType}
-                instruction={getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
-                onExpand={expandQuestion}
                 room={askRoomData
                   ? roomContentFor('ANSWERING', profile, askRoomData)
                   : null}
               />
+            )}
+            {/* A BLUFF ROUND: that one is in play, never who has the real
+                answer (components/stage/BluffLine.jsx). */}
+            {(hostPhase === 'ASK' || hostPhase === 'VOTE' || hostPhase === 'RESULTS') && currentQuestion
+              && !stageQuestionUp && !useConsole && currentGameType === 'call-and-answer' && (
+              <BluffLine phase={hostPhase} question={currentQuestion} reveal={bluffReveal} />
+            )}
+
+            {/* THE QUESTION, BACK UP, ON ONE SCREEN (owner, 5 Nov 2026,
+                replacing the white "expanded lesson" overlay: "it turns the
+                modal background white but really isnt much larger"). When the
+                phone Remote's "Show the question" (or Session menu → Show how
+                this works) puts the question up during voting or the results,
+                the stage draws the same card as ASK — the room's
+                QUESTION_FOCUS content, in the stage's own dusk — in place of
+                the answers, at ASK's data-grow. Esc, the button below or the
+                Remote's "Stop showing the question" puts the answers back.
+                Two screens: it is the wall's, and the console's row. */}
+            {stageQuestionUp && currentQuestion && (
+              <>
+                <QuestionCard
+                  phase="ASK"
+                  question={currentQuestion}
+                  gameType={currentGameType}
+                  room={askRoomData
+                    ? roomContentFor('QUESTION_FOCUS', profile, askRoomData)
+                    : null}
+                />
+                <div className="fn-controls stage-qfocus" data-drop="1" data-testid="stage-question-back">
+                  <button type="button" onClick={collapseQuestion}>
+                    {hostPhase === 'VOTE' ? 'Back to the responses'
+                      : hostPhase === 'FIELD_NOTES' ? `Back to ${RW.whatWeHeard}` : 'Back to the results'}
+                  </button>
+                  <span>Esc</span>
+                </div>
+              </>
             )}
 
             {/* A TYPED POLL: its options on the wall the moment it is asked,
@@ -9946,7 +10374,7 @@ Focus on actionable business strategy insights.`;
               <PollBoard question={currentQuestion.poll} tally={pollTallyNow} live />
             )}
 
-            {hostPhase === 'VOTE' && (
+            {hostPhase === 'VOTE' && !stageQuestionUp && (
               <>
                 {/* THE CUE, THE TITLE, EVERY ANSWER (owner, 18 Oct 2026,
                     docs/design/room-content-v2 frame 4): "nice to see a bar
@@ -9958,9 +10386,10 @@ Focus on actionable business strategy insights.`;
                     2026-10-12), so the first votes cannot steer the rest; how
                     many have voted is the meter's. */}
                 <div className="kicker" data-rc-part="cue" data-rc="kicker">
-                  {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
+                  {currentQuestion?.bluff?.active ? BLUFF_WORDS.voteCue
+                    : currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
-                {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
+                {currentQuestion && <StageQuestionRecap question={currentQuestion} />}
                 {currentQuestion?.image && (
                   <img
                     className="stage-art"
@@ -10078,7 +10507,7 @@ Focus on actionable business strategy insights.`;
                     stageShell.test.jsx holds. A control that is not on the
                     stage cannot be sacrificed from it. */}
 
-            {hostPhase === 'RESULTS' && (
+            {hostPhase === 'RESULTS' && !stageQuestionUp && (
               <>
                 {/* NO KICKER ON RESULTS. "Round 3 · Results" sat above a card
                     whose first line now restates the question (QuestionCard's
@@ -10193,7 +10622,7 @@ Focus on actionable business strategy insights.`;
                      without asking anyone to own up, and is the first thing
                      the fitter may give up. */
                   <>
-                  {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
+                  {currentQuestion && <StageQuestionRecap question={currentQuestion} />}
                   <div className="cards is-ideas" data-rc-part="ideas" data-rc="lead">
                     {answerPage.items.map((answer, i) => {
                       const idx = answerPage.offset + i;
@@ -10227,11 +10656,22 @@ Focus on actionable business strategy insights.`;
                       // flag away and hardcoded the session setting — so the
                       // points vanished with the names, for the same reason and
                       // in the same rounds.
+                      /* A BLUFF ROUND (QA 2026-11-07): on the room's screen no
+                         name and no points, whatever the setting — the names
+                         would point at the truth-holder, and an answer's points
+                         are not any one player's. On the host's own console
+                         (two screens) the name and that PLAYER's points as
+                         scored, spotting included (get-results bluff.points). */
+                      const bluffRow = bluffReveal ? {
+                        real: Boolean(bluffReveal.holderAnswered && answer.answer === bluffReveal.holderAnswer),
+                        points: Number((bluffReveal.points || {})[answer.playerName || answer.player]) || 0,
+                      } : null;
                       const showPoints = standingsVisible({
                         gameType: currentGameType,
                         anonymousUntilReveal,
                         authorsRevealed,
                       });
+                      const showCredit = bluffRow ? useConsole : showPoints;
                       /*
                         THE CARD OPENS. A card sized to fit a screenful of its
                         siblings is glanceable, not readable, and the host asked
@@ -10253,7 +10693,7 @@ Focus on actionable business strategy insights.`;
                           className={`card is-openable ${pick ? 'lead is-pick' : 'is-runner'}`}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Read this answer in full: ${displayName}`}
+                          aria-label={`Read this answer in full: ${bluffRow && !useConsole ? `Response ${idx + 1}` : displayName}`}
                           onClick={() => openSpotlight(idx)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -10272,10 +10712,14 @@ Focus on actionable business strategy insights.`;
                               pick says what it is in words instead. */}
                           {!pick && <span className="rank">{placeLabel(answer.placement)}</span>}
                           <div className="body">
-                            {pick && <span className="pick-k">{RESULTS_PICK}</span>}
+                            {bluffRow ? (
+                              (bluffRow.real || pick) && (
+                                <span className="pick-k">{bluffRow.real ? BLUFF_WORDS.realLabel : BLUFF_WORDS.fooledLabel}</span>
+                              )
+                            ) : pick && <span className="pick-k">{RESULTS_PICK}</span>}
                             <div className="ans">{answerText(answer.answer)}</div>
-                            {showPoints && (
-                              <span className="who revealed">{RW.backedCredit(points, displayName)}</span>
+                            {showCredit && (
+                              <span className="who revealed">{RW.backedCredit(bluffRow ? bluffRow.points : points, bluffRow ? (answer.playerName || answer.player || '') : displayName)}</span>
                             )}
                           </div>
                         </div>
@@ -10285,7 +10729,7 @@ Focus on actionable business strategy insights.`;
                   {resultsMore > 0 && (
                     <p className="more-answers">{`and ${resultsMore} more ${resultsMore === 1 ? 'answer' : 'answers'}`}</p>
                   )}
-                  {textOf(resultsRoom, 'talk') && (
+                  {textOf(resultsRoom, 'talk') && !bluffReveal && (
                     <p className="talk" data-rc-part="talk" data-rc="support" data-drop="3" data-drop-note="Talk about it">
                       <span className="talk-k">Talk about it</span>
                       <span className="talk-t">{textOf(resultsRoom, 'talk')}</span>
@@ -10357,12 +10801,13 @@ Focus on actionable business strategy insights.`;
                   onClose={closeSpotlight}
                   /* DURING VOTE: no name, no points, whatever the round's
                      names setting (the owner's ruling, two-surface D5). */
-                  showPoints={phaseOfGameState(gameState) !== 'VOTE' && standingsVisible({
+                  showPoints={phaseOfGameState(gameState) !== 'VOTE' && !(bluffReveal && !useConsole) && standingsVisible({
                     gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                   })}
                   labelFor={(answer, idx) => navigatorLabel(answer, idx, {
                     phase: phaseOfGameState(gameState),
-                    authorsHidden: authorsHiddenNow({
+                    // A bluff round names nobody on the room's screen (QA 2026-11-07).
+                    authorsHidden: Boolean(bluffReveal && !useConsole) || authorsHiddenNow({
                       gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                     }),
                   })}
@@ -10378,7 +10823,7 @@ Focus on actionable business strategy insights.`;
               </>
             )}
 
-            {hostPhase === 'FIELD_NOTES' && (
+            {hostPhase === 'FIELD_NOTES' && !stageQuestionUp && (
               <>
                 <div className="kicker">{RW.whatWeHeard}</div>
                 {/* Four states, one component (components/AISummaryStatus.jsx):
@@ -10493,7 +10938,7 @@ Focus on actionable business strategy insights.`;
                 that would be a non-sequitur mid-tally or mid-field-notes, so
                 it must never render there with nothing featured. */}
             {(hostPhase === 'FEEDBACK'
-              || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && featuredComment)) && (
+              || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && featuredComment && !stageQuestionUp)) && (
               // The wall is its own component: the question, one instruction line,
               // and the comment the host put up as a pull quote (FeedbackWall.jsx).
               // The count is the meter's; the arrivals are the meter's list.
@@ -10608,6 +11053,24 @@ Focus on actionable business strategy insights.`;
           onClose={() => setOwnChoiceOpen(false)}
         />
       )}
+      {/* CHOOSE A QUESTION ON ONE SCREEN ASKS FIRST (question picker D9, F5):
+          every time, the phone first. "Show them here" draws the picker
+          with its amber "The room can see this list" line. */}
+      {pickerChoiceOpen && (
+        <PrivateChoice
+          words={PICKER_CHOICE_WORDS}
+          testIdPrefix="picker-choice"
+          hereIcon="Eye"
+          remoteConnected={false}
+          onOpenPhone={() => setPickerChoiceOpen(false)}
+          onConnectPhone={() => { setPickerChoiceOpen(false); openSetupAt('remote'); }}
+          onHere={showPickerHere}
+          onClose={() => setPickerChoiceOpen(false)}
+        />
+      )}
+      {/* On the console the picker takes the content area: the sheet host
+          over the room tile and the main area (F1). */}
+      {pickerEl && consoleOn && consoleSheetHost ? createPortal(pickerEl, consoleSheetHost) : null}
       {askComposer && !useConsole && (
         <AskComposer
           suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
@@ -10680,6 +11143,7 @@ Focus on actionable business strategy insights.`;
           loadingQuestions={loadingQuestions}
           usedQuestionIds={usedQuestionIds}
           onSelectQuestion={selectQuestion}
+          onChoose={pickerOn ? () => openPicker({ from: 'menu' }) : null}
           questionQueue={questionQueue}
           queueBusyKeys={queueBusyKeys}
           upNext={upNext}
@@ -10768,7 +11232,7 @@ Focus on actionable business strategy insights.`;
           answerCount={answers.length}
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
-          onShowHowToPlay={() => setLessonExpanded(true)}
+          onShowHowToPlay={showQuestion}
           onSwitchGame={requestLeave}
           /* AN EVENT'S ITEM (2d, with 2h's order): the Session menu's first
              row, Agenda (up one level, never instead of Main menu) and Bring
@@ -10955,57 +11419,6 @@ Focus on actionable business strategy insights.`;
           room is, continuously, without taking the screen to say it. The
           loading overlay above stays: it reports a real wait. */}
 
-      {/* Expanded Lesson Modal */}
-      {lessonExpanded && questions.length > 0 && !(useConsole && wallFocus === 'question') && (
-        <div className="expanded-lesson-overlay" onClick={collapseQuestion}>
-          <div className="expanded-lesson-content" onClick={(e) => e.stopPropagation()}>
-            <div className="expanded-lesson-header">
-              <div className="field-badge">
-                {questions[0].field || questions[0].category}
-              </div>
-              {questions[0].school && (
-                <div className="school-name">{questions[0].school}</div>
-              )}
-            </div>
-            <div className="expanded-lesson-title">
-              {currentGameType === 'trivia' ? 
-                (questions[0].title) :
-                (questions[0].title || questions[0].question)
-              }
-            </div>
-            {questions[0].image && (
-              <img
-                src={questions[0].image}
-                alt={questions[0].title || 'Artwork'}
-                className="artwork-image artwork-image-expanded"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            )}
-            {currentGameType === 'trivia' && (questions[0].questionDetail || questions[0].detail) && (
-              <div className="expanded-lesson-detail">
-                {questions[0].questionDetail || questions[0].detail}
-              </div>
-            )}
-            {questions[0].detail && currentGameType !== 'wavelength' && (
-              <div className="expanded-lesson-detail">
-                {questions[0].detail}
-              </div>
-            )}
-            {/* Wavelength: the term and nothing about it — a stored detail is
-                a definition, and definitions are the players' job. The
-                expanded view adds only the reminder of what to do. */}
-            {currentGameType === 'wavelength' && (
-              <div className="expanded-lesson-detail wavelength-topic-expanded">
-                Everyone lists up to ten words or short phrases this term brings to mind.
-              </div>
-            )}
-            <div className="expanded-lesson-prompt">
-              <strong>{getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}</strong>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* The are-you-sure dialog, now components/ConfirmDialog.jsx: ← cancels,
           → carries the advance through, and the buttons wear their keys — the
           owner's own gesture, since the hand that triggered this was already

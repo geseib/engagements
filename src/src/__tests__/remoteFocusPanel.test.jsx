@@ -19,7 +19,7 @@ import React from 'react';
 import fs from 'fs';
 import path from 'path';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import RemoteFocusPanel from '../components/RemoteFocusPanel';
+import RemoteFocusPanel, { QUESTION_WORDS } from '../components/RemoteFocusPanel';
 
 const answers = [
   { id: 'a1', playerName: 'Ada', answer: 'Because usage tracks value.' },
@@ -54,36 +54,45 @@ describe('what the panel says it does', () => {
     expect(screen.getByText(/room's screen/i)).toBeInTheDocument();
   });
 
-  test('it names the question it would enlarge', () => {
+  test('it names the question it would show', () => {
     // rejects: an unlabelled button. The projector shows the question; the
-    // phone in the host's hand does not, so "Enlarge the question" with no
+    // phone in the host's hand does not, so "Show the question" with no
     // question named is a button pressed on faith in front of a room.
     renderPanel();
     expect(screen.getByText('Where does pricing power come from?')).toBeInTheDocument();
   });
 });
 
-describe('enlarging the question', () => {
+describe('showing the question (owner, 5 Nov 2026: no more "enlarge")', () => {
+  test('it says Show, not Enlarge or Shrink', () => {
+    // rejects: "Enlarge the question" for the retired white overlay, which
+    // "really isnt much larger". The control puts the question back up in the
+    // room's own view, as each response row's "Show the room" does.
+    renderPanel();
+    expect(screen.queryByRole('button', { name: /enlarge|shrink/i })).toBeNull();
+    expect(screen.getByRole('button', { name: QUESTION_WORDS.show })).toBeInTheDocument();
+  });
+
   test('pressing it asks for a question focus', () => {
     const { onFocus } = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /enlarge the question/i }));
+    fireEvent.click(screen.getByRole('button', { name: QUESTION_WORDS.show }));
     expect(onFocus).toHaveBeenCalledWith({ focus: 'question' });
   });
 
-  test('while it is showing, the same control shrinks it', () => {
+  test('while it is showing, the same control stops showing it', () => {
     // rejects: a one-way button. The host must be able to undo from the same
     // place they did it, without working out which other control reverses it.
     const { onFocus } = renderPanel({ focus: { focus: 'question', index: null } });
-    const button = screen.getByRole('button', { name: /shrink the question/i });
+    const button = screen.getByRole('button', { name: QUESTION_WORDS.stop });
     expect(button).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.click(button);
     expect(onFocus).toHaveBeenCalledWith({ focus: 'none' });
   });
 
-  test('with no question loaded there is nothing to enlarge', () => {
+  test('with no question loaded there is nothing to show', () => {
     renderPanel({ questionTitle: '' });
-    expect(screen.getByRole('button', { name: /enlarge the question/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: QUESTION_WORDS.show })).toBeDisabled();
   });
 });
 
@@ -167,11 +176,11 @@ describe('before any responses have arrived', () => {
     expect(screen.queryAllByTestId('focus-row')).toHaveLength(0);
   });
 
-  test('the question can still be enlarged', () => {
+  test('the question can still be shown', () => {
     // The two halves are independent: a host reads the prompt out loud before
-    // anybody has answered, and that is exactly when they want it big.
+    // anybody has answered, and that is exactly when they want it up.
     renderPanel({ answers: [] });
-    expect(screen.getByRole('button', { name: /enlarge the question/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: QUESTION_WORDS.show })).toBeEnabled();
   });
 });
 
@@ -268,7 +277,8 @@ describe('the stage follows and announces', () => {
     // rejects: a one-way channel. Without this the host opens a spotlight on
     // the laptop and the phone still offers "Show the room" for it.
     expect(host).toMatch(/const openSpotlight = \(idx\) => \{[\s\S]{0,400}publishFocus\(/);
-    expect(host).toMatch(/const expandQuestion = \(\) => \{[\s\S]{0,200}publishFocus\(\{ focus: 'question' \}\)/);
+    expect(host).toMatch(/const showQuestion = \(\) => \{[\s\S]{0,300}publishFocus\(\{ focus: 'question' \}\)/);
+    expect(host).toMatch(/const collapseQuestion = \(\) => \{[\s\S]{0,200}publishFocus\(\{ focus: 'none' \}\)/);
     expect(host).toMatch(/const closeSpotlight[\s\S]{0,400}publishFocus\(\{ focus: 'none' \}\)/);
   });
 

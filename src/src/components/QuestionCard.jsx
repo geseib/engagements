@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/questionCard';
 import {
-  shows, roleOf, sizeOf, textOf, mayDrop, ROLE,
+  shows, roleOf, sizeOf, textOf, ROLE,
 } from '../config/roomContent';
 
 /**
@@ -25,7 +25,8 @@ import {
  * markup in __tests__/questionCardDom.test.jsx.
  *
  *   phase="ASK"     h1.q, img.stage-art, the full-prompt line (never for
- *                   wavelength), the trivia options, the how-to-answer line.
+ *                   wavelength), the trivia options, and the how-to-answer
+ *                   line only when the caller hands one in (`instruction`).
  *   phase="REVEAL"  trivia only: the options, correct one marked, the rest
  *                   dimmed. With `answers` (the stage) every option also
  *                   carries its share — 0% included, because on the stage 0%
@@ -43,16 +44,25 @@ import {
  *                   ASK draws its question anyway; there the prop changes
  *                   nothing.
  *
- * `instruction` IS A PROP. The stage passes getHostInstructionText(…) and the
- * preview resolveInstruction(…); the card never decides what the room is told.
+ * `instruction` IS A PROP, AND THE ROOM'S SCREEN PASSES NONE (owner, 5 Nov
+ * 2026: "taking the instructions out and making the main body larger is more
+ * useful"). The stage hands no instruction in, so its ASK is the question
+ * alone and the phones carry how to answer; the set editor's preview still
+ * passes resolveInstruction(…), for the author checking what they wrote. An
+ * empty instruction draws no line. The card never decides what the room is
+ * told.
+ *
+ * NOTHING HERE OPENS ANYTHING. The heading and the lesson used to open the
+ * question "large" (`onExpand`, a white overlay); the owner retired it on
+ * 5 Nov 2026 ("it turns the modal background white but really isnt much
+ * larger"). The room's question view is this card, at its own size.
  *
  * `room` IS WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026): the
  * stage passes roomContentFor('ANSWERING', profile, questionRoomData(…)) for
  * a Call & Answer round, the same call the room's window makes
- * (present/presentModel.js). With it, ASK draws the parts that content names
- * (owner, 18 Oct 2026): the category eyebrow, the title as the lead (h1.q,
- * the expand recovery on it), the lesson under it (never dropped), and the
- * "Your turn" band when the question has its own instruction — see RoomLines.
+ * (present/presentModel.js). With it, ASK draws the parts that content names:
+ * the category eyebrow, the title as the lead (h1.q), and the whole lesson
+ * under it (never dropped) — see RoomLines.
  * Without it (the set editor's preview, the other types) ASK draws the frozen
  * DOM below.
  */
@@ -62,7 +72,6 @@ export default function QuestionCard({
   gameType,
   instruction = '',
   answers,
-  onExpand,
   withQuestion = false,
   room = null,
 }) {
@@ -119,7 +128,7 @@ export default function QuestionCard({
     if (!withQuestion || !question) return options;
     return (
       <>
-        <QuestionLines question={question} gameType={gameType} onExpand={onExpand} />
+        <QuestionLines question={question} gameType={gameType} />
         {options}
       </>
     );
@@ -127,11 +136,11 @@ export default function QuestionCard({
 
   if (!question) return null;
 
-  if (room) return <RoomLines question={question} room={room} onExpand={onExpand} />;
+  if (room) return <RoomLines question={question} room={room} />;
 
   return (
     <>
-      <QuestionLines question={question} gameType={gameType} onExpand={onExpand} />
+      <QuestionLines question={question} gameType={gameType} />
       {gameType === 'trivia' && (
         <div className="opts">
           {triviaOptions(question).map(({ key, letter, text }) => (
@@ -142,9 +151,11 @@ export default function QuestionCard({
           ))}
         </div>
       )}
-      <p className="qdetail" data-drop="3" data-drop-note="How to answer">
-        {instruction}
-      </p>
+      {instruction ? (
+        <p className="qdetail" data-drop="3" data-drop-note="How to answer">
+          {instruction}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -152,48 +163,32 @@ export default function QuestionCard({
 /** The data attributes a room-content part carries: which part, which role. */
 const rcAttrs = (rc, key) => ({ 'data-rc-part': key, 'data-rc': roleOf(rc, key) });
 
-/** The label on the question's own instruction (docs/design/room-content-v2). */
+/** The label on the question's own instruction, where it is still drawn: the
+ *  console's Responses panel (components/console/panels/ResponsesPanel.jsx).
+ *  No room screen carries it since 5 Nov 2026. */
 export const YOUR_TURN = 'Your turn';
 
 /**
- * ASK, AS THE ROOM CONTENT SAYS (config/roomContent.js; owner, 18 Oct 2026,
- * docs/design/room-content-v2 frames 1-3):
- *
- *   "you provided the biggest text with the generic room instructions, not
- *    the changing lesson ... the instructions is the optional one. the title
- *    often is nice to have big too."
- *
- * So, top to bottom: the category as a small eyebrow; the TITLE as the lead
- * (h1.q, hero when short, primary when long); the LESSON under it at the
- * secondary step, never dropped; the question's own instruction (or the
- * question pulled from the front of the lesson) in one "Your turn" band, never
- * dropped. A generic instruction ("answer on your phone") is not drawn on
- * Room, TV or Table; on Call it is a small line the fitter may give up first
- * (data-drop="3", announced). With no title the lesson leads; with neither,
- * the task.
- *
- * THE RECOVERY STAYS. The heading and the lesson both open the full question
- * (`onExpand`), so a lesson the fitter had to set small can still be read.
+ * ASK, AS THE ROOM CONTENT SAYS (config/roomContent.js questionUp): the
+ * category as a small eyebrow; the TITLE as the lead (h1.q, hero when short,
+ * primary when long); the whole LESSON under it, never dropped, at the
+ * primary step when short and secondary when long. Nothing else: no "Your
+ * turn" band and no how-to-answer line (owner, 5 Nov 2026), so the body has
+ * the space. With no title the lesson leads; with neither, the task.
  */
-function RoomLines({ question, room, onExpand }) {
-  const expand = typeof onExpand === 'function'
-    ? { 'data-expandable': '1', title: 'Show the full question', onClick: onExpand }
-    : {};
+function RoomLines({ question, room }) {
   const leadKey = room.lead;
   const storyRole = roleOf(room, 'story');
-  const taskRole = roleOf(room, 'task');
-  const taskBand = taskRole === ROLE.SUPPORT && !mayDrop(room, 'task');
-  const taskLine = taskRole === ROLE.SUPPORT && mayDrop(room, 'task');
   return (
     <>
       {shows(room, 'category') && (
         <div className="kicker q-eyebrow" {...rcAttrs(room, 'category')}>{textOf(room, 'category')}</div>
       )}
-      <h1 className={`q q-lead is-${sizeOf(room, leadKey)}`} data-rc-size={sizeOf(room, leadKey)} {...rcAttrs(room, leadKey)} {...expand}>
+      <h1 className={`q q-lead is-${sizeOf(room, leadKey)}`} data-rc-size={sizeOf(room, leadKey)} {...rcAttrs(room, leadKey)}>
         {textOf(room, leadKey)}
       </h1>
       {storyRole === ROLE.SUPPORT && (
-        <p className="q-lesson" {...rcAttrs(room, 'story')} {...expand}>{textOf(room, 'story')}</p>
+        <p className={`q-lesson is-${sizeOf(room, 'story')}`} data-rc-size={sizeOf(room, 'story')} {...rcAttrs(room, 'story')}>{textOf(room, 'story')}</p>
       )}
       {question.image && (
         <img
@@ -202,17 +197,6 @@ function RoomLines({ question, room, onExpand }) {
           alt={question.title || 'Artwork'}
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
-      )}
-      {taskBand && (
-        <div className="q-turn" {...rcAttrs(room, 'task')}>
-          <span className="q-turn-k">{YOUR_TURN}</span>
-          <p className="q-turn-t">{textOf(room, 'task')}</p>
-        </div>
-      )}
-      {taskLine && (
-        <p className="qdetail q-howto" {...rcAttrs(room, 'task')} data-drop="3" data-drop-note="How to answer">
-          {textOf(room, 'task')}
-        </p>
       )}
     </>
   );
@@ -224,25 +208,12 @@ function RoomLines({ question, room, onExpand }) {
  * request (`withQuestion`). One block for both, so the question in the
  * preview's Reveal is the stage's ASK question and cannot drift from it.
  */
-function QuestionLines({ question, gameType, onExpand }) {
-  /* THE RECOVERY FOR A DROPPED PROMPT, and only where there is one.
-     The full prompt below is the LAST thing the fitter sacrifices on a dense
-     ASK, after both host controls and the how-to-answer line — but it can
-     still go. Click-to-expand is how the host gets it back, and without it a
-     dense round loses the prompt from both the room's screen and the host's
-     with no way to read it again. Mouse-only on purpose: giving the heading a
-     tabIndex would put SPACE — the advance shortcut — on a focusable element
-     that also opens a modal.
-     GATED ON THE HANDLER. The preview passes none, and a heading that shows
-     the zoom cursor and does nothing on click is a dead control. */
-  const expand = typeof onExpand === 'function'
-    ? { 'data-expandable': '1', title: 'Show the full question', onClick: onExpand }
-    : {};
+function QuestionLines({ question, gameType }) {
   const detail = question.questionDetail || question.detail;
 
   return (
     <>
-      <h1 className="q" {...expand}>
+      <h1 className="q">
         {question.title || question.question}
       </h1>
       {question.image && (
@@ -257,9 +228,8 @@ function QuestionLines({ question, gameType, onExpand }) {
           Jargon set: "we dont want to give them ideas of the meaning, we are
           looking to them to share their meaning." A stored detail sentence IS
           a definition, so for wavelength this line never renders — whatever
-          the set carries. The subject is the headline above; the
-          how-to-answer line ASK draws last is the only other thing the room
-          needs. */}
+          the set carries. The subject is the headline above, alone on the
+          room's screen; how to answer is on every phone. */}
       {gameType !== 'wavelength' && detail && (
         <p className="qdetail" data-drop="4" data-drop-note="Full prompt">
           {detail}

@@ -54,11 +54,19 @@ const DAY = [
   item(3, 'trivia', 'How well do you know our customers?'),
   item(4, 'break', 'Break', { description: 'Coffee on the landing.' }),
 ];
+/** THIS TAB joined earlier: what a reload finds (both copies). */
+const seat = (who) => {
+  const v = JSON.stringify(who);
+  window.localStorage.setItem(`engage.event.${CODE}`, v);
+  window.sessionStorage.setItem(`engage.event.${CODE}`, v);
+};
 const agenda = (event = {}, items = DAY) => ({ event: { ...EVENT, ...event }, items });
 
 beforeEach(() => {
   jest.clearAllMocks();
   window.localStorage.clear();
+  window.sessionStorage.clear();
+  window.history.replaceState({}, '', '/play?event=' + CODE);
   global.__playerEvent = null;
   global.__playerMounts = 0;
   api.getNow.mockResolvedValue({ code: CODE, state: 'SCHEDULED', liveItemId: '', live: null, rev: 'r0' });
@@ -85,7 +93,7 @@ describe('joining once', () => {
   });
 
   test('a reload with the token goes straight to the agenda: no name asked', async () => {
-    window.localStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'tok', name: 'Priya Raman' }));
+    seat({ token: 'tok', name: 'Priya Raman' });
     api.getAgenda.mockResolvedValue(agenda());
     api.whoAmI.mockResolvedValue({ attendee: { name: 'Priya Raman' } });
     render(<EventAttendeePage code={CODE} />);
@@ -97,7 +105,7 @@ describe('joining once', () => {
   });
 
   test('a token the event no longer knows is forgotten, and the name is asked again', async () => {
-    window.localStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'old', name: 'Priya' }));
+    seat({ token: 'old', name: 'Priya' });
     api.getAgenda.mockResolvedValue(agenda());
     api.whoAmI.mockRejectedValue(Object.assign(new Error('You have not joined this event yet.'), { status: 401 }));
     render(<EventAttendeePage code={CODE} />);
@@ -107,7 +115,7 @@ describe('joining once', () => {
   });
 
   test('"Not you?" forgets this browser\'s place and asks for a name', async () => {
-    window.localStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'tok', name: 'Priya' }));
+    seat({ token: 'tok', name: 'Priya' });
     api.getAgenda.mockResolvedValue(agenda());
     api.whoAmI.mockResolvedValue({ attendee: { name: 'Priya' } });
     render(<EventAttendeePage code={CODE} />);
@@ -115,6 +123,59 @@ describe('joining once', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Not you?' }));
     await screen.findByLabelText('Your name');
     expect(window.localStorage.getItem(`engage.event.${CODE}`)).toBeNull();
+  });
+
+  test('A NEW TAB on a browser somebody used asks first: "Continue as" resumes them', async () => {
+    window.localStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'tok', name: 'Ges' }));
+    api.getAgenda.mockResolvedValue(agenda());
+    api.whoAmI.mockResolvedValue({ attendee: { name: 'Ges' } });
+    render(<EventAttendeePage code={CODE} />);
+
+    await screen.findByRole('heading', { name: 'Are you Ges?' });
+    expect(api.whoAmI).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as Ges' }));
+    await screen.findByText('Before we start');
+    expect(api.whoAmI).toHaveBeenCalledWith(CODE, 'tok');
+    expect(JSON.parse(window.sessionStorage.getItem(`engage.event.${CODE}`))).toEqual({ token: 'tok', name: 'Ges' });
+  });
+
+  test('"I\'m someone else" asks for a name and joins as the new person, never the last one', async () => {
+    window.localStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'tok', name: 'Ges' }));
+    api.getAgenda.mockResolvedValue(agenda());
+    api.joinEvent.mockResolvedValue({ token: 'bob-tok', attendee: { name: 'Bob' } });
+    render(<EventAttendeePage code={CODE} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /someone else/ }));
+    fireEvent.change(await screen.findByLabelText('Your name'), { target: { value: 'Bob' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Join the event' }));
+    await screen.findByText('Before we start');
+    expect(api.joinEvent).toHaveBeenCalledWith(CODE, 'Bob');
+    expect(api.whoAmI).not.toHaveBeenCalled();
+    expect(JSON.parse(window.localStorage.getItem(`engage.event.${CODE}`)).name).toBe('Bob');
+  });
+
+  test('a name typed on /play\'s form (?name=) joins as that person, even over this tab\'s own', async () => {
+    seat({ token: 'tok', name: 'Ges' });
+    window.history.replaceState({}, '', `/play?event=${CODE}&name=Bob`);
+    api.getAgenda.mockResolvedValue(agenda());
+    api.joinEvent.mockResolvedValue({ token: 'bob-tok', attendee: { name: 'Bob' } });
+    render(<EventAttendeePage code={CODE} />);
+
+    await screen.findByText('Before we start');
+    expect(api.joinEvent).toHaveBeenCalledWith(CODE, 'Bob');
+    expect(api.whoAmI).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Your name')).not.toBeInTheDocument();
+  });
+
+  test('the same name typed again is a return, not a second attendee', async () => {
+    seat({ token: 'tok', name: 'Ges' });
+    window.history.replaceState({}, '', `/play?event=${CODE}&name=ges`);
+    api.getAgenda.mockResolvedValue(agenda());
+    api.whoAmI.mockResolvedValue({ attendee: { name: 'Ges' } });
+    render(<EventAttendeePage code={CODE} />);
+
+    await screen.findByText('Before we start');
+    expect(api.joinEvent).not.toHaveBeenCalled();
   });
 
   test('an unknown code says so, and offers a different code rather than a name form', async () => {
@@ -127,7 +188,7 @@ describe('joining once', () => {
 });
 
 describe('following the day', () => {
-  const joined = () => window.localStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'tok', name: 'Priya Raman' }));
+  const joined = () => seat({ token: 'tok', name: 'Priya Raman' });
   const liveTrivia = { ...DAY[2], state: 'live', gameId: '4821' };
 
   test('arriving while an engagement is live lands in it, joined by token', async () => {

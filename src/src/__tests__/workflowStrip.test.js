@@ -26,17 +26,20 @@ describe('the steps', () => {
   test('Trivia names its steps Question, Reveal, Scores; Poll Ask, Results', () => {
     expect(stepIdsFor('trivia')).toEqual(['setup', 'answer', 'heard', 'scores', 'finish']);
     expect(stepIdsFor('poll')).toEqual(['setup', 'answer', 'heard', 'finish']);
-    const t = stripFor(snap({ gameType: 'trivia', state: 'ASK#002' }));
+    // Scores is optional: drawn from the reveal on, not while the room answers (cut 7).
+    const t = stripFor(snap({ gameType: 'trivia', state: 'RESULTS#002' }));
     expect(t.steps.filter((s) => s.loop).map((s) => s.label)).toEqual(['Question', 'Reveal', 'Scores']);
     expect(t.steps.find((s) => s.id === 'scores').optional).toBe(true);
+    expect(stripFor(snap({ gameType: 'trivia', state: 'ASK#002' })).steps.filter((s) => s.loop).map((s) => s.label)).toEqual(['Question', 'Reveal']);
     const p = stripFor(snap({ gameType: 'poll', state: 'RESULTS#002' }));
     expect(p.steps.filter((s) => s.loop).map((s) => s.label)).toEqual(['Ask', 'Results']);
     expect(p.live).toBe('heard');
   });
 
   test('Scores is optional: a trivia round past its reveal leaves it unticked', () => {
+    // At Finish an optional step is not drawn: nothing says whether it happened.
     const s = stripFor(snap({ gameType: 'trivia', state: 'ENDED' }));
-    expect(s.steps.find((x) => x.id === 'scores').state).toBe('done');
+    expect(s.steps.find((x) => x.id === 'scores')).toBeUndefined();
     const r = stripFor(snap({ gameType: 'trivia', state: 'RESULTS#002' }));
     expect(stateOf(r)).toEqual({ setup: 'done', answer: 'done', heard: 'live', scores: 'todo', finish: 'todo' });
   });
@@ -44,8 +47,20 @@ describe('the steps', () => {
   test('the lobby: Setup is live and nothing in the loop is done', () => {
     const s = stripFor(snap({ state: 'CREATED' }));
     expect(s.live).toBe('setup');
-    expect(stateOf(s)).toEqual({ setup: 'live', answer: 'todo', vote: 'todo', heard: 'todo', ask: 'todo', finish: 'todo' });
+    // No Ask before the round has run (cut 7: an optional step only once it can happen).
+    expect(stateOf(s)).toEqual({ setup: 'live', answer: 'todo', vote: 'todo', heard: 'todo', finish: 'todo' });
     expect(s.round).toBeNull();
+  });
+
+  test('Ask is drawn once it can happen: from What we heard on, with the room\'s questions on or some ready', () => {
+    const ids = (over) => stripFor(snap(over)).steps.map((x) => x.id);
+    // rejects: Ask beside Answer and Vote in every round, asked or not.
+    expect(ids({ state: 'ASK#002', asksEnabled: true })).toEqual(['setup', 'answer', 'vote', 'heard', 'finish']);
+    expect(ids({ state: 'VOTE#002', asksEnabled: true })).not.toContain('ask');
+    expect(ids({ state: 'RESULTS#002', asksEnabled: true })).toContain('ask');
+    expect(ids({ state: 'RESULTS#002' })).not.toContain('ask');
+    expect(ids({ state: 'RESULTS#002', asksReady: 2 })).toContain('ask');
+    expect(ids({ state: 'RESULTS#002', stageBeat: 'ask', roomAsk: { status: 'open' } })).toContain('ask');
   });
 
   test('answering: Setup ticked, Answer live, the round named with its total', () => {
@@ -72,7 +87,7 @@ describe('the steps', () => {
 
   test('ended: every step ticked and Finish live', () => {
     const s = stripFor(snap({ state: 'ENDED' }));
-    expect(stateOf(s)).toEqual({ setup: 'done', answer: 'done', vote: 'done', heard: 'done', ask: 'done', finish: 'live' });
+    expect(stateOf(s)).toEqual({ setup: 'done', answer: 'done', vote: 'done', heard: 'done', finish: 'live' });
   });
 
   test('a moment with no step (a survey, an unknown state) has no strip', () => {

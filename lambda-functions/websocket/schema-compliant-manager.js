@@ -13,6 +13,14 @@ const { NAMES, NAMES_DEFAULT } = require('./survey-names');
  * anonymous. An unknown value is passed over rather than folded to the
  * default, so a typo in the payload still lands on the set's own choice.
  */
+/** The session's bluff round: the host's boolean, else the set's, Call & Answer only. */
+function bluffRoundFor(engagementType, chosen, setMetadata) {
+  const type = String(engagementType || 'call-and-answer').trim().toLowerCase();
+  if (!['call-and-answer', 'callandanswer', 'call_and_answer', 'calland'].includes(type)) return false;
+  if (typeof chosen === 'boolean') return chosen;
+  return Boolean(setMetadata && setMetadata.bluffRound === true);
+}
+
 function surveyNamesFor(chosen, setMetadata) {
   const known = (v) => {
     const s = String(v == null ? '' : v).trim().toLowerCase();
@@ -282,7 +290,10 @@ const createGame = async (gameId, gameData) => {
         // happened to triviaTimer.
         HostPreferences: {
           randomizeQuestions: gameData.hostPreferences?.randomizeQuestions !== false,
-          anonymousUntilReveal: gameData.hostPreferences?.anonymousUntilReveal !== false
+          anonymousUntilReveal: gameData.hostPreferences?.anonymousUntilReveal !== false,
+          // THE BLUFF ROUND (docs/design/bluff-round/README.md): the host's
+          // choice, else the set's `bluffRound`. Call & Answer only.
+          bluffRound: bluffRoundFor(gameData.engagementType, gameData.hostPreferences?.bluffRound, resolvedSet.metadata)
         },
         ttl
       })

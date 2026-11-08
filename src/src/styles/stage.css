@@ -911,10 +911,6 @@ a.dock-more{text-decoration:none}
 .q{font-family:var(--font-display);font-weight:800;
   font-size:var(--t-primary);line-height:1.05;letter-spacing:-.005em;
   max-width:var(--measure);margin:0;color:var(--text)}
-/* The one affordance for reading a prompt the fitter dropped. A cursor is the
-   whole of it: anything the room can see would be a second thing competing for
-   the space that ran out in the first place. */
-.q[data-expandable]{cursor:zoom-in}
 /* WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026; config/roomContent.js,
    components/QuestionCard RoomLines). While a Call & Answer question is up the
    LEAD is the title since 18 Oct (the lesson, or the task, when there is no
@@ -929,36 +925,23 @@ a.dock-more{text-decoration:none}
    colour; the previous revision then set every explanatory sentence in it. */
 .qdetail{font-size:var(--t-body);color:var(--text);opacity:.82;margin:0;
   max-width:44ch;line-height:1.3}
-/* The task under the lesson (owner, 18 Oct 2026): a sentence, labelled, with
-   the task's accent rule; never dropped (no data-drop). */
-.qdetail.q-task{opacity:1;max-width:min(100%, calc(var(--measure) + 12ch));
-  border-left:4px solid var(--accent);padding-left:.7em}
-.q-task-k{display:block;font-size:var(--t-meta);letter-spacing:.08em;
-  text-transform:uppercase;color:var(--muted);margin:0 0 .15em}
-/* THE TITLE AND THE LESSON LEAD, THE QUESTION IN "YOUR TURN" (owner, 18 Oct
-   2026, docs/design/room-content-v2 frames 1-3; components/QuestionCard
-   RoomLines). The category is a small eyebrow in the accent's text tint; the
-   title is .q.q-lead above; the lesson sits under it at the secondary step,
-   full --text, never dropped (no data-drop); the question's own instruction
-   is one band with the accent rule. Call's generic instruction is .q-howto, a
-   body-step line the fitter may give up (data-drop="3").
+/* THE TITLE AND THE LESSON, NOTHING ELSE (owner, 5 Nov 2026: "taking the
+   instructions out and making the main body larger is more useful";
+   components/QuestionCard RoomLines, config/roomContent.js questionUp). The
+   category is a small eyebrow in the accent's text tint; the title is
+   .q.q-lead above; the whole lesson sits under it, full --text, never dropped
+   (no data-drop): at the primary step when short (STORY_PRIMARY_MAX), else
+   secondary. The "Your turn" band and Call's how-to line are gone from every
+   room screen; the phones carry how to answer, and ASK's data-grow lets the
+   fitter take the space they left.
    Contrast, measured on the stage field: --text 14.97:1, --accent-text 8.86:1
-   (Classic) / 9.14:1 (Present); on the band (accent at .10 over the field)
-   --text 12.60:1 or more, --accent-text 7.46:1 or more. Tokens only; held by
+   (Classic) / 9.14:1 (Present). Tokens only; held by
    __tests__/stageRoomContentPalette.test.js. */
 .q-eyebrow{color:var(--accent-text)}
 .q-lesson{font-size:var(--t-secondary);font-weight:500;line-height:1.3;color:var(--text);
   margin:0;max-width:min(100%, calc(var(--measure) + 34ch))}
-.q-lesson[data-expandable]{cursor:zoom-in}
-.q-turn{display:flex;align-items:baseline;gap:calc(1vw + 12px);margin-top:calc(1vh + 4px);
-  background:rgb(var(--accent-rgb) / .10);border-left:calc(var(--hair) * 4 + 2px) solid var(--accent);
-  border-radius:var(--radius-sm);padding:calc(1.2vh + 6px) calc(1.2vw + 12px);
-  /* As wide as the lesson above it: a narrow box wrapped a one-line question to three. */
-  max-width:min(100%, calc(var(--measure) + 34ch));width:100%;box-sizing:border-box}
-.q-turn-k{flex:none;font-size:var(--t-meta);font-weight:800;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--accent-text);white-space:nowrap}
-.q-turn-t{margin:0;min-width:0;font-size:var(--t-secondary);font-weight:650;line-height:1.25;color:var(--text)}
-.qdetail.q-howto{max-width:min(100%, calc(var(--measure) + 20ch))}
+.q-lesson.is-primary{font-size:var(--t-primary);line-height:1.22;
+  max-width:min(100%, calc(var(--measure) + 20ch))}
 /* GATHERING RESPONSES… (components/stage/StageGathering.jsx, owner
    2026-10-11). The VOTE/RESULTS wait: .qdetail's size and tone so it reads as
    a calm sentence, three muted dots that breathe so it reads as work in
@@ -1234,9 +1217,6 @@ a.dock-more{text-decoration:none}
 .content[data-clamped="on"] .cards.is-ideas .card .ans{display:-webkit-box;
   -webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .cards.is-ideas .card .who{opacity:.72;font-weight:500}
-/* The question line above the cards, pressable: it puts the question up. */
-.recap.is-openable{cursor:pointer}
-.recap.is-openable:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .card .share{position:absolute;left:0;bottom:0;height:calc(.4vh + 3px);background:var(--accent);opacity:.85;z-index:0}
 
 /* ------------------------------------------------------------------- PAGER
@@ -1408,6 +1388,14 @@ a.dock-more{text-decoration:none}
 .dock .host-action-bar__primary:hover:not(:disabled){
   background:var(--primary);color:#14203A;filter:brightness(1.06);
   transform:none;box-shadow:none}
+/* AN ARMED MAIN BUTTON KEEPS ITS RING UNDER THE POINTER (dev QA 5 Nov). The
+   hover rule above is (0,4,0) and takes box-shadow away; styles.css's armed
+   ring is (0,3,0), so the ring vanished the moment it was drawn, with the
+   pointer still on the button that had just been pressed, and the press
+   looked like nothing. Restated here at (0,3,0) and (0,5,0). */
+.dock .host-action-bar__primary.is-armed,
+.dock .host-action-bar__primary.is-armed:hover:not(:disabled){
+  border-color:var(--warn);box-shadow:0 0 0 3px rgb(var(--warn-rgb) / .55)}
 .dock .host-action-bar__primary:disabled{
   background:rgba(155,168,190,.18);color:var(--muted);
   border:var(--hair) solid transparent;cursor:not-allowed;
@@ -1478,7 +1466,7 @@ a.dock-more{text-decoration:none}
   border:var(--hair) solid var(--rule);border-radius:8px;padding:.3em .6em;cursor:pointer}
 /* A preview lobby's "Set the running order" (QA drive finding #4): below the
    join block, a beat of space from it. */
-.fn-controls.preview-order{margin-top:.8em}
+.fn-controls.preview-order,.fn-controls.stage-qfocus{margin-top:.8em}
 
 /* THE ANONYMITY CONTROLS USED TO BE SIZED HERE, and the rule that put them
    here is worth keeping even though the elements are gone: anything inside
@@ -1635,12 +1623,12 @@ a.dock-more{text-decoration:none}
    =========================================================================== */
 
 /* The title as the reminder above the answers and the results (frames 4-5):
-   the primary step, essential, pressable to put the question back up. */
+   the primary step, essential. Not pressable since 5 Nov 2026: the room's
+   screen opens nothing; the question goes back up from the phone Remote or,
+   on two screens, the console's "The question" row. */
 .q-remind{font-family:var(--font-display);font-weight:800;font-size:var(--t-primary);
   line-height:1.08;letter-spacing:-.005em;margin:0;color:var(--text);
   max-width:min(100%, calc(var(--measure) + 24ch))}
-.q-remind.is-openable{cursor:pointer}
-.q-remind.is-openable:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
 
 /* VOTING (frame 4): every answer whole and numbered, at the secondary step,
    two columns when there is more than one. No name, no points, no rank. */

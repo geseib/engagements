@@ -1,25 +1,18 @@
 import React from 'react';
-import {
-  SET_SEARCH_FIELDS, SET_SORTS, TAGS_AXIS, CONSOLE_UPDATED_WINDOWS, inUpdatedWindow, splitTags,
-} from '../config/setFinder';
 import Icon from './Icon';
 import PlanLimitNotice from './PlanLimitNotice';
-import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
-import SetShelfBrowse from './SetShelfBrowse';
+import SetFilterBar, { SET_LIST_CONFIG, SET_FILTER_LABELS } from './SetFilterBar';
 import DraftsStrip from './DraftsStrip';
 import { draftsForSet } from '../utils/draftsApi';
 import useListControls from '../hooks/useListControls';
-import {
-  setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerTag, setOwnerRank, OWNER_OPTIONS,
-} from '../utils/setOwnerTag';
+import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerTag';
 import {
   isUnreadableSet, unreadableSetName,
   UNREADABLE_LABEL, UNREADABLE_REASON, UNREADABLE_SUB,
 } from '../utils/unreadableSet';
 import { matchesListFilters } from '../config/listControls';
 import {
-  GAME_TYPE_LIST,
   gameTypeLabel,
   isPlayableGameType,
   normalizeGameType,
@@ -28,9 +21,7 @@ import {
 } from '../config/gameTypes';
 import { truncate } from '../utils/questionSetEditing';
 import { shareStateOf } from '../utils/shareState';
-import {
-  resolveSetTopic, setTopicLabel, SET_TOPIC_IDS, SET_TOPICS, UNFILED, UNFILED_LABEL,
-} from '../config/setTopics';
+import { resolveSetTopic, SET_TOPIC_IDS, SET_TOPICS, UNFILED } from '../config/setTopics';
 import { classifySetTopic } from '../config/topicKeywords';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
@@ -71,80 +62,13 @@ import Button from './ui/Button';
  *    different words and different exits now (host §7.9).
  */
 
-// THE SORTS AND THE SEARCH FIELDS ARE SHARED with the host's set chooser
-// (config/setFinder.js), so a word or "newest" means the same thing in both.
-const SORTS = SET_SORTS;
-
 /*
-  THE LIST CONTROLS, DECLARED ONCE. This screen was the donor for
-  config/listControls.js — its search / axes / sorts / drop-exits are now this
-  config plus the shared mechanism, and the guarantee its old comment asked for
-  ("one place, so the drop-counts cannot drift from the list they describe")
-  is structural there: the list and the counts share one predicate by
-  construction.
-
-  Only the ITEM side of the type compare is normalised, deliberately: the
-  filter's options come from GAME_TYPE_LIST, so its value is already canonical,
-  while the rows still hold the original seeds' aliases (`callandanswer`,
-  `polls`).
+  THE LIST CONTROLS — the config (what each filter matches), the drop-exit
+  labels and the bar itself — live in SetFilterBar.jsx, shared with the host's
+  "Your question sets" dialog so the two explorers offer the same filters in the
+  same order (type first; owner, 7 Nov 2026). This screen was the donor.
 */
-const LIST_CONFIG = {
-  // The SET's own tags join the haystack (config/setTopics.js: not the list a
-  // QUESTION carries, which lives on a different row and never meets this one).
-  // A word somebody can write and never find again is not a tag.
-  searchFields: SET_SEARCH_FIELDS,
-  axes: {
-    // THE SHELF, first because it is the axis a library is browsed by. Only
-    // the ITEM side is resolved: the options come from the closed vocabulary,
-    // so the filter's own value is already an id — and `resolveSetTopic` folds
-    // a row with no shelf, or a shelf nothing recognises, onto UNFILED, which
-    // is a real option here rather than a row that cannot be reached.
-    topic: { get: (set) => resolveSetTopic(set.topic) },
-    /*
-      THE AUTHOR'S OWN WORDS, and an axis rather than a phrase pushed into the
-      search box — which is what the browse's tag pills used to do.
-
-      The pill carries a COUNT: the sets carrying that tag (once another tag is
-      in force, a click ADDS that tag's sets, so the list grows by that count
-      less the overlap). The search box cannot give it even that: it OR-matches a
-      substring across the name, the description, the custom instruction and
-      the tags, so `empire` also returned "The British Empire" (which carries
-      no such tag) and `ancient` also returned every `ancient-egypt` set.
-      Matching through `setCarriesTag` — the same function config/
-      setShelfIndex.js counts with — makes the two agree by construction.
-
-      `all: ''` rather than the usual `all` sentinel: a set tagged `all` is
-      not a hypothetical, and the empty string is the one value `normalizeTag`
-      can never produce, so it cannot collide with a real word.
-
-      The row itself is handed to `eq`, not a field of it, because carrying a
-      tag is a question about the set rather than a value to compare.
-
-      SEVERAL AT ONCE since the set chooser (owner, 23 Oct 2026: "filter ...
-      by tag"): the value is a comma-joined list (setFinder's joinTags /
-      splitTags) and a set carrying ANY of them stays, so ticking a second
-      tag widens what is shown. It is the chooser's own axis, TAGS_AXIS, so
-      the two cannot disagree about what a tag finds. The key stays `tag`: a
-      single tag is the same string it always was.
-    */
-    tag: TAGS_AXIS,
-    type: { get: (set) => normalizeGameType(set.engagementType) },
-    status: { get: (set) => (set.active ? 'active' : 'inactive') },
-    // WHOSE IT IS — the same four values as the chip on every row, from the
-    // same function, so the filter can never disagree with what a row says.
-    owner: { get: (set) => setOwnerTag(set) },
-    /*
-      WHEN IT LAST CHANGED — the owner's "or by date". The same windows and
-      the same rule as the chooser (setFinder's inUpdatedWindow), minus "Used
-      by me lately": that reads the host's own sessions, which this screen
-      never loads. The clock is read when the row is tested rather than when
-      the module loads, so a console left open overnight still means today.
-    */
-    updated: { all: 'any', get: (set) => set, eq: (set, wanted) => inUpdatedWindow(set, wanted, Date.now()) },
-  },
-  sorts: SORTS,
-  defaultSort: 'newest',
-};
+const LIST_CONFIG = SET_LIST_CONFIG;
 
 /** Does this set survive a given filter combination? Kept as a named export —
  *  other suites import it — implemented on the shared predicate. */
@@ -220,32 +144,8 @@ export default function QuestionSetsPanel({
     screen is not an exit. computeDrops in config/listControls.js keeps that
     contract, on the same predicate the list itself uses.
   */
-  const {
-    state: { search, topic, tag, type, status, owner, updated, sort },
-    set,
-    shown,
-    drops,
-    activeFilterCount,
-    clearOne,
-    clearAll,
-  } = useListControls(questionSets, LIST_CONFIG, {
-    labels: {
-      search: (needle) => `Search “${needle}”`,
-      // setTopicLabel answers "Unfiled" for the empty id, so the exit out of
-      // that filter names itself the same way the option does.
-      topic: (value) => `Topic: ${setTopicLabel(value)}`,
-      // A tag is already the word a person clicked, so it names itself; with
-      // several, the exit drops them all, so it names them all.
-      tag: (value) => {
-        const tags = splitTags(value);
-        return `${tags.length > 1 ? 'Tags' : 'Tag'}: ${tags.join(', ')}`;
-      },
-      type: (value) => `Type: ${gameTypeLabel(value)}`,
-      owner: (value) => `Owner: ${(OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
-      status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
-      updated: (value) => (CONSOLE_UPDATED_WINDOWS.find((w) => w.value === value) || {}).label || value,
-    },
-  });
+  const controls = useListControls(questionSets, LIST_CONFIG, { labels: SET_FILTER_LABELS });
+  const { shown, drops, activeFilterCount, clearOne, clearAll } = controls;
 
   const nothingExists = questionSets.length === 0;
 
@@ -399,131 +299,18 @@ export default function QuestionSetsPanel({
           )}
 
           {/*
-            The bar renders through the shared ListControls under this screen's
-            own scope, so .qsets-filters/.qsets-search/.qsets-input/
-            .qsets-select/.qsets-count keep styling it unchanged. The TYPE
-            options stay DERIVED, NOT HAND-WRITTEN: GAME_TYPE_LIST is the whole
-            table, so a type added there appears here without an edit. Survey is
-            present and annotated rather than dropped — see the header.
+            THE BAR AND THE SHELF BROWSE, shared with the host's set dialog
+            (SetFilterBar.jsx): type, topic, status, owner, updated, sort — type
+            first, by the owner's ask. The browse sits OUTSIDE the shown/empty
+            branch below on purpose: on the screen that says nothing matches,
+            the one control showing what does exist is an exit.
           */}
-          <ListControls
-            scope="qsets"
-            search={{
-              value: search,
-              onChange: (value) => set({ search: value }),
-              /*
-                IT NAMES THE TAGS BECAUSE IT READS THE TAGS. `searchFields`
-                above put a set's own words into the haystack; this said
-                "name, description" for a while after, which is the shape of
-                defect the owner's ask was about — "ability to see/search all
-                tags" is not delivered by a box that can do it and never says
-                so. A control's label is the only documentation anybody reads.
-              */
-              ariaLabel: 'Search name, description, tags',
-              placeholder: 'Search name, description, tags',
-            }}
-            selects={[
-              {
-                /*
-                  THE SHELF. All fifteen are offered whether or not anything
-                  sits on them, exactly as the type filter offers every type:
-                  this control is the closed vocabulary, and a person filtering
-                  has to be able to read what the vocabulary is. What is
-                  ACTUALLY on the shelves, with counts, is the browse below.
-
-                  Unfiled is last and is a real destination, not a placeholder:
-                  the sets that predate the field are on no shelf, and a filter
-                  that can only name the fifteen makes that backlog invisible.
-                */
-                key: 'topic',
-                value: topic,
-                onChange: (value) => set({ topic: value }),
-                ariaLabel: 'Filter by topic',
-                options: [
-                  { value: 'all', label: 'All topics' },
-                  ...SET_TOPIC_IDS.map((id) => ({ value: id, label: SET_TOPICS[id].label })),
-                  { value: UNFILED, label: UNFILED_LABEL },
-                ],
-              },
-              {
-                key: 'type',
-                value: type,
-                onChange: (value) => set({ type: value }),
-                ariaLabel: 'Filter by engagement type',
-                options: [
-                  { value: 'all', label: 'All types' },
-                  ...GAME_TYPE_LIST.map((meta) => ({
-                    value: meta.id,
-                    label: `${meta.label}${
-                      isPlayableGameType(meta.id) ? '' : ` — ${NOT_PLAYABLE_LABEL.toLowerCase()}`
-                    }`,
-                  })),
-                ],
-              },
-              {
-                key: 'status',
-                value: status,
-                onChange: (value) => set({ status: value }),
-                ariaLabel: 'Filter by status',
-                options: [
-                  { value: 'all', label: 'All statuses' },
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                ],
-              },
-              {
-                key: 'owner',
-                value: owner,
-                onChange: (value) => set({ owner: value }),
-                ariaLabel: 'Filter by owner',
-                options: [
-                  { value: 'all', label: 'All owners' },
-                  ...OWNER_OPTIONS,
-                ],
-              },
-              {
-                // "Any time" reads as a filter label on this bar, where every
-                // other select opens with its own "All …".
-                key: 'updated',
-                value: updated,
-                onChange: (value) => set({ updated: value }),
-                ariaLabel: 'Filter by when it was updated',
-                options: CONSOLE_UPDATED_WINDOWS.map((w) => (
-                  w.value === 'any' ? { value: 'any', label: 'Updated any time' } : w
-                )),
-              },
-              {
-                key: 'sort',
-                value: sort,
-                onChange: (value) => set({ sort: value }),
-                ariaLabel: 'Sort order',
-                options: [
-                  { value: 'newest', label: 'Newest first' },
-                  { value: 'oldest', label: 'Oldest first' },
-                  { value: 'name', label: 'Name (A–Z)' },
-                  { value: 'questions', label: 'Most questions' },
-                  { value: 'owner', label: 'Owner (yours first)' },
-                ],
-              },
-            ]}
+          <SetFilterBar
+            sets={questionSets}
+            controls={controls}
             count={`${questionSets.length} set${questionSets.length === 1 ? '' : 's'}${
               shown.length !== questionSets.length ? ` · ${shown.length} shown` : ''
             }`}
-          />
-
-          {/*
-            WHAT IS ACTUALLY ON THE SHELVES, and the words these sets carry —
-            the other half of the owner's ask, which a select cannot do because
-            a tag vocabulary is open. Closed by default, and OUTSIDE the
-            shown/empty branch below on purpose: on the screen that says
-            nothing matches, the one control showing what does exist is an exit.
-          */}
-          <SetShelfBrowse
-            sets={questionSets}
-            topic={topic}
-            tag={tag}
-            onPickTopic={(value) => set({ topic: value })}
-            onPickTag={(value) => set({ tag: value })}
           />
 
           {shown.length === 0 ? (
