@@ -1,0 +1,422 @@
+[
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-31.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 442072,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-06.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 439002,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-13.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 531385,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-07.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 658710,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-04.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 506337,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-35.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 498821,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-66.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 98917,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-67.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 189569,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-46.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 684440,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-63.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 495383,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-23.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 386343,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-15.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 614285,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-18.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 414931,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-24.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 570888,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-09.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 569765,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-42.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 495057,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-02.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 382479,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-34.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 369980,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-08.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 183668,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-60.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 688981,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-17.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 580471,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-57.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 405641,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-55.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 659968,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-01.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 508567,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-58.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 642063,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-48.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 283481,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-32.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 544713,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-61.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 433014,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-30.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 543623,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-21.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 523777,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-65.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 575190,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-28.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 348591,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-38.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 555018,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-56.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 434075,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-50.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 280375,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-11.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 410545,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-22.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 338917,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-12.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 217496,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-19.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 233084,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-44.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 328652,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-26.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 309505,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-49.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 273044,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-54.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 441231,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-53.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 489503,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-51.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 654250,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-36.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 259432,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-05.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 366404,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-45.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 568013,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-14.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 411052,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-16.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 578432,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-62.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 72537,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-39.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 224910,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-47.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 539966,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-10.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 282828,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-03.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 268892,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-52.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 522193,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-29.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 353504,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-25.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 407270,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-43.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 406249,
+  "matchesDev": true
+ },
+ {
+  "image": "https://engage.test.seibtribe.us/sets/uffiziarttitles/uffizi-64.jpg",
+  "status": 200,
+  "contentType": "image/jpeg",
+  "bytes": 366495,
+  "matchesDev": true
+ }
+]
