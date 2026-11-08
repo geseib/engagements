@@ -19,9 +19,9 @@ review found (`sets/call-answer-2026-11/QA-NOTES.md`), fixed the same way.
 | `images/fat-01.jpg` … `fat-60.jpg` | The original 60 paintings, numbered in shuffled order (the number does not follow question order) |
 | `images/fat-61.jpg` … `fat-63.jpg` | The three replacements from round 2 (see below) |
 | `famous-art-titles-dev-v5.csv`, `-test-v2.csv` | Round 1: neutral images only, as installed on dev v5 and test v2 |
-| `famous-art-titles-dev-v6.csv`, `-test-v3.csv`, `-prod-v2.csv` | Round 2: the three swaps, plus prod's images. **Not installed yet**: the AWS credentials had expired (see INSTALLED.md) |
+| `famous-art-titles-dev-v6.csv`, `-test-v3.csv`, `-prod-v2.csv` | Round 2: the three swaps, plus prod's images, as installed on dev v6, test v3 and prod v2 |
 | `famous-art-titles-images.json` | Per image: the dev question it belongs to, the work, whether it is also on test, Commons file and page, licence, the URL it was fetched from, source and saved size. Round 2 entries also say which image they replace and which Wikipedia article the facts were checked against |
-| `image-check-dev.json`, `image-check-test.json` | The URL check after upload: status, content type, bytes, and whether the served bytes equal the local file |
+| `image-check-dev.json`, `-test.json`, `-prod.json` | The URL check after the round-2 upload: status, content type, bytes, and whether the served bytes equal the local file |
 | `INSTALLED.md` | Where it is installed and how it read back |
 
 The CSVs were written from the **live** active version on each tier (not from
