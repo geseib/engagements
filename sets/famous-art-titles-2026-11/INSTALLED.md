@@ -1,5 +1,29 @@
 # Installed: Famous Art Titles, neutral-named images
 
+## Round 2 (8 Nov 2026): prepared, NOT installed
+
+The three swaps and prod's images (README, "Round 2") are ready as CSVs and images in this
+package. They have not been written to any tier, because the AWS credentials had expired.
+Nothing below this section has changed. The plan, in order, each tier verified before the next:
+
+| Tier | Expected change | Upload to the tier's media bucket | CSV |
+|---|---|---|---|
+| dev | v5 → v6 | `fat-61`, `fat-62`, `fat-63` | `famous-art-titles-dev-v6.csv` |
+| test | v2 → v3 | `fat-62` | `famous-art-titles-test-v3.csv` |
+| prod | unversioned → v2 (v1 = snapshot of the legacy rows) | the 9 kept images plus `fat-62` (10 files) | `famous-art-titles-prod-v2.csv` |
+
+For each tier:
+1. Re-read the live active version and rebuild the CSV from it. If anything other than the
+   intended fields differs from the committed CSV, stop and say so.
+2. Upload, then fetch each URL. Each must return 200 `image/jpeg`, and the served bytes must
+   equal the file.
+3. Run `replace-question-set.js` as a dry run, then with `--apply`.
+4. Read back. The only differences allowed are Image on every row, and on the swapped rows
+   Title, AnswerDetails, Image (plus School on test; Category on test and prod; CustomInstruction
+   on prod).
+
+## Round 1 (7 Nov 2026)
+
 7 Nov 2026. Platform Engage library (`SETS` partition), set id `famousarttitles` on dev and
 test. Each tier got a new version from `scripts/replace-question-set.js`. The old version
 is kept in the set's Versions. Nothing was pushed or deployed.
@@ -24,10 +48,10 @@ the superseded version of the What Is This Thing? set. They were left alone.
 
 ```bash
 node scripts/replace-question-set.js engagedev famousarttitles \
-  --csv sets/famous-art-titles-2026-11/famous-art-titles-dev.csv \
+  --csv sets/famous-art-titles-2026-11/famous-art-titles-dev-v5.csv \
   --note "Images re-hosted under neutral names (the Commons filenames named the paintings); The Nightmare now shows Fuseli's painting. No other field changed."
 node scripts/replace-question-set.js engagetest famousarttitles \
-  --csv sets/famous-art-titles-2026-11/famous-art-titles-test.csv \
+  --csv sets/famous-art-titles-2026-11/famous-art-titles-test-v2.csv \
   --note "Images re-hosted under neutral names (the Commons filenames named the paintings). No other field changed."
 ```
 

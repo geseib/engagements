@@ -16,14 +16,15 @@ review found (`sets/call-answer-2026-11/QA-NOTES.md`), fixed the same way.
 
 | File | What it is |
 |---|---|
-| `images/fat-NN.jpg` | All 60 paintings, numbered in shuffled order (the number does not follow question order) |
-| `famous-art-titles-dev.csv` | The 60-question set as installed on dev as v5 |
-| `famous-art-titles-test.csv` | The 10-question set as installed on test as v2 |
-| `famous-art-titles-images.json` | Per image: the dev question it belongs to, the work, whether it is also on test, Commons file and page, licence, the URL it was fetched from, source and saved size |
+| `images/fat-01.jpg` … `fat-60.jpg` | The original 60 paintings, numbered in shuffled order (the number does not follow question order) |
+| `images/fat-61.jpg` … `fat-63.jpg` | The three replacements from round 2 (see below) |
+| `famous-art-titles-dev-v5.csv`, `-test-v2.csv` | Round 1: neutral images only, as installed on dev v5 and test v2 |
+| `famous-art-titles-dev-v6.csv`, `-test-v3.csv`, `-prod-v2.csv` | Round 2: the three swaps, plus prod's images. **Not installed yet**: the AWS credentials had expired (see INSTALLED.md) |
+| `famous-art-titles-images.json` | Per image: the dev question it belongs to, the work, whether it is also on test, Commons file and page, licence, the URL it was fetched from, source and saved size. Round 2 entries also say which image they replace and which Wikipedia article the facts were checked against |
 | `image-check-dev.json`, `image-check-test.json` | The URL check after upload: status, content type, bytes, and whether the served bytes equal the local file |
 | `INSTALLED.md` | Where it is installed and how it read back |
 
-The two CSVs were written from the **live** active version on each tier (not from
+The CSVs were written from the **live** active version on each tier (not from
 `sets/famous-art-titles.csv`, which no longer matches either tier), with every column
 copied as stored except Image. Dev and test hold different content (see INSTALLED.md), so
 there is one CSV per tier.
@@ -47,6 +48,42 @@ painting: it is a 596 px CC BY-SA 4.0 photograph by Lieve Prins of a different w
 shows Fuseli's 1781 painting (Detroit Institute of Arts) from
 `File:John_Henry_Fuseli_-_The_Nightmare.JPG` (public domain). That is the work the row's
 Title and AnswerDetails describe.
+
+## Round 2 (8 Nov 2026): three paintings swapped, and prod gets images
+
+The owner approved two more changes.
+
+**1. Three paintings swapped out.** Each had its title or subject painted into the image.
+Each was replaced with a well-known public-domain painting that has no title in it. The
+replacement gets a new file number, so old versions keep loading their own image.
+
+| Out | In | Tiers | Category |
+|---|---|---|---|
+| `fat-60` Gauguin, *Ia Orana Maria* ("IA ORANA MARIA" painted on it) | `fat-63` Caillebotte, *Paris Street; Rainy Day*, 1877 | dev | Impressionism & Post-Impressionism (unchanged) |
+| `fat-28` David, *The Death of Marat* ("À MARAT" on the crate) | `fat-61` Gainsborough, *The Blue Boy*, c. 1770 | dev | Baroque, Rococo & Neoclassicism (unchanged) |
+| `fat-17` Hokusai, *The Great Wave* (title cartouche) | `fat-62` Hasegawa Tōhaku, *Pine Trees* screen, c. 1595 (left-hand screen) | dev, test, prod | dev: Asian Art (unchanged). test and prod: **Ukiyo-e → Asian Art** |
+
+- **Fields changed on each swapped row:** Title (in the style of that tier's other rows),
+  AnswerDetails ("Real title: …" plus a short story), and Image.
+  - Test's row also gets the artist in School, as its other rows have.
+  - Prod's row also gets a new CustomInstruction. Every prod row has a hint written for its
+    own painting, and the old one described the Great Wave's boats.
+  - Prod's row is the only prod row with AnswerDetails, because the other nine have none.
+  - No tier has a RealAnswer column.
+- **Category change on test and prod:** the Pine Trees screen is a Momoyama ink painting, not
+  ukiyo-e, so that row's category on test and prod becomes "Asian Art", which is dev's name
+  for it. A text-free ukiyo-e was not used because famous ukiyo-e prints nearly always carry
+  a title cartouche, and the obvious cartouche-free ukiyo-e painting (Moronobu's *Beauty
+  Looking Back*) has no en.wikipedia article to check facts against.
+- **Facts:** checked against the en.wikipedia articles "Paris Street; Rainy Day", "The Blue
+  Boy" and "Shōrin-zu byōbu".
+- **Images viewed:** none has a title in it. Caillebotte signed lower left, and the Tōhaku
+  screen carries two small artist's seals at its left edge. Neither names the work.
+
+**2. Prod gets images.** Prod's copy (`famousarttitlesimported20260815`) had a blank Image
+on every row. Its round-2 CSV gives every row the same neutral image as the matching row
+on test (matched on the teaser Title, which is identical on both tiers), served from
+`engage.seibtribe.us`. Nothing else on those rows changes.
 
 ## Licence
 
@@ -122,12 +159,11 @@ US-specific grounds, so read each Commons page's tag before reusing them outside
 
 ## Known gaps
 
-1. **Text painted into three works names or points at the answer.** Not changed, because it
-   is part of the painting, not a label:
+1. **Text painted into three works names or points at the answer** (in round 1 and in dev v5 / test v2):
    - `fat-60.jpg` (Gauguin): "IA ORANA MARIA" is painted across the bottom. That is the title.
    - `fat-28.jpg` (David): the crate reads "À MARAT / DAVID", which names the subject.
    - `fat-17.jpg` (Hokusai): the cartouche at top left gives the series and print title in Japanese.
-   The owner may want those questions dropped, cropped or hinted differently.
+   Round 2 swaps all three out. The files stay in the buckets for the old versions.
 2. **Dev's Title column is the artist and date** ("Leonardo da Vinci, c. 1503"), and Title is
    shown during ASK. It is not the title, but it is a strong hint. Test's Title is a teaser
    ("THE ENIGMATIC SMILE") with the artist in School, which players do not see until after
