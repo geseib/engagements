@@ -28,7 +28,11 @@ import {
   pickerRows,
   describePlanEntry,
   restoreChecks,
+  promptChecks,
   checkCount,
+  batchNoun,
+  promptsFirst,
+  mergeExports,
 } from '../utils/archiveItems';
 import { promoteLink, readPromotion, withoutPromotion } from '../utils/archivePromotion';
 import './ArchivePanel.css';
@@ -73,6 +77,12 @@ import './ArchivePanel.css';
  * set is read back and its counts are shown beside the snapshot's, and `onRestored` refreshes
  * the console's own list of sets so Shared library shows them without a fresh sign-in. On prod
  * the confirm names PROD and asks for the word typed: it is the write every customer sees.
+ *
+ * ONE BATCH (2026-11-08, the real dev → test promotion). Sets and prompts are picked in one
+ * selection and leave in one Export or Promote, at the foot of the dialog: two buttons per list
+ * meant pressing one closed the dialog on the other list's picks, and a set and its prompt
+ * needed two links. The batch is ordered prompts first, everywhere it is shown or sent, because
+ * a set links to its prompt only if the prompt has landed first (archiveItems.js promptsFirst).
  */
 const archiveRoute = (suffix) => `${window.API_BASE}admin/archive/${suffix}`;
 const importRoute = () => `${window.API_BASE}admin/import-from-archive`;
@@ -83,6 +93,8 @@ const isOutage = (status) => [0, 502, 503, 504].includes(Number(status));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 /** A restored set's own address in the console: Shared library with that set open (AdminPage `?set=`). */
 const setHref = (id) => `/admin?section=questionsets&set=${encodeURIComponent(id)}&setScope=platform`;
+/** The console's Prompts section, where a restored prompt is listed. */
+const PROMPTS_HREF = '/admin?section=prompts';
 
 const formatFileSize = (bytes) => {
   if (!bytes) return '0 Bytes';
@@ -259,6 +271,8 @@ const ArchivePanel = ({ environment, onRestored }) => {
   const toggleSelected = toggleIn(setSelected);
   const togglePickedSet = toggleIn(setPickedSets);
   const togglePickedPrompt = toggleIn(setPickedPrompts);
+  const pickedCount = pickedSets.size + pickedPrompts.size;
+  const pickedNoun = batchNoun(pickedSets.size, pickedPrompts.size);
   /** "Select all" means all SHOWN: a search narrows what it takes, and keeps earlier picks. */
   const pickAllShown = (setter, rowsShown) => setter((current) => new Set([...current, ...rowsShown.map((r) => r.key)]));
 
@@ -283,7 +297,7 @@ const ArchivePanel = ({ environment, onRestored }) => {
 
   /** Open the restore dialog for these ids, and ask the tier what restoring them would do. */
   const openImport = async (ids) => {
-    const selectedItems = [...ids];
+    const selectedItems = promptsFirst(ids, items);
     if (selectedItems.length === 0) return;
     setTyped('');
     setError(null);
@@ -370,7 +384,7 @@ const ArchivePanel = ({ environment, onRestored }) => {
   const planSettled = Boolean(plan) && plan.state !== 'loading';
 
   const confirmImport = async () => {
-    const selectedItems = [...selected];
+    const selectedItems = promptsFirst(selected, items);
     if (selectedItems.length === 0 || busy || !typedOk) return;
     setBusy('import');
     setError(null);
@@ -387,7 +401,7 @@ const ArchivePanel = ({ environment, onRestored }) => {
       if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
       setReport(describeRestore(result));
       const restoredIds = ((result.results && result.results.successful) || []).map((r) => r.archiveId).filter(Boolean);
-      setRestoreResult({ ids: restoredIds, checks: restoreChecks(result) });
+      setRestoreResult({ ids: promptsFirst(restoredIds, items), checks: restoreChecks(result), promptChecks: promptChecks(result) });
       setExportResult(null);
       setPromoBanner(null);
       setSelected(new Set());
@@ -402,11 +416,28 @@ const ArchivePanel = ({ environment, onRestored }) => {
     }
   };
 
-  const exportPicked = async (exportType, { promote = false } = {}) => {
-    const selectedItems = exportType === 'questionsets'
-      ? exportSelection(pickedSets)
-      : [...pickedPrompts].map((id) => ({ scope: 'platform', id }));
-    if (selectedItems.length === 0 || busy) return;
+  /** POST one kind of the batch to the export route, or null when the batch has none of it. */
+  const exportKind = async (exportType, selectedItems) => {
+    if (selectedItems.length === 0) return null;
+    const response = await authFetch(`${window.API_BASE}admin/export-to-archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selectedItems, exportType }),
+    });
+    const result = await readBody(response);
+    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+    return result;
+  };
+
+  /**
+   * EVERYTHING PICKED, IN ONE BATCH: prompts first, then sets, so the ids the link carries are
+   * already in the order the receiving tier restores them. The route takes one kind per call,
+   * so a mixed batch is two calls whose results are reported as one.
+   */
+  const exportPicked = async ({ promote = false } = {}) => {
+    const setItems = exportSelection(pickedSets);
+    const promptItems = [...pickedPrompts].map((id) => ({ scope: 'platform', id }));
+    if (setItems.length + promptItems.length === 0 || busy) return;
     setBusy(promote ? 'promote' : 'export');
     setError(null);
     setNotice('');
@@ -414,22 +445,22 @@ const ArchivePanel = ({ environment, onRestored }) => {
     setExportResult(null);
     setRestoreResult(null);
     setCopied(false);
+    let promptsResult = null;
     try {
-      const response = await authFetch(`${window.API_BASE}admin/export-to-archive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selectedItems, exportType }),
-      });
-      const result = await readBody(response);
-      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      promptsResult = await exportKind('prompts', promptItems);
+      const setsResult = await exportKind('questionsets', setItems);
+      const result = mergeExports(promptsResult, setsResult);
       setReport(describeExport(result));
-      const ids = ((result.results && result.results.successful) || []).map((r) => r.archiveId).filter(Boolean);
+      const ids = result.results.successful.map((r) => r.archiveId).filter(Boolean);
       setExportResult(ids.length ? { ids, promoted: promote } : null);
       setDialog(null);
       loadArchiveItems();
     } catch (err) {
       console.error('Export failed:', err);
-      setError(`Export failed: ${err.message}`);
+      // The prompts may already be in the archive when the sets' call fails: say so.
+      const done = promptsResult ? mergeExports(promptsResult).results.successful.length : 0;
+      setError(`Export failed: ${err.message}${done ? ` (${plural(done, 'prompt')} had already been backed up.)` : ''}`);
+      if (done) loadArchiveItems();
     } finally {
       setBusy(null);
     }
@@ -445,21 +476,13 @@ const ArchivePanel = ({ environment, onRestored }) => {
   };
 
   /** One group of the export picker: its head, its actions, and its rows. */
-  const pickGroup = ({ title, all, shownRows, picked, setPicked, toggle, exportType, noun, renderMeta }) => (
+  const pickGroup = ({ title, all, shownRows, picked, setPicked, toggle, noun, renderMeta }) => (
     <section className="arch-group">
       <div className="arch-group-head">
         <h3>{title} ({shownRows.length === all.length ? all.length : `${shownRows.length} of ${all.length}`})</h3>
         <div className="arch-group-acts">
           <button type="button" className="arch-btn arch-btn--sm" onClick={() => pickAllShown(setPicked, shownRows)} disabled={shownRows.length === 0}>Select all</button>
-          <button type="button" className="arch-btn arch-btn--sm" onClick={() => setPicked(new Set())}>Clear</button>
-          <button type="button" className={`arch-btn arch-btn--sm${promoteTo ? '' : ' arch-btn--primary'}`} onClick={() => exportPicked(exportType)} disabled={picked.size === 0 || Boolean(busy)}>
-            {busy === 'export' ? 'Backing up…' : `Export ${plural(picked.size, noun)}`}
-          </button>
-          {promoteTo && (
-            <button type="button" className="arch-btn arch-btn--sm arch-btn--primary" onClick={() => exportPicked(exportType, { promote: true })} disabled={picked.size === 0 || Boolean(busy)}>
-              {busy === 'promote' ? 'Exporting…' : `Promote to ${promoteTo}…`}
-            </button>
-          )}
+          <button type="button" className="arch-btn arch-btn--sm" onClick={() => setPicked(new Set())} disabled={picked.size === 0}>Clear</button>
         </div>
       </div>
       <ul className="arch-picklist">
@@ -562,11 +585,39 @@ const ArchivePanel = ({ environment, onRestored }) => {
         </section>
       )}
 
-      {restoreResult && (restoreResult.checks.length > 0 || (promoteTo && restoreResult.ids.length > 0)) && (
+      {restoreResult && (restoreResult.checks.length > 0 || restoreResult.promptChecks.length > 0 || (promoteTo && restoreResult.ids.length > 0)) && (
         <section className="arch-next" data-testid="archive-restore-check">
+          {(restoreResult.checks.length > 0 || restoreResult.promptChecks.length > 0) && <h3>Checked after the restore</h3>}
+          {restoreResult.promptChecks.length > 0 && (
+            <table className="arch-tbl arch-checktbl" data-testid="archive-prompt-checks">
+              <thead>
+                <tr>
+                  <th className="arch-col-cset">Prompt</th>
+                  <th className="arch-col-cnum">Version</th>
+                  <th className="arch-col-cnum">Status</th>
+                  <th className="arch-col-cstate">Read back</th>
+                  <th className="arch-col-copen" />
+                </tr>
+              </thead>
+              <tbody>
+                {restoreResult.promptChecks.map(({ archiveId, id, name, check }) => (
+                  <tr key={archiveId || id} data-testid={`archive-check-prompt-${id}`}>
+                    <td><span className="arch-nm" title={check.name || name}>{check.name || name}</span></td>
+                    <td className="arch-num">{check.version ? `v${check.version}` : '—'}</td>
+                    <td className="arch-num">{check.active ? 'Active' : (check.status || '—')}</td>
+                    <td>
+                      {check.matches
+                        ? <span className="arch-ok">Matches</span>
+                        : <span className="arch-bad" title={check.error || ''}>{check.error ? 'Could not check' : 'Does not match'}</span>}
+                    </td>
+                    <td><div className="arch-rowact"><a className="arch-btn arch-btn--sm" href={PROMPTS_HREF}>Open prompts</a></div></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
           {restoreResult.checks.length > 0 && (
             <>
-              <h3>Checked after the restore</h3>
               <table className="arch-tbl arch-checktbl">
                 <thead>
                   <tr>
@@ -832,7 +883,9 @@ const ArchivePanel = ({ environment, onRestored }) => {
                     <li key={entry.archiveId} data-testid={`archive-plan-${entry.archiveId}`}>
                       <span className="arch-pick-main">
                         <span className="arch-nm" title={entry.name || titleOf(entry.archiveId)}>{entry.name || titleOf(entry.archiveId)}</span>
-                        <span className="arch-sub">{shownEntry.counts}</span>
+                        <span className="arch-sub" title={(entry.externalImages || []).join(', ')} data-testid="archive-plan-sub">
+                          {[shownEntry.counts, shownEntry.external].filter(Boolean).join(' · ')}
+                        </span>
                       </span>
                       <span className="arch-pick-meta">
                         <span className={`arch-chip${entry.mode === 'new-version' ? ' arch-chip--version' : ''}`}>{shownEntry.verdict}</span>
@@ -921,7 +974,7 @@ const ArchivePanel = ({ environment, onRestored }) => {
           closeOnBackdrop={() => !busy}
           closeOnEscape={() => !busy}
         >
-          <DialogHead titleId="arch-export-title" title={<>Back up from {tierName}</>} titlesClassName="arch-grow" sub={`Engage and public content only. Organisation content is encrypted per organisation and is never archived.${promoteTo ? ` Promote to ${promoteTo}… backs up and gives you a link that opens ${promoteTo}'s Archive with them selected.` : ''}`} subClassName="arch-dim" icon={<Icon name="UploadSimple" weight="fill" size={20} color="var(--primary)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
+          <DialogHead titleId="arch-export-title" title={<>Back up from {tierName}</>} titlesClassName="arch-grow" sub={`Engage and public content only. Organisation content is encrypted per organisation and is never archived. Tick sets and prompts together: they go as one batch.${promoteTo ? ` Promote to ${promoteTo}… backs up and gives you one link that opens ${promoteTo}'s Archive with them all selected.` : ''}`} subClassName="arch-dim" icon={<Icon name="UploadSimple" weight="fill" size={20} color="var(--primary)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
           <div className="arch-modal-body">
             <StatusMessage message={error} tone="error" className="arch-alert arch-alert--error" />
             {localPending > 0 ? (
@@ -951,7 +1004,6 @@ const ArchivePanel = ({ environment, onRestored }) => {
                   picked: pickedSets,
                   setPicked: setPickedSets,
                   toggle: togglePickedSet,
-                  exportType: 'questionsets',
                   noun: 'set',
                   renderMeta: (row) => (
                     <>
@@ -968,7 +1020,6 @@ const ArchivePanel = ({ environment, onRestored }) => {
                   picked: pickedPrompts,
                   setPicked: setPickedPrompts,
                   toggle: togglePickedPrompt,
-                  exportType: 'prompts',
                   noun: 'prompt',
                   renderMeta: (row) => (
                     <>
@@ -980,8 +1031,16 @@ const ArchivePanel = ({ environment, onRestored }) => {
               </>
             )}
           </div>
-          <DialogFoot>
-            <button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Close</button>
+          <DialogFoot cancel={<button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Close</button>}>
+            {/* One batch: whatever is ticked in either list leaves together, prompts first. */}
+            <button type="button" className={`arch-btn${promoteTo ? '' : ' arch-btn--primary'}`} onClick={() => exportPicked()} disabled={pickedCount === 0 || Boolean(busy)}>
+              {busy === 'export' ? 'Backing up…' : (pickedCount ? `Export ${pickedNoun}` : 'Export')}
+            </button>
+            {promoteTo && (
+              <button type="button" className="arch-btn arch-btn--primary" onClick={() => exportPicked({ promote: true })} disabled={pickedCount === 0 || Boolean(busy)}>
+                {busy === 'promote' ? 'Exporting…' : `Promote ${pickedCount ? `${pickedNoun} ` : ''}to ${promoteTo}…`}
+              </button>
+            )}
           </DialogFoot>
         </Modal>
       )}

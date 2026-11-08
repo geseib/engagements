@@ -102,7 +102,7 @@ const ART = {
     assert.strictEqual(h.objects.get(`${process.env.ARCHIVE_BUCKET}/${env.media[0].archiveKey}`).Body, 'PNG-CHART');
     assert.deepStrictEqual(envelopeOf(triviaItem.archiveId).media, []);
     assert.deepStrictEqual(envelopeOf(artItem.archiveId).media, []);
-    assert.deepStrictEqual(pollItem.media, { copied: 1, missing: [], skipped: [] });
+    assert.deepStrictEqual(pollItem.media, { copied: 1, missing: [], skipped: [], external: [] });
   });
   await check('the linked prompt travels by name as well as by id', () => {
     assert.deepStrictEqual(envelopeOf(pollItem.archiveId).links, { promptName: 'Workie - Pulse' });
@@ -147,7 +147,7 @@ const ART = {
   });
   await check('the image is back in the tier media bucket', () => {
     assert.strictEqual(h.objects.get(`${MEDIA}/sets/pulse/chart.png`).Body, 'PNG-CHART');
-    assert.deepStrictEqual(restored.body.media, { copied: 1, kept: 0, missing: [], skipped: [] });
+    assert.deepStrictEqual(restored.body.media, { copied: 1, kept: 0, missing: [], skipped: [], external: ['https://upload.wikimedia.org/jupiter.jpg'] });
   });
 
   console.log('\n3. a second round trip is identical to the first');
@@ -177,7 +177,7 @@ const ART = {
     assert.strictEqual(h.rows(resolved.pk).length, 4);
   });
   await check('the image that already existed was kept, not overwritten', () => {
-    assert.deepStrictEqual(restored.body.media, { copied: 0, kept: 1, missing: [], skipped: [] });
+    assert.deepStrictEqual(restored.body.media, { copied: 0, kept: 1, missing: [], skipped: [], external: [] });
   });
 
   console.log('\n5. a public set is archived and comes back as a house copy');
@@ -208,7 +208,7 @@ const ART = {
   exported = await exportSets('gappy');
   await check('a missing image is reported, and the backup still happens', () => {
     assert.strictEqual(exported.body.results.successful.length, 1);
-    assert.deepStrictEqual(exported.body.results.successful[0].media, { copied: 0, missing: ['sets/gappy/gone.png'], skipped: [] });
+    assert.deepStrictEqual(exported.body.results.successful[0].media, { copied: 0, missing: ['sets/gappy/gone.png'], skipped: [], external: [] });
   });
   h.reset();
   h.seedSet({
@@ -227,7 +227,7 @@ const ART = {
   await check('an image stored outside sets/ is named as skipped, never copied, and the backup still happens', () => {
     // rejects: export's role reads only sets/*, so on a live tier this copy is an AccessDenied that failed the whole set.
     assert.strictEqual(exported.body.results.successful.length, 1);
-    assert.deepStrictEqual(exported.body.results.successful[0].media, { copied: 1, missing: [], skipped: ['images/legacy.png'] });
+    assert.deepStrictEqual(exported.body.results.successful[0].media, { copied: 1, missing: [], skipped: ['images/legacy.png'], external: [] });
     const env = envelopeOf(exported.body.results.successful[0].archiveId);
     assert.deepStrictEqual(env.media.map((m) => m.key), ['sets/stray/ok.png']);
     const archived = [...h.objects.keys()].filter((key) => key.startsWith(`${process.env.ARCHIVE_BUCKET}/`));

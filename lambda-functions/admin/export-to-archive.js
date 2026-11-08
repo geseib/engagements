@@ -5,7 +5,8 @@
  * written here was a CSV with a fixed column set. Everything it had no column for (poll
  * options, trivia E/F, images, every set setting, the active flag) was lost on every trip.
  * Each item is now one JSON envelope (shared/archive-snapshot.js) copied wholesale from its
- * rows, with the images those rows point at copied beside it (shared/archive-media.js).
+ * rows, with the images those rows point at copied beside it (shared/archive-media.js) —
+ * uploaded keys and absolute URLs on an Engage tier's own site alike.
  *
  * WHO: Engage staff acting as Engage, via canManageScope(event, PLATFORM), the same interlock
  * that guards writing Engage's library. The route's `admins` gate alone lets an admin standing
@@ -193,7 +194,9 @@ async function exportSet(ref, tier, results) {
   }
 
   const snapshotId = crypto.randomUUID();
-  const { media, missing, skipped } = await copyMediaOut(s3Client, {
+  // Uploaded keys AND absolute URLs on an Engage tier's own site travel (archive-media.js);
+  // any other absolute URL is somebody else's picture, named in `external`.
+  const { media, missing, skipped, external } = await copyMediaOut(s3Client, {
     mediaBucket: process.env.MEDIA_BUCKET, archiveBucket: process.env.ARCHIVE_BUCKET, snapshotId, rows,
   });
   const envelope = snap.buildSetEnvelope({
@@ -217,7 +220,7 @@ async function exportSet(ref, tier, results) {
   const uploaded = await upload(item, `"${meta.name}" (${ref.id})`);
   results.successful.push({
     id: ref.id, scope: ref.scope, name: meta.name, archiveId: uploaded.archiveId, snapshotId,
-    questionsCount: questionCount, media: { copied: media.length, missing, skipped },
+    questionsCount: questionCount, media: { copied: media.length, missing, skipped, external },
   });
   return undefined;
 }

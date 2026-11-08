@@ -9,6 +9,7 @@ import {
   TIERS, archiveTier, archiveScope, archiveSource, isSnapshot, displayTags, groupSnapshots,
   selectionKey, exportSelection, describeExport, describeRestore,
   formatExported, lastBackups, relativeTime, pickerRows, describePlanEntry, restoreChecks, checkCount,
+  promptChecks, batchNoun, promptsFirst, mergeExports,
 } from '../utils/archiveItems';
 
 const snapshot = (id, tier, source, createdAt, extra = []) => ({
@@ -193,15 +194,15 @@ describe('the export picker', () => {
 describe('the restore preview and the check after it', () => {
   test('a new version names the live version and whether it is live now', () => {
     expect(describePlanEntry({ kind: 'set', mode: 'new-version', currentVersion: 3, currentlyActive: true, active: true, questionCount: 60, categoryCount: 6 }))
-      .toEqual({ verdict: 'New version of v3 (currently live)', counts: '60 questions · 6 categories', arrival: 'Active on arrival', live: true });
+      .toEqual({ verdict: 'New version of v3 (currently live)', counts: '60 questions · 6 categories', arrival: 'Active on arrival', live: true, external: '' });
     expect(describePlanEntry({ kind: 'set', mode: 'new-version', currentVersion: 1, currentlyActive: false, active: false, questionCount: 1, categoryCount: 1 }))
-      .toEqual({ verdict: 'New version of v1 (currently inactive)', counts: '1 question · 1 category', arrival: 'Inactive on arrival', live: false });
+      .toEqual({ verdict: 'New version of v1 (currently inactive)', counts: '1 question · 1 category', arrival: 'Inactive on arrival', live: false, external: '' });
   });
   test('a new set, a legacy CSV with no category count, and a prompt', () => {
     expect(describePlanEntry({ kind: 'set', mode: 'created', active: false, questionCount: 7, categoryCount: null, legacy: true }).verdict).toBe('New set');
     expect(describePlanEntry({ kind: 'set', mode: 'created', active: false, questionCount: 7, categoryCount: null }).counts).toBe('7 questions');
     expect(describePlanEntry({ kind: 'prompt', mode: 'new-version', currentVersion: 4, status: 'active' }))
-      .toEqual({ verdict: 'New version of v4', counts: 'Prompt', arrival: 'Active on arrival', live: false });
+      .toEqual({ verdict: 'New version of v4', counts: 'Prompt', arrival: 'Active on arrival', live: false, external: '' });
     expect(describePlanEntry({ kind: 'prompt', mode: 'created', status: 'draft', legacy: true }).verdict).toBe('New draft prompt');
   });
   test('the check lists only sets that carry one, and counts read "found of expected"', () => {
@@ -213,5 +214,50 @@ describe('the restore preview and the check after it', () => {
     expect(checkCount({ expected: 60, found: 58 })).toBe('58 of 60');
     expect(checkCount({ expected: null, found: 6 })).toBe('6');
     expect(checkCount(undefined)).toBe('—');
+  });
+  test('a set whose images stay on another site says how many', () => {
+    expect(describePlanEntry({ kind: 'set', mode: 'created', active: true, questionCount: 2, categoryCount: 1, externalImages: ['https://x/a.jpg'] }).external)
+      .toBe('1 image stays on another site');
+    expect(describePlanEntry({ kind: 'set', mode: 'created', active: true, questionCount: 2, categoryCount: 1, externalImages: ['a', 'b'] }).external)
+      .toBe('2 images stay on another site');
+  });
+  test('prompts carry their read-back too, in their own list', () => {
+    const response = { results: { successful: [
+      { archiveId: 'a', kind: 'set', id: 's1', check: { matches: true } },
+      { archiveId: 'b', kind: 'prompt', id: 'p1', name: 'P', check: { version: 2, status: 'active', active: true, name: 'P', matches: true } },
+      { archiveId: 'c', kind: 'prompt', id: 'p2' },
+    ] } };
+    expect(promptChecks(response)).toEqual([{ archiveId: 'b', id: 'p1', name: 'P', check: { version: 2, status: 'active', active: true, name: 'P', matches: true } }]);
+  });
+});
+
+describe('one batch, prompts first', () => {
+  test('batchNoun names what the batch holds', () => {
+    expect(batchNoun(2, 0)).toBe('2 sets');
+    expect(batchNoun(0, 1)).toBe('1 prompt');
+    expect(batchNoun(1, 2)).toBe('1 set and 2 prompts');
+    expect(batchNoun(0, 0)).toBe('');
+  });
+  test('promptsFirst moves prompts ahead of sets and keeps the order within each', () => {
+    const items = [
+      { ArchiveId: 's1', ContentType: 'questionset' }, { ArchiveId: 'p1', ContentType: 'prompt' },
+      { ArchiveId: 's2', ContentType: 'questionset' }, { ArchiveId: 'p2', ContentType: 'prompt' },
+    ];
+    expect(promptsFirst(['s1', 'p1', 's2', 'unknown', 'p2'], items)).toEqual(['p1', 'p2', 's1', 's2', 'unknown']);
+    expect(promptsFirst(new Set(['s2', 'p2']), items)).toEqual(['p2', 's2']);
+  });
+  test('mergeExports joins the prompt and set responses in that order; a missing one is skipped', () => {
+    const merged = mergeExports(
+      { results: { successful: [{ archiveId: 'p' }], failed: [], totalRequested: 1 } },
+      null,
+      { results: { successful: [{ archiveId: 's' }], failed: [{ id: 'x' }], totalRequested: 2 } },
+    );
+    expect(merged).toEqual({ results: { successful: [{ archiveId: 'p' }, { archiveId: 's' }], failed: [{ id: 'x' }], totalRequested: 3 } });
+  });
+  test('the export and restore reports list images that stay on another site', () => {
+    expect(describeExport({ results: { successful: [{ name: 'W', media: { missing: [], skipped: [], external: ['https://w/a.jpg'] } }], failed: [] } }))
+      .toContain('W: 1 image stays on another site, not copied: https://w/a.jpg.');
+    expect(describeRestore({ results: { successful: [{ id: 'w', kind: 'set', mode: 'created' }], failed: [] }, media: { missing: [], skipped: [], external: ['u1', 'u2', 'u1'] } }))
+      .toContain('2 images stay on another site, not copied: u1, u2.');
   });
 });
