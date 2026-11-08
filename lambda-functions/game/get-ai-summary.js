@@ -53,7 +53,7 @@ const { ORG, promptsMetadataPk, callerMayDriveSession, isPlatformAdmin } = requi
 // Dev's model picker (AI_MODEL_PICKER): the catalogue, and the one call to the
 // Anthropic Messages API. Off on test and prod, where neither is consulted.
 const {
-  DEFAULT_MODEL, findModel, modelByProviderId, modelPickerOn, pickerCatalogue,
+  DEFAULT_MODEL, findModel, modelByProviderId, modelPickerOn, pickerCatalogue, promptSummaryModel,
   estimateCostUsd, variantSk, variantSkPrefix,
 } = require('./summary-models');
 const anthropicMessages = require('./anthropic-messages');
@@ -583,7 +583,10 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
     // describes the name. tests/ai-summary-prompt-name-not-logged.js.
     console.log(`✅ Successfully fetched prompt ${promptId}: name ${shapeForLog(promptData.name)}`);
 
-    return promptData;
+    // The row's settings that are not in the body: which model writes this
+    // Workie's reads (summary-models.js promptSummaryModel). A setting, never
+    // prose, so it is plaintext on every row.
+    return promptRecord.summaryModel ? { ...promptData, summaryModel: promptRecord.summaryModel } : promptData;
   } catch (error) {
     console.error(`❌ Error fetching prompt ${promptId}:`, error);
     
@@ -3877,12 +3880,17 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Dev's model picker: the model asked for (the default unless a staff member
   // chose another on dev), and the one actually answering — the default once
   // the chosen one has failed.
-  const requestedModel = modelChoice || DEFAULT_MODEL;
+  // A staff member's pick first, then the model this Workie names for its own
+  // reads (Bedrock only), then the house default.
+  const promptModel = modelChoice ? null : promptSummaryModel(promptData);
+  const requestedModel = modelChoice || promptModel || DEFAULT_MODEL;
   let activeModel = requestedModel;
   let modelFallbackReason = null;
   // Only the default read goes through the switch; a model a staff member
   // chose is a comparison and is asked for as chosen.
-  const routeDefault = !modelChoice;
+  // A Workie's own model is asked for as named, on Bedrock, never through the
+  // Engage-wide Anthropic switch (owner: it stays in our account).
+  const routeDefault = !modelChoice && !promptModel;
   // Who actually wrote the last reply used: set by askOnce. The switch may
   // have sent the default read to Haiku 5.5 (claude-route.js).
   let servedModelId = null;

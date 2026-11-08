@@ -220,10 +220,35 @@ function normalizeAngleWeights(raw) {
   return { ok: true, weights };
 }
 
+/*
+  WHICH MODEL WRITES THIS WORKIE'S READ (owner, 2026-11-08). A Workie may name
+  a larger model for its own reads when the house default (Haiku 4.5) is not
+  careful enough for it — What Is This Thing?'s reveal mixed up votes and
+  points and broke its own naming rule on Haiku. Absent, null or '' means the
+  house default, which is every Workie written before this field existed.
+
+  BEDROCK ONLY, IN THIS ACCOUNT: the owner's condition. These are the Bedrock
+  rows of game/summary-models.js's catalogue (tests/prompt-summary-model.js
+  holds the two lists equal), and the read is sent to Bedrock directly, never
+  through claude-route.js's Anthropic switch. A staff member's picker choice on
+  a regeneration still wins over this.
+*/
+const SUMMARY_MODEL_IDS = Object.freeze(['bedrock-haiku-4-5', 'bedrock-sonnet-4-6', 'bedrock-opus-4-6']);
+
+function normalizeSummaryModel(raw) {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, model: null };
+  const id = typeof raw === 'string' ? raw.trim() : '';
+  if (!SUMMARY_MODEL_IDS.includes(id)) {
+    return { ok: false, error: `summaryModel must be one of: ${SUMMARY_MODEL_IDS.join(', ')} (or empty for the house default)` };
+  }
+  return { ok: true, model: id };
+}
+
 module.exports = {
   isUsableSummaryPrompt, summaryPromptDefect, inferPromptType,
   DEFAULT_OUTPUT_SECTIONS, normalizeOutputSections, resolveOutputSections,
   hasCustomOutputShape, describeOutputShape, normalizeAngleWeights,
+  SUMMARY_MODEL_IDS, normalizeSummaryModel,
   // The limits themselves, so a surface that DESCRIBES the rules (the
   // workbench's export, admin/shared/workie-reference.js) quotes these numbers
   // rather than retyping them.

@@ -3,7 +3,7 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryComm
 const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
 const {
-  normalizeOutputSections, normalizeAngleWeights, inferPromptType, isUsableSummaryPrompt,
+  normalizeOutputSections, normalizeAngleWeights, normalizeSummaryModel, inferPromptType, isUsableSummaryPrompt,
 } = require('./shared/prompt-shape');
 const versions = require('./shared/prompt-versions');
 const {
@@ -89,6 +89,7 @@ exports.handler = async (event) => {
       // Round-angle mix (game/round-angles.js). Omit to leave it; null or {}
       // to go back to the house mix.
       angleWeights: rawAngleWeights,
+      summaryModel: rawSummaryModel,
       isDefault,
       status,
       questionSetIds,
@@ -257,6 +258,11 @@ exports.handler = async (event) => {
     const angleWeightsCheck = angleWeightsSupplied ? normalizeAngleWeights(rawAngleWeights) : { ok: true, weights: null };
     if (!angleWeightsCheck.ok) throw new Error(angleWeightsCheck.error);
     const angleWeights = angleWeightsCheck.weights;
+    // Same convention: undefined = leave alone; null or '' = the house default.
+    const summaryModelSupplied = rawSummaryModel !== undefined;
+    const summaryModelCheck = summaryModelSupplied ? normalizeSummaryModel(rawSummaryModel) : { ok: true, model: null };
+    if (!summaryModelCheck.ok) throw new Error(summaryModelCheck.error);
+    const summaryModel = summaryModelCheck.model;
 
     // See PROMPT_STATUSES. `undefined` means "not supplied", same convention as
     // every other field here; anything else has to be one of the three.
@@ -642,6 +648,14 @@ exports.handler = async (event) => {
       // scope. Cleared writes an empty map, which reads as the house mix.
       updateExpression.push('angleWeights = :angleWeights');
       expressionAttributeValues[':angleWeights'] = angleWeights || {};
+    }
+
+    if (summaryModelSupplied) {
+      // A setting on the row only (prompt-shape.js normalizeSummaryModel), so
+      // it is not a content change and mints no version. '' reads as the
+      // house default.
+      updateExpression.push('summaryModel = :summaryModel');
+      expressionAttributeValues[':summaryModel'] = summaryModel || '';
     }
 
     // Always update these fields
