@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 8 Nov 2026 (the bluff round, promoting sets through the Archive, the question picker, Auto that never stalls)
 
-**Test:** merge of dev at `d708952db` plus these notes. Everything below this entry is already on test.
+**Test:** merge of dev `d708952db` plus these notes. Everything below this entry is already on test.
 
 **Content is data, not code.** The new question sets below are on **dev**. They reach test by promoting them through the Archive after this push (step 1 of What to look at), not with the deploy.
 
