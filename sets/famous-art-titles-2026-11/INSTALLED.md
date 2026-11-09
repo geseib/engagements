@@ -1,5 +1,19 @@
 # Installed: Famous Art Titles, neutral-named images
 
+## 9 Nov 2026: dev back on v6 (teasers rolled back)
+
+The owner changed their mind ("the name and date are better"), so dev's live version is
+**v6** again: artist and date in Title, with the round-2 swaps. It was switched with the
+app's own `admin/promote-set-version.js` handler, which is what the set editor's Versions
+panel calls. It ran in-process as a platform admin and returned 200 ("Version 6 is now
+active"). The handler writes its own audit entry (`set.promote-version`, 7 → 6). No rows
+were written. **v7 stays in the history** (versions 1, 4, 5, 6, 7) and can be promoted
+again.
+
+**Read-back:** `activeVersion` is 6. The active partition `SET#famousarttitles#v6` holds 68
+rows that are identical to v6 as read before v7 was made, on every attribute. The SETS row's
+settings are as they were.
+
 ## Round 3 (8 Nov 2026): dev v6 → v7, teaser Titles
 
 Dev only. The 60 Titles changed from artist and date to short teasers (README, "Round 3").

@@ -85,7 +85,11 @@ on every row. Its round-2 CSV gives every row the same neutral image as the matc
 on test (matched on the teaser Title, which is identical on both tiers), served from
 `engage.seibtribe.us`. Nothing else on those rows changes.
 
-## Round 3 (8 Nov 2026): dev's Titles become teasers
+## Round 3 (8 Nov 2026): dev's Titles become teasers (rolled back 9 Nov)
+
+> **Rolled back on 9 Nov 2026.** The owner: "the name and date are better". Dev is on **v6**
+> again (artist and date in Title, with the round-2 painting swaps). v7 and its teasers are kept
+> in the set's Versions and in `famous-art-titles-dev-v7.csv`. See INSTALLED.md.
 
 On dev, the Title players see while they answer was the artist and date ("Leonardo da
 Vinci, c. 1503"), which is a strong hint. The owner asked for teasers instead: "we dont
@@ -247,7 +251,7 @@ US-specific grounds, so read each Commons page's tag before reusing them outside
    - `fat-28.jpg` (David): the crate reads "À MARAT / DAVID", which names the subject.
    - `fat-17.jpg` (Hokusai): the cartouche at top left gives the series and print title in Japanese.
    Round 2 swaps all three out. The files stay in the buckets for the old versions.
-2. **(Fixed in round 3, dev v7.) Dev's Title column was the artist and date** ("Leonardo da Vinci, c. 1503"), and Title is
+2. **Dev's Title column is the artist and date.** The owner prefers it that way (9 Nov; v7's teasers were rolled back) ("Leonardo da Vinci, c. 1503"), and Title is
    shown during ASK. It is not the title, but it is a strong hint. Test's Title is a teaser
    ("THE ENIGMATIC SMILE") with the artist in School, which players do not see until after
    the reveal. Left as it is: changing content was out of scope.
