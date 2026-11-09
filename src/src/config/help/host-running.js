@@ -326,6 +326,11 @@ const running = {
             'V changes its look: **Departure board**, **Olympic board** or **Tote board**. The default is set under **Scoreboard look** in the Session menu\'s Screens · **More options**.',
           ],
         },
+        /* config/scoreFlash.js; useScoreFlash.js; SessionSetupPanel "Scoreboard between rounds". */
+        {
+          t: 'p',
+          text: 'In Trivia the board also comes up by itself between rounds. When you press **Start round** after Workie\'s read, or Auto does, the room sees the standings for a few seconds, with this round\'s biggest gains and a countdown, and then the next round opens on its own. Press **Start round** again, Space or a clicker\'s → to start it straight away. It does not come up after the last round. Turn it off, or make it 3 or 8 seconds instead of 5, under **Scoreboard between rounds** in the Session menu\'s **How it runs**.',
+        },
       ],
     },
     /*
@@ -608,7 +613,7 @@ const sessionPanel = {
             { title: '**Screens**', text: 'One screen or two and the room\'s window (see Two screens and your phone), **Your phone as a remote** with **Connect your phone**, and the scoreboard\'s button (Trivia and Call & Answer). More options: room screen size, **Scoreboard look**, **Show how this works on the room\'s screen →**, and the keys.' },
             { title: '**Joining**', text: 'The join address, its QR and the code, **Copy join link** and **Show join code**. More options: **Invite…**, a calendar invite.' },
             { title: '**How it runs**: Names', text: '**Show who wrote each response from the start** (Call & Answer). Off (the default), answers are numbered until voting closes, then show their writers. Turning it on cannot be taken back.' },
-            { title: '**How it runs**: Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. It never waits long on Workie: a read that fails, or is not written within about 25 seconds, is skipped. Opening anything pauses it.' },
+            { title: '**How it runs**: Pace', text: '**Auto-advance when everyone has responded** moves on after a short beat. It never waits long on Workie: a read that fails, or is not written within about 25 seconds, is skipped. Opening anything pauses it. Trivia: **Scoreboard between rounds**.' },
             { title: '**How it runs**: More options', text: '**Name who is still waiting** (the room meter can list who has not answered), whether comments show on the room\'s screen as they arrive, and Workie\'s voice and approach for the next round. While a read is on screen, **Redo the read on screen** is here too; on two screens it is also beside the read itself, as **Redo Workie\'s read**.' },
           ],
         },
@@ -655,7 +660,7 @@ const byType = {
         { t: 'phases', gameType: 'trivia' },
         {
           t: 'p',
-          text: 'The question goes up with its options. There is nothing to vote on, so **Show results** goes straight to the answer: the correct option is marked **Correct**, the others are dimmed, and every option shows the share of the room that chose it. The scoreboard is there with S. On two screens your console shows the answer while the room answers; the room\'s window does not.',
+          text: 'The question goes up with its options. There is nothing to vote on, so **Show results** goes straight to the answer: the correct option is marked **Correct**, the others are dimmed, and every option shows the share of the room that chose it. The scoreboard is there with S, and flashes up by itself for a few seconds before each new round. On two screens your console shows the answer while the room answers; the room\'s window does not.',
         },
       ],
     },

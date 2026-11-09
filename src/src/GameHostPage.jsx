@@ -61,9 +61,13 @@ import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
 import useSessionPanelKey from './components/stage/useSessionPanelKey';
 import useFullscreenKey from './hooks/useFullscreenKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
+import useScoreFlash from './components/stage/scoreboard/useScoreFlash';
 import useStageNotesSync from './hooks/useStageNotesSync';
 import useSetCategoryLoader from './hooks/useSetCategoryLoader';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
+import {
+  flashesByDefault, loadScoreFlash, normaliseScoreFlash, saveScoreFlash, scoreFlashApplies, scoreFlashMs,
+} from './config/scoreFlash';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
 import { twoSurfacesHere, twoSurfacesFor, consoleFor, presentHref, TWO_SURFACE_TYPES, CONSOLE_TYPES, SETUP_TYPES, oneScreenWhy } from './config/surfaces';
 import { EVENT_WORDS, eventMovedOn, itemNumber, latecomersFrom, eventScreensSet, markEventScreens } from './config/eventAgenda';
@@ -675,6 +679,28 @@ function GameHostPage() {
     scoreboard, applyServerBoard, publishScoreboard, resetScoreboard,
   } = useScoreboardSync({ gameId, apiBase: API_BASE, fetchFn: authFetch });
   const [scoresAfterRound, setScoresAfterRound] = useState(null);
+  /*
+    THE SCOREBOARD FLASH (config/scoreFlash.js): on trivia, Start round N
+    first puts the board up for a few seconds, then opens the round itself.
+    Its one timer is useScoreFlash's. The setting is this session's, kept in
+    this browser (`scoreFlashChoice`: {} until the host changes it, which
+    reads as the format's default — on for trivia, 5 seconds).
+  */
+  const openFlashBoard = useCallback(() => publishScoreboard({ open: true }), [publishScoreboard]);
+  const scoreFlash = useScoreFlash({ boardOpen: scoreboard.open, openBoard: openFlashBoard });
+  const [scoreFlashChoice, setScoreFlashChoice] = useState({});
+  useEffect(() => { setScoreFlashChoice(loadScoreFlash(gameId)); }, [gameId]);
+  // A flash never outlives its session: leaving stops it without advancing.
+  const cancelScoreFlash = scoreFlash.cancel;
+  useEffect(() => { cancelScoreFlash(); }, [gameId, cancelScoreFlash]);
+  const scoreFlashSetting = normaliseScoreFlash(scoreFlashChoice, normalizeGameType(currentGameType));
+  const changeScoreFlash = useCallback((patch) => {
+    setScoreFlashChoice((prev) => {
+      const next = { ...normaliseScoreFlash(prev, 'trivia'), ...prev, ...patch };
+      saveScoreFlash(gameId, next);
+      return next;
+    });
+  }, [gameId]);
 
 
 
@@ -7214,6 +7240,9 @@ Focus on actionable business strategy insights.`;
    */
   useEffect(() => {
     if (!autoMode) return undefined;
+    // THE SCOREBOARD FLASH is its own step with its own clock (autoMode.js
+    // SCORE_FLASH): Auto stands still until it has opened the round.
+    if (scoreFlash.flash) return undefined;
     if (createdSetup || showWelcomeScreen || showNewGameDialog
         || showReport || showSurveyResults || showSurveyWalkthrough || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
@@ -7344,7 +7373,7 @@ Focus on actionable business strategy insights.`;
     playersWhoVoted.length, createdSetup, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, questionHeld, isLoadingData, qrMode,
-    spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces, wallFocus]);
+    spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces, wallFocus, scoreFlash.flash]);
 
   /*
     WORKIE'S PAGE AS A SERVER FACT (two-surface PLAN 1.14). Every way this page
@@ -7436,7 +7465,8 @@ Focus on actionable business strategy insights.`;
     open: scoreboard.open,
     canOpen: scoreboardAvail.enabled,
     onOpen: () => publishScoreboard({ open: true }),
-    onClose: () => publishScoreboard({ open: false }),
+    // During the flash the host's own close (Space, Esc) is "start the round now".
+    onClose: () => (scoreFlash.flash ? scoreFlash.skip() : publishScoreboard({ open: false })),
     onCycleStyle: () => publishScoreboard({ style: nextStyle(scoreboard.style) }),
   });
 
@@ -8367,7 +8397,30 @@ Focus on actionable business strategy insights.`;
         setStagePageIndex(stagePageIndex + 1);
         break;
       case HOST_INTENTS.START:
+        handleNextQuestion(false);
+        break;
       case HOST_INTENTS.NEXT:
+        // THE SCOREBOARD FLASH (config/scoreFlash.js). Pressed again while it
+        // is up — the dock, Space, a clicker, Auto — the round opens now.
+        if (scoreFlash.flash) {
+          scoreFlash.skip();
+          break;
+        }
+        if (scoreFlashApplies({
+          on: scoreFlashSetting.on,
+          gameType: normalizeGameType(currentGameType),
+          phase: hostPhase,
+          nextRoundExists,
+          boardAvailable: scoreboardAvail.enabled,
+          boardOpen: scoreboard.open,
+        })) {
+          scoreFlash.start({
+            ms: scoreFlashMs(scoreFlashSetting.seconds),
+            nextRound: lessonNumber > 0 ? lessonNumber + 1 : null,
+            go: () => handleNextQuestion(false),
+          });
+          break;
+        }
         handleNextQuestion(false);
         break;
       case HOST_INTENTS.SKIP:
@@ -10196,7 +10249,8 @@ Focus on actionable business strategy insights.`;
             board={scoreboard}
             refreshKey={`${gameState}|${scoresAfterRound}`}
             keysEnabled={scoreboardKeysOn}
-            onClose={() => publishScoreboard({ open: false })}
+            onClose={() => (scoreFlash.flash ? scoreFlash.skip() : publishScoreboard({ open: false }))}
+            flash={scoreFlash.flash}
           />
         ) : null}
       >
@@ -11229,6 +11283,8 @@ Focus on actionable business strategy insights.`;
           nextRoundNumber={lessonNumber + 1}
           autoMode={autoMode}
           onAutoModeChange={setAutoMode}
+          scoreFlash={flashesByDefault(normalizeGameType(currentGameType))
+            ? { ...scoreFlashSetting, onChange: changeScoreFlash } : null}
           answerCount={answers.length}
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}

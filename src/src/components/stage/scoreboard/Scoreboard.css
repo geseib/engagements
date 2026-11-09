@@ -140,6 +140,23 @@
 .sb .sb-close:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 
 .sb .sb-body{position:relative;z-index:2;min-height:0;display:flex;flex-direction:column}
+
+/* THE FLASH between two trivia rounds (config/scoreFlash.js; 2026-11-09): a
+   foot line under any of the three looks — this round's biggest gains and
+   the countdown to the next round. The rail's own idiom and tokens: --text
+   for what is read (12.53:1 flat on the field, as the title), --muted for the
+   hint (as the context line), --accent-text (the skin role for --primary) for the gain numerals (as the chip,
+   7.42:1). Wraps rather than truncating. */
+.sb.sb--flash{grid-template-rows:auto minmax(0,1fr) auto}
+.sb .sb-flash{position:relative;z-index:2;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;
+  gap:calc(.6vh + 4px) calc(2vw + 12px);padding:calc(.8vh + 4px) calc(2.4vw + 10px) calc(1.4vh + 8px)}
+.sb .sb-gains{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:.4em 1.1em;
+  font-size:var(--L-meta);color:var(--text);font-weight:700}
+.sb .sb-gains-h{color:var(--muted);font-weight:600;letter-spacing:.09em;text-transform:uppercase}
+.sb .sb-gain b{font-family:var(--font-display);font-stretch:125%;font-weight:800;color:var(--accent-text)}
+.sb .sb-next{margin:0 0 0 auto;display:flex;flex-wrap:wrap;align-items:baseline;gap:.3em 1em;
+  font-size:var(--L-meta);color:var(--text);font-weight:700;letter-spacing:.02em}
+.sb .sb-next-hint{color:var(--muted);font-weight:600}
 .sb .sb-note{margin:auto;font-size:var(--L-body);color:var(--muted);font-weight:600}
 
 /* ================================================== A · THE DEPARTURE BOARD */

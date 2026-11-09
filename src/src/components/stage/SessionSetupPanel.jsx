@@ -12,6 +12,7 @@ import {
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
+import { SCORE_FLASH_CHOICES } from '../../config/scoreFlash';
 import { canEndSession, isLobbyState, isSurveyType } from '../../config/hostControls';
 import QueueList, { PutAsideList } from './QueueList';
 import OwnQuestionComposer from '../OwnQuestionComposer';
@@ -58,6 +59,7 @@ export const TAB_HELP = {
 /** The words this menu says that no other surface does. */
 export const MENU_WORDS = Object.freeze({
   upNext: 'Up next',
+  scoreFlash: 'Scoreboard between rounds',
   choose: 'Choose a question',
   categories: 'Categories',
   change: 'Change',
@@ -312,6 +314,9 @@ export default function SessionSetupPanel({
      everything else here. */
   autoMode = false,
   onAutoModeChange = () => {},
+  /* THE SCOREBOARD FLASH (config/scoreFlash.js): { on, seconds, onChange }
+     on trivia, null on every other format. Applies from the next press. */
+  scoreFlash = null,
   /* SETTINGS FROM THE NEXT ROUND (session flow v3; owner, 14 Oct). While a
      round is live the page holds a change in `pendingSettings` (keys:
      anonymousUntilReveal, nameWaiting, wallComments, scoreboardStyle) and
@@ -646,6 +651,39 @@ export default function SessionSetupPanel({
       </p>
     </section>
   );
+
+  /* SCOREBOARD BETWEEN ROUNDS (How it runs · default, trivia): the flash. */
+  const scoreFlashGroup = scoreFlash ? (
+    <section className="setup-group" aria-labelledby="setup-g-flash">
+      <h4 className="setup-h setup-h--sub" id="setup-g-flash">{MENU_WORDS.scoreFlash}</h4>
+      <label className="setup-toggle">
+        <input
+          type="checkbox"
+          data-testid="score-flash"
+          checked={scoreFlash.on === true}
+          onChange={(e) => scoreFlash.onChange({ on: e.target.checked })}
+        />
+        <span>Flash the scoreboard before each new round</span>
+      </label>
+      {scoreFlash.on ? (
+        <label className="setup-field">
+          <span>For</span>
+          <select
+            data-testid="score-flash-seconds"
+            value={String(scoreFlash.seconds)}
+            onChange={(e) => scoreFlash.onChange({ seconds: Number(e.target.value) })}
+          >
+            {SCORE_FLASH_CHOICES.map((n) => <option key={n} value={String(n)}>{`${n} seconds`}</option>)}
+          </select>
+        </label>
+      ) : null}
+      <p className="setup-note">
+        When you start the next round — or Auto does — the room sees the
+        standings first, then the round opens by itself. Press Start round
+        again, or Space, to skip it. Not after the last round.
+      </p>
+    </section>
+  ) : null;
 
   /* NAMES (How it runs · default, where it applies): the one control that
      changes what the room learns about a colleague. */
@@ -1103,6 +1141,7 @@ export default function SessionSetupPanel({
       {survey ? <h3 className="setup-h">{MENU_WORDS.afterClose}</h3> : null}
       {namesGroup}
       {survey ? null : paceGroup}
+      {survey ? null : scoreFlashGroup}
       <MoreOptions section="run" groups={runMoreGroups}>
         {waitingGroup}
         {wallGroup}

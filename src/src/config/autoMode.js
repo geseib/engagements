@@ -111,6 +111,9 @@ export function notesDwellMs(pageText) {
  *               RESULTS, Next Round on FIELD_NOTES.
  *   'leave'   — FIELD_NOTES with Workie's read still not written after
  *               NOTES_WAIT_MAX_MS: the dock's secondary, "Start round N".
+ * On trivia the FIELD_NOTES primary ("Start round N") first flashes the
+ * scoreboard (config/scoreFlash.js); while it is up the phase is SCORE_FLASH
+ * and the answer is null — the flash's own timer opens the round.
  * `why` is a short sentence for the log and the dock's own hint line.
  */
 export function autoDecision({
@@ -187,6 +190,13 @@ export function autoDecision({
         return { kind: 'page', delayMs: notesDwellMs(pageText), why: `Workie page ${page + 1} of ${pages} read` };
       }
       return { kind: 'primary', delayMs: notesDwellMs(pageText) + AUTO_GRACE_MS, why: 'the reading is done — next round' };
+    case 'SCORE_FLASH':
+      // THE SCOREBOARD FLASH (config/scoreFlash.js) is a step of its own, and
+      // it carries its own clock: the board stays up its few seconds and then
+      // opens the next round through the same advance this file's FIELD_NOTES
+      // primary pressed to start it. A second timer here would race it and
+      // could open two rounds, so Auto stands still until the round is open.
+      return null;
     default:
       // LOBBY and ENDED are the host's own moments, and any phase this file
       // has never heard of gets stillness rather than a guess.

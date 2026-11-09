@@ -6,6 +6,7 @@ import {
   boardRows, movementLabel, normaliseScoreboard, pageCount, pageDwellMs, pageRange,
   pageRows, placesPerPage, previousOrder, scoreboardKeyIntent,
 } from '../../../config/scoreboard';
+import { roundGains, secondsLeft } from '../../../config/scoreFlash';
 
 /**
  * THE SCOREBOARD — a full-screen standings moment on the room's screen.
@@ -70,6 +71,10 @@ export default function Scoreboard({
   // The Presentation (/present) shows the board and never a control: it
   // passes closable={false} and keysEnabled={false}.
   closable = true,
+  // THE FLASH between two trivia rounds (config/scoreFlash.js), on the host's
+  // stage: { ms, startedAt, nextRound } while it runs, else null. It adds a
+  // countdown and this round's biggest gains; the board is otherwise the same.
+  flash = null,
 }) {
   const { style, openedAt, page: remotePage } = normaliseScoreboard({ ...board, open: true });
   const size = placesPerPage(profile);
@@ -190,9 +195,20 @@ export default function Scoreboard({
 
   const label = afterRound ? `Standings after round ${afterRound}` : 'Standings';
 
+  /* ------------------------------------------------------------ the flash */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!flash) return undefined;
+    setNow(Date.now());
+    const tick = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(tick);
+  }, [flash]);
+  const gains = useMemo(() => (flash ? roundGains(rows) : []), [flash, rows]);
+  const left = flash ? secondsLeft(flash.startedAt, flash.ms, now) : 0;
+
   return (
     <section
-      className={`sb sb--${style}`}
+      className={`sb sb--${style}${flash ? ' sb--flash' : ''}`}
       aria-label={label}
       data-scoreboard=""
       data-style={style}
@@ -238,6 +254,22 @@ export default function Scoreboard({
           />
         )}
       </div>
+      {flash ? (
+        <footer className="sb-flash" data-testid="score-flash">
+          {gains.length ? (
+            <p className="sb-gains">
+              <span className="sb-gains-h">This round</span>
+              {gains.map((g) => (
+                <span key={g.name} className="sb-gain"><b>{`+${g.gain}`}</b>{` ${g.name}`}</span>
+              ))}
+            </p>
+          ) : null}
+          <p className="sb-next">
+            {flash.nextRound ? `Round ${flash.nextRound} starts in ${left}` : `Next round in ${left}`}
+            <span className="sb-next-hint">Next or Space to start now</span>
+          </p>
+        </footer>
+      ) : null}
       <ol className="sb-vh">
         {onPage.map((r) => (
           <li key={r.id}>{`${r.place} ${r.name}, ${r.total} points, ${movementLabel(r.movement).spoken}`}</li>
