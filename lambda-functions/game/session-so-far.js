@@ -78,4 +78,73 @@ function sessionSoFar(rows, current = {}) {
   return { rounds, allRight, priorAllRight, streak, block: lines.join('\n') };
 }
 
-module.exports = { sessionSoFar };
+/**
+ * THE RACE — who leads after this round and whether that changed, as facts,
+ * so the read's "standings nudge" (owner, 2026-11-09: "trivia ... workie
+ * response needed tightening up") is copied, never worked out. The prompt
+ * already prints the standings; what it never said was the BEFORE, so "takes
+ * the lead" (8741 round 14) was a guess the prompt could not check.
+ *
+ * Pure. `standings` is the leaderboard after this round ([{ name, score }],
+ * any order); `roundPoints` is { name: points } scored THIS round. Before =
+ * after minus this round. Null with fewer than two players, or before anybody
+ * has scored.
+ *
+ * @returns {null | { leaders: string[], leadersBefore: string[], change: string, gap: number|null, block: string }}
+ *   change is 'took' | 'broke-tie' | 'drew-level' | 'held' | 'first'.
+ */
+function raceSoFar(standings, roundPoints = {}, { round } = {}) {
+  const rows = (standings || [])
+    .filter((p) => p && typeof p.name === 'string' && p.name && Number.isFinite(Number(p.score)))
+    .map((p) => ({ name: p.name, score: Number(p.score), before: Number(p.score) - (Number(roundPoints[p.name]) || 0) }));
+  if (rows.length < 2) return null;
+  const top = (key) => {
+    const best = Math.max(...rows.map((r) => r[key]));
+    return { best, names: rows.filter((r) => r[key] === best).map((r) => r.name) };
+  };
+  const now = top('score');
+  if (!(now.best > 0)) return null;
+  const was = top('before');
+  const list = (names) => (names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+  const lines = ['THE RACE — the standings after this round, as facts. Copy them; do not add, subtract or recount.'];
+  let gap = null;
+  if (now.names.length === 1) {
+    const second = rows.filter((r) => r.name !== now.names[0]).sort((a, b) => b.score - a.score)[0];
+    gap = now.best - second.score;
+    lines.push(`- ${now.names[0]} leads on ${now.best} points, ${gap} ahead of ${second.name} on ${second.score}.`);
+  } else {
+    lines.push(`- ${list(now.names)} are level at the top on ${now.best} points.`);
+  }
+
+  let change;
+  const same = now.names.length === was.names.length && now.names.every((n) => was.names.includes(n));
+  if (!(was.best > 0) || Number(round) === 1) {
+    change = 'first';
+  } else if (same) {
+    change = 'held';
+    if (now.names.length === 1) {
+      const leader = rows.find((r) => r.name === now.names[0]);
+      const gapBefore = leader.before - Math.max(...rows.filter((r) => r !== leader).map((r) => r.before));
+      const moved = gap > gapBefore ? 'grew' : (gap < gapBefore ? 'shrank' : 'stayed the same');
+      lines.push(`- ${now.names[0]} already led before this round, by ${gapBefore}: the lead did not change hands and the gap ${moved}. Never say ${now.names[0]} "takes" the lead.`);
+    } else {
+      lines.push('- The top of the table was level before this round too.');
+    }
+  } else if (now.names.length === 1 && was.names.includes(now.names[0])) {
+    change = 'broke-tie';
+    lines.push(`- ${now.names[0]} broke a tie at the top this round (level before with ${list(was.names.filter((n) => n !== now.names[0]))}).`);
+  } else if (now.names.length === 1) {
+    change = 'took';
+    lines.push(`- ${now.names[0]} took the lead this round from ${list(was.names)}.`);
+  } else {
+    change = 'drew-level';
+    const caught = now.names.filter((n) => !was.names.includes(n));
+    lines.push(`- ${list(caught.length ? caught : now.names)} drew level at the top this round.`);
+  }
+  lines.push('Mention the race only when a line above is worth a beat (a new leader, a tie at the top, a gap of a point or two); otherwise leave it out. Say nothing about the standings these lines do not show.');
+
+  return { leaders: now.names, leadersBefore: was.names, change, gap, block: lines.join('\n') };
+}
+
+module.exports = { sessionSoFar, raceSoFar };

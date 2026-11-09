@@ -41,7 +41,7 @@ const { consensusLabel } = require('./consensus');
 // room-level claims and decided-sounding next steps the material does not support.
 const { checkRead, collectMaterial, revisionNote, issueKinds } = require('./read-check');
 // The earlier rounds of a trivia session, as facts (session 8741's "first time").
-const { sessionSoFar } = require('./session-so-far');
+const { sessionSoFar, raceSoFar } = require('./session-so-far');
 // buildWavelengthProse lives in wavelength.js WITH the engine, not here.
 // promptPreflight.test.js extracts "the hardcoded fallback" by slicing from
 // this file's FIRST backtick character, so nothing above the real fallback
@@ -3717,6 +3717,18 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     historyLayer = history ? `\n\n${history.block}` : '';
     if (history) {
       console.log(`📜 SESSION SO FAR: ${history.rounds.length} round(s), everyone right in ${history.allRight.length}, streak ${history.streak}`);
+    }
+    // THE RACE (session-so-far.js raceSoFar): the leaderboard after this round
+    // and before it, so "takes the lead" is copied rather than guessed. The
+    // stored trivia score already holds this round; its points come off it.
+    const roundPointsByName = {};
+    for (const t of Object.values((results && results.voteTallies) || {})) {
+      if (t && t.playerName) roundPointsByName[t.playerName] = (roundPointsByName[t.playerName] || 0) + (Number(t.totalScore) || 0);
+    }
+    const race = raceSoFar(leaderboard, roundPointsByName, { round: parseInt(paddedQuestionNumber, 10) });
+    if (race) {
+      historyLayer += `\n\n${race.block}`;
+      console.log(`🏁 THE RACE: ${race.leaders.length} leader(s), change ${race.change}`);
     }
   }
 

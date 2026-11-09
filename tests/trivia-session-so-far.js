@@ -121,6 +121,48 @@ check('a discussion question about watching a film is not a claim about the sess
   assert.strictEqual(kinds(read, null).length, 0);
 });
 
+console.log('\n3. the race: who leads, and whether that changed this round (raceSoFar)');
+
+const { raceSoFar } = require(path.join(__dirname, '..', 'lambda-functions/game/session-so-far.js'));
+const STANDINGS = [{ name: 'Marcus', score: 62 }, { name: 'Priya', score: 58 }, { name: 'Elena', score: 51 }];
+
+check('a player who passes the leader this round "took the lead", with the gap after', () => {
+  const r = raceSoFar(STANDINGS, { Marcus: 14 }, { round: 9 });
+  assert.strictEqual(r.change, 'took');
+  assert.deepStrictEqual(r.leadersBefore, ['Priya']);
+  assert.ok(r.block.includes('Marcus leads on 62 points, 4 ahead of Priya on 58.'), r.block);
+  assert.ok(r.block.includes('Marcus took the lead this round from Priya.'), r.block);
+});
+
+check('a lead that holds says so, with the gap before, and forbids "takes the lead"', () => {
+  const r = raceSoFar(STANDINGS, { Marcus: 2, Priya: 10 }, { round: 9 });
+  assert.strictEqual(r.change, 'held');
+  assert.ok(r.block.includes('already led before this round, by 9'), r.block);
+  assert.ok(r.block.includes('the gap shrank'), r.block);
+  assert.ok(r.block.includes('Never say Marcus "takes" the lead'), r.block);
+});
+
+check('a tie at the top: drew level, and broke a tie', () => {
+  const level = raceSoFar([{ name: 'Priya', score: 36 }, { name: 'Elena', score: 36 }, { name: 'Tom', score: 20 }], { Priya: 12, Elena: 11 }, { round: 4 });
+  assert.strictEqual(level.change, 'drew-level');
+  assert.ok(level.block.includes('Priya and Elena are level at the top on 36 points.'), level.block);
+  assert.ok(level.block.includes('Priya drew level at the top this round.'), level.block);
+  const broke = raceSoFar([{ name: 'Priya', score: 40 }, { name: 'Elena', score: 30 }], { Priya: 10 }, { round: 5 });
+  assert.strictEqual(broke.change, 'broke-tie');
+});
+
+check('round 1, nobody scored, or one player: no change claimed / no block', () => {
+  assert.strictEqual(raceSoFar(STANDINGS, { Marcus: 62, Priya: 58, Elena: 51 }, { round: 1 }).change, 'first');
+  assert.strictEqual(raceSoFar([{ name: 'A', score: 0 }, { name: 'B', score: 0 }], {}, { round: 3 }), null);
+  assert.strictEqual(raceSoFar([{ name: 'A', score: 9 }], {}, { round: 3 }), null);
+});
+
+check('get-ai-summary hands the race to a trivia read beside the session so far', () => {
+  const src = require('fs').readFileSync(path.join(__dirname, '..', 'lambda-functions/game/get-ai-summary.js'), 'utf8');
+  assert.ok(/raceSoFar\(leaderboard, roundPointsByName/.test(src), 'raceSoFar is not called with the leaderboard');
+  assert.ok(/historyLayer \+= `\\n\\n\$\{race\.block\}`/.test(src), 'the race block does not join the history layer');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 suiteFinished();
 process.exit(fail === 0 ? 0 : 1);
