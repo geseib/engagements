@@ -33,7 +33,8 @@ leave out a category, or skip a round, if the room calls for it.
 
 | File | What it is |
 |---|---|
-| `uffizi-art-titles.csv` | The set, in the Famous Art Titles column layout plus `RealAnswer` |
+| `uffizi-art-titles.csv` | The set, in the Famous Art Titles column layout plus `RealAnswer` (teaser titles; dev v1/v2) |
+| `uffizi-art-titles-<tier>-artist-date.csv` | Live rows from dev, test and prod on 26 Nov 2026, with only Title changed to artist and date (dev v3, test v3, prod v2) |
 | `uffizi-art-titles.json` | One record per painting: artist, date, Commons file and page, licence, photo credit where the licence needs one, Uffizi verification (page, room, inventory number), image URL, output size, crop |
 | `images/uffizi-NN.jpg` | All 60 images under neutral names in shuffled order. The sidecar maps each file to its question. |
 | `QA-NOTES.md` | What was checked, what was changed, and the known gaps |
@@ -41,7 +42,14 @@ leave out a category, or skip a round, if the room calls for it.
 
 ## Columns, and what players see before the reveal
 
-- **Title**: a short teaser that never contains the real title ("THE DOG IS ASLEEP").
+- **Title**: since 26 Nov 2026, the artist and the date or approximate date, as written in
+  the row's own AnswerDetails ("Titian, 1538", "Sandro Botticelli, c. 1485").
+  This is the Famous Art Titles pattern on dev ("Leonardo da Vinci, c. 1503"). The owner
+  retired the teasers ("THE DOG IS ASLEEP", "FOUR OLD MEN IN THE BASEMENT") because they
+  "take away ideas" from the room. Players now see the artist during ASK, so the note on
+  School below about keeping the artist out no longer holds for the set as a whole. The
+  teasers are kept in `uffizi-art-titles.csv`, `-test-v2.csv`, `-prod.csv` and in each
+  tier's earlier version. Live versions: see INSTALLED.md.
 - **Detail_lesson**: left blank. Players see Detail during ASK, so anything in it would
   spoil the round.
 - **School**: school and century, such as "Florentine, 15th century". The question

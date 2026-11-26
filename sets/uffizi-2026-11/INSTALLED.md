@@ -1,5 +1,42 @@
 # Installed: Uffizi Art Titles
 
+## All tiers (26 Nov 2026): Title shows artist and date; teasers retired
+
+Owner: the teasing titles ("THE DOG IS ASLEEP", "FOUR OLD MEN IN THE BASEMENT") "take away
+ideas". Title now shows just the artist and the date or approximate date, the pattern Famous
+Art Titles uses on dev ("Leonardo da Vinci, c. 1503").
+
+| Tier | Table | Before | After | CSV |
+|---|---|---|---|---|
+| dev | `engagedev` | v2 | **v3** | `uffizi-art-titles-dev-artist-date.csv` |
+| test | `engagetest` | v2 | **v3** | `uffizi-art-titles-test-artist-date.csv` |
+| prod | `engageprod` | v1 | **v2** | `uffizi-art-titles-prod-artist-date.csv` |
+
+1. Read each tier's **live** active version (all 66 rows) and wrote its CSV from it. Every
+   column is as stored on that tier (Image keeps the tier's own host). Only Title changes.
+2. New Title = the row's own AnswerDetails with `Real title: <RealAnswer>, ` removed from the
+   front and cut at `, Uffizi`, e.g. "Cimabue, c. 1290–1300", "Sandro Botticelli, c. 1485",
+   "Giorgione (attributed), c. 1502–1505", "Andrea del Verrocchio and Leonardo da Vinci,
+   c. 1470–1475" (the longest, 57 characters). All 60 parsed cleanly on every tier; no row
+   was fixed by hand. Each was checked: non-empty, has a date, no word of the real title in
+   it. The three tiers' titles are identical.
+3. Ran `node scripts/replace-question-set.js <table> uffiziarttitles --csv <file> --note
+   "Titles show artist and date instead of teasers (owner, 26 Nov)"`, dry run (60 questions,
+   6 categories, 0 skipped) then `--apply`, in the order dev, test, prod, reading back each
+   before the next. Prod's older code was not involved: the script runs the repo's handler
+   in-process.
+
+**Read-back, each tier:** the new version was compared with the previous one on every
+attribute of all 66 rows: **Title differs on 60 questions, nothing else differs** (Image,
+RealAnswer, AnswerDetails, School, categories, order all unchanged). On the SETS row only
+`activeVersion`, `versions`, `updatedAt` and `sourceFile` changed; `personaId` comedian,
+`promptId` (dev `mskc5h7boibe5abg15`, test `mupjs2kx1yhsr6kgenz`, prod `mvru8w1qz3hhl8oqlqn`),
+`bluffRound: false`, topic, tags, `active`, no roundNoun are as before. The previous version
+re-reads byte-identical to what was live, so it can be made live again from the set's
+Versions to bring the teasers back.
+
+Nothing was pushed or deployed.
+
 ## Prod (8 Nov 2026): installed as a new set
 
 Owner-approved. Installed on **prod** (`engageprod`, platform `SETS` library) as a new set
